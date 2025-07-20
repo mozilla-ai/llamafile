@@ -1711,7 +1711,12 @@ struct llama_server_context
                         slot.cache_tokens[i - n_discard] = slot.cache_tokens[i];
                     }
 
-                    slot.cache_tokens.resize(slot.cache_tokens.size() - n_discard);
+                    // Prevent integer underflow that causes std::length_error
+                    if (n_discard >= 0 && (size_t)n_discard < slot.cache_tokens.size()) {
+                        slot.cache_tokens.resize(slot.cache_tokens.size() - n_discard);
+                    } else {
+                        slot.cache_tokens.clear();
+                    }
 
                     slot.n_past -= n_discard;
 
