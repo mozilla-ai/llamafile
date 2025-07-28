@@ -10,3 +10,9 @@
 /trace.json
 
 /*.log
+
+# Test binaries
+/test_kv_cache_fix
+/test_qwen2vl
+/test_sampling_comprehensive
+/test_sampling_flags
