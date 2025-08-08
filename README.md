@@ -199,7 +199,7 @@ llamafile -m base_model.gguf --lora adapter1.gguf --lora-scaled adapter2.gguf 0.
 
 - `--lora [FNAME]`: Apply a LoRA adapter from the specified file (default scale: 1.0)
 - `--lora-scaled [FNAME] [SCALE]`: Apply a LoRA adapter with a custom scaling factor
-- `--lora-init-without-apply [FNAME]`: Load LoRA adapters without applying (lora hot-swapping)
+- `--lora-init-without-apply`: Load LoRA adapters without applying (lora hot-swapping)
 
 ### Dynamic LoRA Adapter Management (Hot-Swapping)
 
