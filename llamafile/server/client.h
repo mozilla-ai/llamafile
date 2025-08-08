@@ -35,6 +35,11 @@
     SlicesEqualCase(S, strlen(S), HeaderData(H), HeaderLength(H))
 
 struct llama_model;
+struct llama_lora_adapter;
+
+namespace jt {
+struct Json;
+}
 
 namespace lf {
 namespace server {
@@ -121,6 +126,11 @@ struct Client
 
     bool slotz() __wur;
     bool flagz() __wur;
+    bool lora_adapters() __wur;
+    bool handle_apply_adapters(jt::Json&) __wur;
+    bool handle_load_adapter(jt::Json&) __wur;
+    bool handle_clear_adapters() __wur;
+    bool handle_upstream_lora_apply(jt::Json&) __wur;
     bool db_chat(int64_t) __wur;
     bool db_chats() __wur;
     bool db_message(int64_t) __wur;
@@ -129,3 +139,15 @@ struct Client
 
 } // namespace server
 } // namespace lf
+
+// Global LoRA adapter storage - extern declarations (outside namespace to match definitions in prog.cpp)
+#define MAX_LORA_ADAPTERS 8
+struct lora_adapter_container {
+    struct llama_lora_adapter* adapter;
+    float scale;
+    std::string name;  // Model/adapter name for identification
+    bool applied;      // Whether this adapter is currently applied to slots
+};
+
+extern struct lora_adapter_container g_lora_adapters[MAX_LORA_ADAPTERS];
+extern int g_lora_adapters_count;

@@ -53,6 +53,7 @@ bool FLAG_tinyblas = false;
 bool FLAG_trace = false;
 bool FLAG_unsecure = false;
 bool FLAG_v2 = false;
+bool FLAG_lora_init_without_apply = false;
 const char *FLAG_chat_template = "";
 const char *FLAG_db = nullptr;
 const char *FLAG_db_startup_sql = "PRAGMA journal_mode=WAL;"
@@ -66,7 +67,6 @@ const char *FLAG_prompt = nullptr;
 const char *FLAG_url_prefix = "";
 const char *FLAG_www_root = "/zip/www";
 const char *FLAG_lora = nullptr;
-const char *FLAG_lora_base = nullptr;
 
 // Multiple LoRA adapters support
 struct llamafile_lora_adapter_info FLAG_lora_adapters[MAX_LORA_ADAPTERS] = {0};
@@ -431,10 +431,8 @@ void llamafile_get_flags(int argc, char **argv) {
             continue;
         }
 
-        if (!strcmp(flag, "--lora-base")) {
-            if (i == argc)
-                missing("--lora-base");
-            FLAG_lora_base = argv[i++];
+        if (!strcmp(flag, "--lora-init-without-apply")) {
+            FLAG_lora_init_without_apply = true;
             continue;
         }
 

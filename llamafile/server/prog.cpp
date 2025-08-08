@@ -31,13 +31,17 @@
 
 // Global LoRA adapter storage for multiple adapters
 #define MAX_LORA_ADAPTERS 8
+#include <string>
 struct lora_adapter_container {
     struct llama_lora_adapter* adapter;
     float scale;
+    std::string name;  // Model/adapter name for identification
+    bool applied;      // Whether this adapter is currently applied to slots
 };
 
-static struct lora_adapter_container g_lora_adapters[MAX_LORA_ADAPTERS] = {0};
-static int g_lora_adapters_count = 0;
+// Make these externally accessible for HTTP endpoint
+struct lora_adapter_container g_lora_adapters[MAX_LORA_ADAPTERS] = {};
+int g_lora_adapters_count = 0;
 
 // Function to get the first global LoRA adapter for backward compatibility
 extern "C" struct llama_lora_adapter* llamafiler_get_lora_adapter() {
@@ -118,16 +122,35 @@ main(int argc, char* argv[])
 
     // load LoRA adapters if specified
     if (FLAG_lora_adapters_count > 0) {
-        SLOG("loading %d LoRA adapter(s)", FLAG_lora_adapters_count);
+        const char* apply_mode = FLAG_lora_init_without_apply ? "without applying" : "and applying";
+        SLOG("loading %d LoRA adapter(s) %s", FLAG_lora_adapters_count, apply_mode);
+        
         for (int i = 0; i < FLAG_lora_adapters_count; i++) {
             char scale_buf[32];
             snprintf(scale_buf, sizeof(scale_buf), "%.2f", FLAG_lora_adapters[i].scale);
-            SLOG("loading LoRA adapter %d from %s with scale %s", i + 1, 
-                 FLAG_lora_adapters[i].path, scale_buf);
-            g_lora_adapters[i].adapter = llama_lora_adapter_init(model, FLAG_lora_adapters[i].path);
+            
+            // Generate model name from filename
+            const char* path = FLAG_lora_adapters[i].path;
+            const char* filename = strrchr(path, '/');
+            filename = filename ? filename + 1 : path;
+            
+            // Remove file extension for cleaner name
+            std::string model_name(filename);
+            size_t dot_pos = model_name.find_last_of('.');
+            if (dot_pos != std::string::npos) {
+                model_name = model_name.substr(0, dot_pos);
+            }
+            
+            SLOG("loading LoRA adapter %d ('%s') from %s with scale %s", i + 1, 
+                 model_name.c_str(), path, scale_buf);
+                 
+            g_lora_adapters[i].adapter = llama_lora_adapter_init(model, path);
             g_lora_adapters[i].scale = FLAG_lora_adapters[i].scale;
+            g_lora_adapters[i].name = model_name;
+            g_lora_adapters[i].applied = !FLAG_lora_init_without_apply;  // Apply unless flag is set
+            
             if (!g_lora_adapters[i].adapter) {
-                fprintf(stderr, "%s: failed to load LoRA adapter from %s\n", FLAG_model, FLAG_lora_adapters[i].path);
+                fprintf(stderr, "%s: failed to load LoRA adapter from %s\n", FLAG_model, path);
                 // Cleanup previously loaded adapters
                 for (int j = 0; j < i; j++) {
                     if (g_lora_adapters[j].adapter) {
@@ -139,7 +162,12 @@ main(int argc, char* argv[])
             }
             g_lora_adapters_count++;
         }
-        SLOG("all LoRA adapters loaded successfully");
+        
+        if (FLAG_lora_init_without_apply) {
+            SLOG("all LoRA adapters loaded successfully but not applied (use /lora-adapters API to apply)");
+        } else {
+            SLOG("all LoRA adapters loaded and applied successfully");
+        }
     }
 
     // create slots
