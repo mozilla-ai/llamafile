@@ -120,8 +120,10 @@ main(int argc, char* argv[])
     if (FLAG_lora_adapters_count > 0) {
         SLOG("loading %d LoRA adapter(s)", FLAG_lora_adapters_count);
         for (int i = 0; i < FLAG_lora_adapters_count; i++) {
-            SLOG("loading LoRA adapter %d from %s with scale %.2f", i + 1, 
-                 FLAG_lora_adapters[i].path, FLAG_lora_adapters[i].scale);
+            char scale_buf[32];
+            snprintf(scale_buf, sizeof(scale_buf), "%.2f", FLAG_lora_adapters[i].scale);
+            SLOG("loading LoRA adapter %d from %s with scale %s", i + 1, 
+                 FLAG_lora_adapters[i].path, scale_buf);
             g_lora_adapters[i].adapter = llama_lora_adapter_init(model, FLAG_lora_adapters[i].path);
             g_lora_adapters[i].scale = FLAG_lora_adapters[i].scale;
             if (!g_lora_adapters[i].adapter) {

@@ -140,7 +140,9 @@ Slot::start()
                 ctx_ = nullptr;
                 return false;
             }
-            SLOG("applied LoRA adapter %d to slot #%d with scale %.2f", i + 1, id_, scales[i]);
+            char scale_buf[32];
+            snprintf(scale_buf, sizeof(scale_buf), "%.2f", scales[i]);
+            SLOG("applied LoRA adapter %d to slot #%d with scale %s", i + 1, id_, scale_buf);
         }
     }
     
