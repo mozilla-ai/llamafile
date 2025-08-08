@@ -125,6 +125,25 @@ Slot::start()
     system_fingerprint_ = generate_system_fingerprint(&cparams);
     if (!(ctx_ = llama_new_context_with_model(model_, cparams)))
         return false;
+    
+    // Apply LoRA adapters if available
+    struct llama_lora_adapter* adapters[MAX_LORA_ADAPTERS];
+    float scales[MAX_LORA_ADAPTERS];
+    int adapter_count = llamafiler_get_lora_adapters(adapters, scales, MAX_LORA_ADAPTERS);
+    
+    if (adapter_count > 0) {
+        SLOG("applying %d LoRA adapter(s) to slot #%d", adapter_count, id_);
+        for (int i = 0; i < adapter_count; i++) {
+            if (llama_lora_adapter_set(ctx_, adapters[i], scales[i]) != 0) {
+                SLOG("failed to apply LoRA adapter %d to slot #%d", i + 1, id_);
+                llama_free(ctx_);
+                ctx_ = nullptr;
+                return false;
+            }
+            SLOG("applied LoRA adapter %d to slot #%d with scale %.2f", i + 1, id_, scales[i]);
+        }
+    }
+    
     if (FLAG_mmproj)
         if (!(clip_ctx_ = clip_model_load(FLAG_mmproj, FLAG_verbose)))
             return false;

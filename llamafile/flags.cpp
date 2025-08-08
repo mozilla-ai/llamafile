@@ -65,6 +65,12 @@ const char *FLAG_model = nullptr;
 const char *FLAG_prompt = nullptr;
 const char *FLAG_url_prefix = "";
 const char *FLAG_www_root = "/zip/www";
+const char *FLAG_lora = nullptr;
+const char *FLAG_lora_base = nullptr;
+
+// Multiple LoRA adapters support
+struct llamafile_lora_adapter_info FLAG_lora_adapters[MAX_LORA_ADAPTERS] = {0};
+int FLAG_lora_adapters_count = 0;
 double FLAG_token_rate = 1;
 float FLAG_decay_growth = .01;
 float FLAG_frequency_penalty = 0;
@@ -382,6 +388,53 @@ void llamafile_get_flags(int argc, char **argv) {
             if (i == argc)
                 missing("--presence-penalty");
             FLAG_presence_penalty = atof(argv[i++]);
+            continue;
+        }
+
+        //////////////////////////////////////////////////////////////////////
+        // LoRA flags
+
+        if (!strcmp(flag, "--lora")) {
+            if (i == argc)
+                missing("--lora");
+            if (FLAG_lora_adapters_count >= MAX_LORA_ADAPTERS) {
+                error("too many LoRA adapters (max 8)");
+            }
+            FLAG_lora_adapters[FLAG_lora_adapters_count].path = argv[i++];
+            FLAG_lora_adapters[FLAG_lora_adapters_count].scale = 1.0f;
+            FLAG_lora_adapters_count++;
+            
+            // Keep FLAG_lora for backward compatibility
+            if (!FLAG_lora) {
+                FLAG_lora = FLAG_lora_adapters[0].path;
+            }
+            continue;
+        }
+
+        if (!strcmp(flag, "--lora-scaled")) {
+            if (i == argc)
+                missing("--lora-scaled");
+            const char* lora_adapter = argv[i++];
+            if (i == argc)
+                missing("--lora-scaled scale value");
+            if (FLAG_lora_adapters_count >= MAX_LORA_ADAPTERS) {
+                error("too many LoRA adapters (max 8)");
+            }
+            FLAG_lora_adapters[FLAG_lora_adapters_count].path = lora_adapter;
+            FLAG_lora_adapters[FLAG_lora_adapters_count].scale = atof(argv[i++]);
+            FLAG_lora_adapters_count++;
+            
+            // Keep FLAG_lora for backward compatibility
+            if (!FLAG_lora) {
+                FLAG_lora = FLAG_lora_adapters[0].path;
+            }
+            continue;
+        }
+
+        if (!strcmp(flag, "--lora-base")) {
+            if (i == argc)
+                missing("--lora-base");
+            FLAG_lora_base = argv[i++];
             continue;
         }
 

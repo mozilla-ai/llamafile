@@ -23,10 +23,18 @@
 #include <vector>
 
 #define SLOT(e) DLL_CONTAINER(Slot, elem_, e)
+#define MAX_LORA_ADAPTERS 8
 
 struct llama_context;
 struct llama_model;
+struct llama_lora_adapter;
 struct clip_ctx;
+
+// Function to get the global LoRA adapter
+extern "C" struct llama_lora_adapter* llamafiler_get_lora_adapter();
+
+// Function to get multiple LoRA adapters with their scales
+extern "C" int llamafiler_get_lora_adapters(struct llama_lora_adapter** adapters, float* scales, int max_adapters);
 
 namespace lf {
 namespace server {

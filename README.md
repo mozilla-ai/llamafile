@@ -176,6 +176,38 @@ llamafile --server --v2 --help
 llamafile --server --v2
 ```
 
+## LoRA Adapter Support
+
+Llamafile supports LoRA (Low-Rank Adaptation) adapters, allowing you to fine-tune models with adapter layers applied on top of the base model. This is compatible with adapters created for llama.cpp.
+
+### Using LoRA Adapters
+
+To use LoRA adapters with llamafile server, use the `--lora` and `--lora-scaled` flags:
+
+```bash
+# Single adapter with default scale (1.0)
+llamafile -m base_model.gguf --lora adapter.gguf --server
+
+# Single adapter with custom scale
+llamafile -m base_model.gguf --lora-scaled adapter.gguf 0.8 --server
+
+# Multiple adapters with different scales
+llamafile -m base_model.gguf --lora adapter1.gguf --lora-scaled adapter2.gguf 0.5 --server
+```
+
+### LoRA Adapter Flags
+
+- `--lora [FNAME]`: Apply a LoRA adapter from the specified file (default scale: 1.0)
+- `--lora-scaled [FNAME] [SCALE]`: Apply a LoRA adapter with a custom scaling factor
+- `--lora-base [FNAME]`: Optional base model for LoRA adapter (usually not needed)
+
+### Important Notes
+
+- LoRA adapters are automatically applied to each inference slot when they start
+- Memory mapping (`mmap`) is automatically disabled when using LoRA adapters for compatibility
+- Multiple adapters can be combined by using multiple `--lora` and `--lora-scaled` flags
+- The base model specified by `-m` serves as the foundation for the LoRA adapter(s)
+
 ## Other example llamafiles
 
 We also provide example llamafiles for other models, so you can easily

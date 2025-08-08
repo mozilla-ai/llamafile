@@ -2,6 +2,32 @@
 
 There are a few steps in making a Llamafile release which will be detailed in this document.
 
+## What's New in This Release
+
+### LoRA Adapter Support
+
+This release adds comprehensive support for LoRA (Low-Rank Adaptation) adapters, enabling fine-tuning capabilities compatible with llama.cpp. Key features include:
+
+- **Multiple LoRA Adapter Support**: Load and apply multiple LoRA adapters simultaneously with individual scaling factors
+- **Server Integration**: Full integration with the llamafile server (`--server` mode) for LoRA-enhanced inference
+- **Compatible Flags**: 
+  - `--lora [FNAME]`: Apply a LoRA adapter with default scale (1.0)
+  - `--lora-scaled [FNAME] [SCALE]`: Apply a LoRA adapter with custom scaling factor
+  - `--lora-base [FNAME]`: Optional base model for LoRA adapter (advanced use cases)
+- **Automatic Optimizations**: Memory mapping is automatically disabled when using LoRA adapters for optimal compatibility
+- **Clean Resource Management**: Proper loading, application, and cleanup of LoRA adapters across server lifecycle
+
+Example usage:
+```bash
+# Single adapter with default scale
+llamafile -m base_model.gguf --lora adapter.gguf --server
+
+# Multiple adapters with different scales
+llamafile -m base_model.gguf --lora adapter1.gguf --lora-scaled adapter2.gguf 0.5 --server
+```
+
+This implementation follows llama.cpp patterns for maximum compatibility and provides a foundation for advanced fine-tuning workflows.
+
 The two primary artifacts of the release are the `llamafile-<version>.zip` and the binaries for the GitHub release.
 
 ## Release Process

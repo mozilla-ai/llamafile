@@ -36,6 +36,18 @@ extern const char *FLAG_prompt;
 extern const char *FLAG_url_prefix;
 extern const char *FLAG_www_root;
 extern double FLAG_token_rate;
+extern const char *FLAG_lora;
+extern const char *FLAG_lora_base;
+
+// LoRA adapter info structure to match llama.cpp
+struct llamafile_lora_adapter_info {
+    const char* path;
+    float scale;
+};
+
+#define MAX_LORA_ADAPTERS 8
+extern struct llamafile_lora_adapter_info FLAG_lora_adapters[MAX_LORA_ADAPTERS];
+extern int FLAG_lora_adapters_count;
 extern float FLAG_decay_growth;
 extern float FLAG_frequency_penalty;
 extern float FLAG_presence_penalty;

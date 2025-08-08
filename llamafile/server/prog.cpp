@@ -29,6 +29,31 @@
 #include <cassert>
 #include <cosmo.h>
 
+// Global LoRA adapter storage for multiple adapters
+#define MAX_LORA_ADAPTERS 8
+struct lora_adapter_container {
+    struct llama_lora_adapter* adapter;
+    float scale;
+};
+
+static struct lora_adapter_container g_lora_adapters[MAX_LORA_ADAPTERS] = {0};
+static int g_lora_adapters_count = 0;
+
+// Function to get the first global LoRA adapter for backward compatibility
+extern "C" struct llama_lora_adapter* llamafiler_get_lora_adapter() {
+    return g_lora_adapters_count > 0 ? g_lora_adapters[0].adapter : nullptr;
+}
+
+// Function to get all LoRA adapters and their count
+extern "C" int llamafiler_get_lora_adapters(struct llama_lora_adapter** adapters, float* scales, int max_adapters) {
+    int count = g_lora_adapters_count < max_adapters ? g_lora_adapters_count : max_adapters;
+    for (int i = 0; i < count; i++) {
+        adapters[i] = g_lora_adapters[i].adapter;
+        scales[i] = g_lora_adapters[i].scale;
+    }
+    return count;
+}
+
 namespace lf {
 namespace server {
 
@@ -69,6 +94,8 @@ main(int argc, char* argv[])
         FLAG_log_disable = true;
 
     // load model
+    // --lora implies --no-mmap (as per llama.cpp server)
+    bool use_mmap = FLAG_mmap && (FLAG_lora_adapters_count == 0);
     llama_model_params mparams = {
         .n_gpu_layers = FLAG_n_gpu_layers,
         .split_mode = (enum llama_split_mode)FLAG_split_mode,
@@ -79,14 +106,38 @@ main(int argc, char* argv[])
         .progress_callback_user_data = nullptr,
         .kv_overrides = nullptr,
         .vocab_only = false,
-        .use_mmap = true,
-        .use_mlock = false,
+        .use_mmap = use_mmap,
+        .use_mlock = FLAG_mlock,
         .check_tensors = false,
     };
     llama_model* model = llama_load_model_from_file(FLAG_model, mparams);
     if (!model) {
         fprintf(stderr, "%s: failed to load model\n", FLAG_model);
         exit(1);
+    }
+
+    // load LoRA adapters if specified
+    if (FLAG_lora_adapters_count > 0) {
+        SLOG("loading %d LoRA adapter(s)", FLAG_lora_adapters_count);
+        for (int i = 0; i < FLAG_lora_adapters_count; i++) {
+            SLOG("loading LoRA adapter %d from %s with scale %.2f", i + 1, 
+                 FLAG_lora_adapters[i].path, FLAG_lora_adapters[i].scale);
+            g_lora_adapters[i].adapter = llama_lora_adapter_init(model, FLAG_lora_adapters[i].path);
+            g_lora_adapters[i].scale = FLAG_lora_adapters[i].scale;
+            if (!g_lora_adapters[i].adapter) {
+                fprintf(stderr, "%s: failed to load LoRA adapter from %s\n", FLAG_model, FLAG_lora_adapters[i].path);
+                // Cleanup previously loaded adapters
+                for (int j = 0; j < i; j++) {
+                    if (g_lora_adapters[j].adapter) {
+                        llama_lora_adapter_free(g_lora_adapters[j].adapter);
+                    }
+                }
+                llama_free_model(model);
+                exit(1);
+            }
+            g_lora_adapters_count++;
+        }
+        SLOG("all LoRA adapters loaded successfully");
     }
 
     // create slots
@@ -120,6 +171,14 @@ main(int argc, char* argv[])
     g_server->close();
     delete g_server;
     delete slots;
+    
+    // Cleanup LoRA adapters
+    for (int i = 0; i < g_lora_adapters_count; i++) {
+        if (g_lora_adapters[i].adapter) {
+            llama_lora_adapter_free(g_lora_adapters[i].adapter);
+        }
+    }
+    
     llama_free_model(model);
     tokenbucket_destroy();
     time_destroy();
