@@ -17,7 +17,7 @@ This release adds comprehensive support for LoRA (Low-Rank Adaptation) adapters,
 - **Compatible Flags**:
   - `--lora [FNAME]`: Apply a LoRA adapter with default scale (1.0)
   - `--lora-scaled [FNAME] [SCALE]`: Apply a LoRA adapter with custom scaling factor
-  - `--lora-base [FNAME]`: Optional base model for LoRA adapter (advanced use cases)
+  - `--lora-init-without-apply`: Load LoRA adapters without applying (lora hot-swapping)
 - **Automatic Optimizations**: Memory mapping is automatically disabled when using LoRA adapters for optimal compatibility
 - **Thread-Safe Operations**: Hot-swapping includes proper mutex locking for concurrent access safety
 - **Clean Resource Management**: Proper loading, application, and cleanup of LoRA adapters across server lifecycle
