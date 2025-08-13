@@ -1,0 +1,175 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "Build (fast)",
+			"type": "shell",
+			"command": "${workspaceFolder}/.cosmocc/3.9.7/bin/make",
+			"args": [
+				"-j8"
+			],
+			"group": {
+				"kind": "build",
+				"isDefault": true
+			},
+			"problemMatcher": [
+				"$gcc"
+			],
+			"presentation": {
+				"reveal": "always",
+				"panel": "shared"
+			}
+		},
+		{
+			"label": "Rebuild (clean + all)",
+			"type": "shell",
+			"command": "${workspaceFolder}/.cosmocc/3.9.7/bin/make",
+			"args": [
+				"clean",
+				"&&",
+				"${workspaceFolder}/.cosmocc/3.9.7/bin/make",
+				"-j8"
+			],
+			"problemMatcher": [
+				"$gcc"
+			],
+			"presentation": {
+				"reveal": "always",
+				"panel": "shared"
+			}
+		},
+		{
+			"label": "Build vmathf_test",
+			"type": "shell",
+			"command": "${workspaceFolder}/.cosmocc/3.9.7/bin/make",
+			"args": [
+				"-j8",
+				"o/opt/llamafile/vmathf_test"
+			],
+			"problemMatcher": [
+				"$gcc"
+			],
+			"presentation": {
+				"reveal": "always",
+				"panel": "shared"
+			}
+		},
+		{
+			"label": "Run vmathf_test",
+			"type": "shell",
+			"command": "o/opt/llamafile/vmathf_test",
+			"dependsOn": "Build vmathf_test",
+			"presentation": {
+				"reveal": "always",
+				"panel": "shared"
+			}
+		},
+		{
+			"label": "Clean",
+			"type": "shell",
+			"command": "${workspaceFolder}/.cosmocc/3.9.7/bin/make",
+			"args": [
+				"clean"
+			],
+			"group": "build",
+			"presentation": {
+				"reveal": "always",
+				"panel": "shared"
+			}
+		},
+		{
+			"label": "Watch (incremental)",
+			"type": "shell",
+			"command": "${workspaceFolder}/.cosmocc/3.9.7/bin/make",
+			"args": [
+				"-j8"
+			],
+			"isBackground": true,
+			"problemMatcher": [
+				{
+					"owner": "cpp",
+					"pattern": {
+						"regexp": "^(.*):(\\d+):(\\d+): (warning|error): (.*)$",
+						"file": 1,
+						"line": 2,
+						"column": 3,
+						"severity": 4,
+						"message": 5
+					},
+					"background": {
+						"activeOnStart": true,
+						"beginsPattern": "^.*Building.*$",
+						"endsPattern": "^.*(error|warning|linking).*$"
+					}
+				}
+			],
+			"presentation": {
+				"reveal": "never",
+				"panel": "dedicated"
+			}
+		},
+		{
+			"label": "Build (fast)",
+			"type": "shell",
+			"command": "/Users/logan/Documents/projects/llamafile/.cosmocc/3.9.7/bin/make",
+			"args": [
+				"-j8"
+			],
+			"group": "build"
+		},
+		{
+			"label": "Build (fast)",
+			"type": "shell",
+			"command": "/Users/logan/Documents/projects/llamafile/.cosmocc/3.9.7/bin/make",
+			"args": [
+				"-j8"
+			],
+			"group": "build"
+		},
+		{
+			"label": "Build (fast)",
+			"type": "shell",
+			"command": "/Users/logan/Documents/projects/llamafile/.cosmocc/3.9.7/bin/make",
+			"args": [
+				"-j8"
+			],
+			"group": "build"
+		},
+		{
+			"label": "Build (fast)",
+			"type": "shell",
+			"command": "/Users/logan/Documents/projects/llamafile/.cosmocc/3.9.7/bin/make",
+			"args": [
+				"-j8"
+			],
+			"group": "build"
+		},
+		{
+			"label": "Build (fast)",
+			"type": "shell",
+			"command": "/Users/logan/Documents/projects/llamafile/.cosmocc/3.9.7/bin/make",
+			"args": [
+				"-j8"
+			],
+			"group": "build"
+		},
+		{
+			"label": "Build (fast)",
+			"type": "shell",
+			"command": "/Users/logan/Documents/projects/llamafile/.cosmocc/3.9.7/bin/make",
+			"args": [
+				"-j8"
+			],
+			"group": "build"
+		},
+		{
+			"label": "Build (fast)",
+			"type": "shell",
+			"command": "/Users/logan/Documents/projects/llamafile/.cosmocc/3.9.7/bin/make",
+			"args": [
+				"-j8"
+			],
+			"group": "build"
+		}
+	]
+}

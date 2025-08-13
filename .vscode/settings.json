@@ -1,0 +1,38 @@
+{
+  // Core C/C++ extension behavior
+  "C_Cpp.default.configurationProvider": "ms-vscode.cpptools", // use c_cpp_properties.json
+  "C_Cpp.intelliSenseEngine": "default",
+  "C_Cpp.errorSquiggles": "disabled",
+  "C_Cpp.autoAddFileAssociations": false,
+  "C_Cpp.default.browse.limitSymbolsToIncludedHeaders": false,
+  "C_Cpp.workspaceParsingPriority": "highest",
+  "C_Cpp.loggingLevel": "Warning",
+  // Speed: avoid re-indexing node_modules or build/artifacts if present
+  "files.watcherExclude": {
+    "**/o/**": true,
+    "**/.git/**": true,
+    "**/.cosmocc/**": true
+  },
+  "search.exclude": {
+    "o": true,
+    "**/o/**": true
+  },
+  // Formatting / style (adjust to project preference)
+  "editor.formatOnSave": false,
+  "C_Cpp.formatting": "disabled",
+  // Diagnostics tuning: treat missing headers as warnings (since we simplified config)
+  "C_Cpp.codeAnalysis.clangTidy.enabled": false,
+  "C_Cpp.intelliSenseCacheSize": 512,
+  // Optional UI niceties
+  "C_Cpp.enhancedColorization": "enabled",
+  "C_Cpp.dimInactiveRegions": true,
+  // File associations
+  "files.associations": {
+    "*.cpp": "cpp",
+    "*.c": "c",
+    "*.h": "c",
+    "*.hpp": "cpp",
+    "*.mk": "makefile",
+    "BUILD.mk": "makefile"
+  }
+}

@@ -18,6 +18,7 @@
 #include "slot.h"
 #include "llama.cpp/llava/clip.h"
 #include "llama.cpp/llava/llava.h"
+#include "llama.cpp/common.h"
 #include "llamafile/image.h"
 #include "llamafile/llama.h"
 #include "llamafile/llamafile.h"
@@ -31,6 +32,9 @@
 #include <algorithm>
 #include <cassert>
 #include <cosmo.h>
+
+// External declaration for global LoRA adapter storage
+extern std::vector<llama_lora_adapter_container> g_lora_adapters;
 
 namespace lf {
 namespace server {
@@ -79,7 +83,7 @@ Slot::describe_error(int err)
     }
 }
 
-Slot::Slot(int id, llama_model* model) : id_(id), model_(model)
+Slot::Slot(int id, llama_model* model) : id_(id), model_(model), needs_refresh_(false)
 {
     dll_init(&elem_);
     last_used_ = time(0);
@@ -126,24 +130,16 @@ Slot::start()
     if (!(ctx_ = llama_new_context_with_model(model_, cparams)))
         return false;
     
-    // Apply LoRA adapters if available
-    struct llama_lora_adapter* adapters[MAX_LORA_ADAPTERS];
-    float scales[MAX_LORA_ADAPTERS];
-    int adapter_count = llamafiler_get_lora_adapters(adapters, scales, MAX_LORA_ADAPTERS);
-    
-    if (adapter_count > 0) {
-        SLOG("applying %d LoRA adapter(s) to slot #%d", adapter_count, id_);
-        for (int i = 0; i < adapter_count; i++) {
-            if (llama_lora_adapter_set(ctx_, adapters[i], scales[i]) != 0) {
-                SLOG("failed to apply LoRA adapter %d to slot #%d", i + 1, id_);
-                llama_free(ctx_);
-                ctx_ = nullptr;
-                return false;
-            }
-            char scale_buf[32];
-            snprintf(scale_buf, sizeof(scale_buf), "%.2f", scales[i]);
-            SLOG("applied LoRA adapter %d to slot #%d with scale %s", i + 1, id_, scale_buf);
-        }
+    // Apply LoRA adapters if available using llama.cpp's unified function
+    if (!::g_lora_adapters.empty() && !FLAG_lora_init_without_apply) {
+        SLOG("applying %d LoRA adapter(s) to slot #%d using llama.cpp unified function", 
+             (int)::g_lora_adapters.size(), id_);
+        llama_lora_adapters_apply(ctx_, ::g_lora_adapters);
+    } else if (!::g_lora_adapters.empty() && FLAG_lora_init_without_apply) {
+        // When --lora-init-without-apply is set, explicitly clear any LoRA state
+        // to ensure no residual LoRA effects from model initialization
+        SLOG("clearing LoRA state for slot #%d (--lora-init-without-apply mode)", id_);
+        llama_lora_adapter_clear(ctx_);
     }
     
     if (FLAG_mmproj)
@@ -314,6 +310,15 @@ Slot::prefill(const std::vector<Atom>& atoms, const ProgressCallback& progress)
     if (!ctx_)
         return uninitialized;
 
+    // Check if we need to refresh due to LoRA adapter changes
+    if (needs_refresh_) {
+        SLOG("Refreshing slot due to LoRA adapter changes");
+        llama_kv_cache_clear(ctx_);
+        history_.clear();
+        needs_refresh_ = false;
+        // Fall through to normal prefill logic with cleared state
+    }
+
     // handle special case of empty prefill
     if (atoms.empty()) {
         llama_kv_cache_clear(ctx_);
@@ -456,6 +461,12 @@ Slot::dump(std::string* result)
             convert_image_to_uri(result, history_[i].image().bytes());
         }
     }
+}
+
+void
+Slot::mark_for_refresh()
+{
+    needs_refresh_ = true;
 }
 
 } // namespace server

@@ -26,31 +26,21 @@
 #include "llamafile/server/tokenbucket.h"
 #include "llamafile/server/utils.h"
 #include "llamafile/version.h"
+#include "llama.cpp/common.h"
 #include <cassert>
 #include <cosmo.h>
 
-// Global LoRA adapter storage for multiple adapters
-#define MAX_LORA_ADAPTERS 8
-#include <string>
-struct lora_adapter_container {
-    struct llama_lora_adapter* adapter;
-    float scale;
-    std::string name;  // Model/adapter name for identification
-    bool applied;      // Whether this adapter is currently applied to slots
-};
-
-// Make these externally accessible for HTTP endpoint
-struct lora_adapter_container g_lora_adapters[MAX_LORA_ADAPTERS] = {};
-int g_lora_adapters_count = 0;
+// Global LoRA adapter storage using llama.cpp structures
+std::vector<llama_lora_adapter_container> g_lora_adapters;
 
 // Function to get the first global LoRA adapter for backward compatibility
 extern "C" struct llama_lora_adapter* llamafiler_get_lora_adapter() {
-    return g_lora_adapters_count > 0 ? g_lora_adapters[0].adapter : nullptr;
+    return g_lora_adapters.empty() ? nullptr : g_lora_adapters[0].adapter;
 }
 
 // Function to get all LoRA adapters and their count
 extern "C" int llamafiler_get_lora_adapters(struct llama_lora_adapter** adapters, float* scales, int max_adapters) {
-    int count = g_lora_adapters_count < max_adapters ? g_lora_adapters_count : max_adapters;
+    int count = std::min((int)g_lora_adapters.size(), max_adapters);
     for (int i = 0; i < count; i++) {
         adapters[i] = g_lora_adapters[i].adapter;
         scales[i] = g_lora_adapters[i].scale;
@@ -129,38 +119,31 @@ main(int argc, char* argv[])
             char scale_buf[32];
             snprintf(scale_buf, sizeof(scale_buf), "%.2f", FLAG_lora_adapters[i].scale);
             
-            // Generate model name from filename
+            // Generate model name from filename for identification
             const char* path = FLAG_lora_adapters[i].path;
             const char* filename = strrchr(path, '/');
             filename = filename ? filename + 1 : path;
             
-            // Remove file extension for cleaner name
-            std::string model_name(filename);
-            size_t dot_pos = model_name.find_last_of('.');
-            if (dot_pos != std::string::npos) {
-                model_name = model_name.substr(0, dot_pos);
-            }
-            
             SLOG("loading LoRA adapter %d ('%s') from %s with scale %s", i + 1, 
-                 model_name.c_str(), path, scale_buf);
-                 
-            g_lora_adapters[i].adapter = llama_lora_adapter_init(model, path);
-            g_lora_adapters[i].scale = FLAG_lora_adapters[i].scale;
-            g_lora_adapters[i].name = model_name;
-            g_lora_adapters[i].applied = !FLAG_lora_init_without_apply;  // Apply unless flag is set
+                 filename, path, scale_buf);
             
-            if (!g_lora_adapters[i].adapter) {
+            llama_lora_adapter_container adapter_container;
+            adapter_container.path = std::string(path);
+            adapter_container.scale = FLAG_lora_adapters[i].scale;
+            adapter_container.adapter = llama_lora_adapter_init(model, path);
+            
+            if (!adapter_container.adapter) {
                 fprintf(stderr, "%s: failed to load LoRA adapter from %s\n", FLAG_model, path);
                 // Cleanup previously loaded adapters
-                for (int j = 0; j < i; j++) {
-                    if (g_lora_adapters[j].adapter) {
-                        llama_lora_adapter_free(g_lora_adapters[j].adapter);
+                for (auto& la : g_lora_adapters) {
+                    if (la.adapter) {
+                        llama_lora_adapter_free(la.adapter);
                     }
                 }
                 llama_free_model(model);
                 exit(1);
             }
-            g_lora_adapters_count++;
+            g_lora_adapters.push_back(adapter_container);
         }
         
         if (FLAG_lora_init_without_apply) {
@@ -203,9 +186,9 @@ main(int argc, char* argv[])
     delete slots;
     
     // Cleanup LoRA adapters
-    for (int i = 0; i < g_lora_adapters_count; i++) {
-        if (g_lora_adapters[i].adapter) {
-            llama_lora_adapter_free(g_lora_adapters[i].adapter);
+    for (auto& la : g_lora_adapters) {
+        if (la.adapter) {
+            llama_lora_adapter_free(la.adapter);
         }
     }
     

@@ -23,7 +23,6 @@
 #include <vector>
 
 #define SLOT(e) DLL_CONTAINER(Slot, elem_, e)
-#define MAX_LORA_ADAPTERS 8
 
 struct llama_context;
 struct llama_model;
@@ -66,6 +65,7 @@ struct Slot
     llama_context* ctx_ = nullptr;
     std::vector<Atom> history_;
     std::string system_fingerprint_;
+    bool needs_refresh_ = false;
 
     ~Slot();
     Slot(int, llama_model*);
@@ -79,6 +79,7 @@ struct Slot
     int prefill(const std::vector<Atom>&, const ProgressCallback& = nullptr);
     void tokenize(std::vector<Atom>*, std::string_view, bool);
     void dump(std::string*);
+    void mark_for_refresh();
 };
 
 } // namespace server

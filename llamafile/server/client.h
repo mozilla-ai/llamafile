@@ -25,6 +25,7 @@
 #include <optional>
 #include <string>
 #include <sys/resource.h>
+#include "llama.cpp/common.h"
 
 #define HasHeader(H) (!!msg_.headers[H].a)
 #define HeaderData(H) (ibuf_.p + msg_.headers[H].a)
@@ -141,13 +142,4 @@ struct Client
 } // namespace lf
 
 // Global LoRA adapter storage - extern declarations (outside namespace to match definitions in prog.cpp)
-#define MAX_LORA_ADAPTERS 8
-struct lora_adapter_container {
-    struct llama_lora_adapter* adapter;
-    float scale;
-    std::string name;  // Model/adapter name for identification
-    bool applied;      // Whether this adapter is currently applied to slots
-};
-
-extern struct lora_adapter_container g_lora_adapters[MAX_LORA_ADAPTERS];
-extern int g_lora_adapters_count;
+// Remove the custom lora_adapter_container - we'll use llama.cpp's structure instead

@@ -17,6 +17,7 @@
 
 #include "client.h"
 #include "llama.cpp/llama.h"
+#include "llama.cpp/common.h"
 #include "llamafile/json.h"
 #include "llamafile/llamafile.h"
 #include "llamafile/server/log.h"
@@ -29,9 +30,7 @@
 using jt::Json;
 
 // External declarations for global LoRA adapter storage from prog.cpp (outside namespace)
-// Note: struct lora_adapter_container and MAX_LORA_ADAPTERS are already defined in client.h
-extern struct lora_adapter_container g_lora_adapters[MAX_LORA_ADAPTERS];
-extern int g_lora_adapters_count;
+extern std::vector<llama_lora_adapter_container> g_lora_adapters;
 
 namespace lf {
 namespace server {
@@ -46,12 +45,12 @@ Client::lora_adapters()
         json.setArray();
         std::vector<Json>& json_array = json.getArray();
         
-        for (int i = 0; i < g_lora_adapters_count; i++) {
+        for (size_t i = 0; i < ::g_lora_adapters.size(); i++) {
             Json adapter;
             adapter.setObject();
-            adapter["id"] = i;
-            adapter["path"] = g_lora_adapters[i].name;  // Use name as path for now
-            adapter["scale"] = g_lora_adapters[i].scale;
+            adapter["id"] = (int)i;
+            adapter["path"] = ::g_lora_adapters[i].path;
+            adapter["scale"] = ::g_lora_adapters[i].scale;
             json_array.push_back(adapter);
         }
         
@@ -93,7 +92,7 @@ bool
 Client::handle_apply_adapters(Json& json)
 {
     // Get active slots and apply current adapters to them
-    if (g_lora_adapters_count == 0) {
+    if (::g_lora_adapters.empty()) {
         Json response;
         response["success"] = false;
         response["message"] = "No adapters loaded to apply";
@@ -103,14 +102,34 @@ Client::handle_apply_adapters(Json& json)
         return send_response(obuf_.p, p, response.toString());
     }
     
-    // Apply adapters to all slots via the server
-    // Note: This would require coordination with the slot management system
-    SLOG("applying %d LoRA adapter(s) to all active slots", g_lora_adapters_count);
+    // Apply adapters to all slots via the server using llama.cpp unified function
+    SLOG("applying %d LoRA adapter(s) to all active slots using llama.cpp unified function", 
+         (int)::g_lora_adapters.size());
+    
+    // Apply to all active slots
+    Slots* slots = worker_->server_->slots_;
+    pthread_mutex_lock(&slots->lock_);
+    
+    for (size_t i = 0; i < slots->slots_.size(); ++i) {
+        Slot* slot = slots->slots_[i].get();
+        if (slot->ctx_) {
+            SLOG("applying LoRA adapters to slot #%d", slot->id_);
+            llama_lora_adapters_apply(slot->ctx_, ::g_lora_adapters);
+            
+            // CRITICAL: Mark slot for refresh to handle LoRA changes properly
+            // The slot's prefill() mechanism will intelligently preserve system prompts
+            // and only re-evaluate what's necessary when the next request comes in
+            slot->mark_for_refresh();
+            SLOG("marked slot #%d for refresh after LoRA application", slot->id_);
+        }
+    }
+    
+    pthread_mutex_unlock(&slots->lock_);
     
     Json response;
     response["success"] = true;
     response["message"] = "Adapters applied to active slots";
-    response["adapters_applied"] = g_lora_adapters_count;
+    response["adapters_applied"] = (int)::g_lora_adapters.size();
     
     char* p = append_http_response_message(obuf_.p, 200);
     p = stpcpy(p, "Content-Type: application/json\r\n");
@@ -127,18 +146,6 @@ Client::handle_load_adapter(Json& json)
     
     std::string adapter_path = json["path"].getString();
     float scale = json.contains("scale") ? json["scale"].getNumber() : 1.0f;
-    
-    // Check if we have room for more adapters
-    if (g_lora_adapters_count >= MAX_LORA_ADAPTERS) {
-        Json response;
-        response["success"] = false;
-        response["message"] = "Maximum number of adapters already loaded";
-        response["max_adapters"] = MAX_LORA_ADAPTERS;
-        
-        char* p = append_http_response_message(obuf_.p, 400);
-        p = stpcpy(p, "Content-Type: application/json\r\n");
-        return send_response(obuf_.p, p, response.toString());
-    }
     
     // Check if file exists
     if (!std::filesystem::exists(adapter_path)) {
@@ -167,11 +174,15 @@ Client::handle_load_adapter(Json& json)
         return send_response(obuf_.p, p, response.toString());
     }
     
+    // Create the adapter container
+    llama_lora_adapter_container adapter_container;
+    adapter_container.path = adapter_path;
+    adapter_container.scale = scale;
+    adapter_container.adapter = adapter;
+    
     // Store the adapter
-    int index = g_lora_adapters_count;
-    g_lora_adapters[index].adapter = adapter;
-    g_lora_adapters[index].scale = scale;
-    g_lora_adapters_count++;
+    int index = (int)::g_lora_adapters.size();
+    ::g_lora_adapters.push_back(adapter_container);
     
     SLOG("successfully loaded LoRA adapter #%d from %s", index, adapter_path.c_str());
     
@@ -181,7 +192,7 @@ Client::handle_load_adapter(Json& json)
     response["index"] = index;
     response["path"] = adapter_path;
     response["scale"] = scale;
-    response["total_adapters"] = g_lora_adapters_count;
+    response["total_adapters"] = (int)::g_lora_adapters.size();
     
     char* p = append_http_response_message(obuf_.p, 200);
     p = stpcpy(p, "Content-Type: application/json\r\n");
@@ -192,18 +203,16 @@ bool
 Client::handle_clear_adapters()
 {
     // Clear all loaded adapters
-    SLOG("clearing all %d LoRA adapter(s)", g_lora_adapters_count);
+    SLOG("clearing all %d LoRA adapter(s)", (int)::g_lora_adapters.size());
     
-    for (int i = 0; i < g_lora_adapters_count; i++) {
-        if (g_lora_adapters[i].adapter) {
-            llama_lora_adapter_free(g_lora_adapters[i].adapter);
-            g_lora_adapters[i].adapter = nullptr;
-            g_lora_adapters[i].scale = 0.0f;
+    int cleared_count = (int)::g_lora_adapters.size();
+    for (auto& la : ::g_lora_adapters) {
+        if (la.adapter) {
+            llama_lora_adapter_free(la.adapter);
         }
     }
     
-    int cleared_count = g_lora_adapters_count;
-    g_lora_adapters_count = 0;
+    ::g_lora_adapters.clear();
     
     SLOG("cleared %d LoRA adapter(s)", cleared_count);
     
@@ -225,11 +234,6 @@ Client::handle_upstream_lora_apply(Json& json)
     std::vector<Json>& json_array = json.getArray();
     SLOG("applying LoRA configuration with %d entries", (int)json_array.size());
     
-    // First, reset all adapter scales to 0.0 (disabled)
-    for (int i = 0; i < g_lora_adapters_count; i++) {
-        g_lora_adapters[i].applied = false;
-    }
-    
     // Process each entry in the array
     for (size_t i = 0; i < json_array.size(); i++) {
         Json& entry = json_array[i];
@@ -246,22 +250,21 @@ Client::handle_upstream_lora_apply(Json& json)
         float scale = entry["scale"].getNumber();
         
         // Validate ID range
-        if (id < 0 || id >= g_lora_adapters_count) {
+        if (id < 0 || id >= (int)::g_lora_adapters.size()) {
             return send_error(400, "Invalid adapter ID");
         }
         
         // Update the adapter configuration
-        g_lora_adapters[id].scale = scale;
-        g_lora_adapters[id].applied = (scale > 0.0f);
+        ::g_lora_adapters[id].scale = scale;
         
         char scale_buf[32];
         snprintf(scale_buf, sizeof(scale_buf), "%.2f", scale);
         SLOG("set LoRA adapter %d ('%s') scale to %s", 
-             id, g_lora_adapters[id].name.c_str(), scale_buf);
+             id, ::g_lora_adapters[id].path.c_str(), scale_buf);
     }
     
-    // Re-apply LoRA adapters to all active slots with updated scales
-    SLOG("re-applying LoRA adapters to all active slots");
+    // Re-apply LoRA adapters to all active slots with updated scales using llama.cpp unified function
+    SLOG("re-applying LoRA adapters to all active slots using llama.cpp unified function");
     Slots* slots = worker_->server_->slots_;
     
     // Lock the slots to prevent concurrent access during LoRA re-application
@@ -271,32 +274,13 @@ Client::handle_upstream_lora_apply(Json& json)
         Slot* slot = slots->slots_[i].get();
         if (slot->ctx_) {
             SLOG("re-applying LoRA adapters to slot #%d", slot->id_);
+            llama_lora_adapters_apply(slot->ctx_, ::g_lora_adapters);
             
-            // Clear existing LoRA adapters from this context
-            llama_lora_adapter_clear(slot->ctx_);
-            
-            // Use the same approach as slot initialization: get all adapters via the function
-            struct llama_lora_adapter* adapters[MAX_LORA_ADAPTERS];
-            float scales[MAX_LORA_ADAPTERS];
-            int adapter_count = llamafiler_get_lora_adapters(adapters, scales, MAX_LORA_ADAPTERS);
-            
-            SLOG("got %d LoRA adapters from llamafiler_get_lora_adapters for slot #%d", adapter_count, slot->id_);
-            
-            // Re-apply all adapters with their current scales
-            for (int j = 0; j < adapter_count; ++j) {
-                char scale_buf[32];
-                snprintf(scale_buf, sizeof(scale_buf), "%.2f", scales[j]);
-                SLOG("processing LoRA adapter %d with scale %s", j, scale_buf);
-                if (scales[j] > 0.0f) {
-                    if (llama_lora_adapter_set(slot->ctx_, adapters[j], scales[j]) != 0) {
-                        SLOG("failed to re-apply LoRA adapter %d to slot #%d", j, slot->id_);
-                    } else {
-                        SLOG("re-applied LoRA adapter %d to slot #%d with scale %s", j, slot->id_, scale_buf);
-                    }
-                } else {
-                    SLOG("skipping LoRA adapter %d (scale %s <= 0)", j, scale_buf);
-                }
-            }
+            // CRITICAL: Mark slot for refresh to handle LoRA changes properly
+            // The slot's prefill() mechanism will intelligently preserve system prompts
+            // and only re-evaluate what's necessary when the next request comes in
+            slot->mark_for_refresh();
+            SLOG("marked slot #%d for refresh after LoRA update", slot->id_);
         }
     }
     
@@ -307,12 +291,13 @@ Client::handle_upstream_lora_apply(Json& json)
     Json response;
     response.setArray();
     std::vector<Json>& response_array = response.getArray();
-    for (int i = 0; i < g_lora_adapters_count; i++) {
+    
+    for (size_t i = 0; i < ::g_lora_adapters.size(); i++) {
         Json adapter;
         adapter.setObject();
-        adapter["id"] = i;
-        adapter["path"] = g_lora_adapters[i].name;
-        adapter["scale"] = g_lora_adapters[i].scale;
+        adapter["id"] = (int)i;
+        adapter["path"] = ::g_lora_adapters[i].path;
+        adapter["scale"] = ::g_lora_adapters[i].scale;
         response_array.push_back(adapter);
     }
     
