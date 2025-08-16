@@ -8,7 +8,9 @@
 #include "llama.cpp/llama.h"
 #include "llama.cpp/base64.h"
 #include "llamafile/version.h"
+#include "llamafile/llamafile.h"
 
+#include <cosmo.h>
 #include <cstdio>
 #include <cstdlib>
 #include <vector>
@@ -62,6 +64,68 @@ static const char * sample(struct llama_sampling_context * ctx_sampling,
 
 static const char* IMG_BASE64_TAG_BEGIN = "<img src=\"data:image/jpeg;base64,";
 static const char* IMG_BASE64_TAG_END = "\">";
+
+// Auto-detect mmproj file from the main model if it's a ZIP/llamafile
+static std::string auto_detect_mmproj(const std::string& model_path) {
+    // Try common mmproj filenames
+    std::vector<std::string> common_names = {
+        "mmproj-model-f16.gguf",
+        "mmproj-model-q4_0.gguf",
+        "mmproj-model-q4_1.gguf",
+        "mmproj.gguf", 
+        "vision_encoder.gguf",
+        "clip.gguf",
+        "visual.gguf"
+    };
+    
+    LOG_TEE("Auto-detecting mmproj file (model_path='%s')...\n", model_path.c_str());
+    
+    // First, check if model_path is a ZIP file (contains @) or a regular file
+    bool model_is_zip = false;
+    if (!model_path.empty() && model_path != DEFAULT_MODEL_PATH) {
+        // Check if it's a ZIP by looking for .gguf extension or seeing if we can open it
+        struct llamafile* test = llamafile_open_gguf(model_path.c_str(), "rb");
+        if (test) {
+            // Check if it's actually a ZIP by looking at the opened path
+            const char* opened_name = llamafile_name(test);
+            model_is_zip = opened_name && strchr(opened_name, '@') != NULL;
+            llamafile_close(test);
+        }
+        
+        // If model is a ZIP/llamafile, try to find mmproj inside it
+        if (model_is_zip || model_path.find(".llamafile") != std::string::npos) {
+            std::string base_path = model_path;
+            // Remove @ suffix if present
+            size_t at_pos = base_path.find('@');
+            if (at_pos != std::string::npos) {
+                base_path = base_path.substr(0, at_pos);
+            }
+            
+            for (const auto& name : common_names) {
+                std::string test_path = base_path + "@" + name;
+                struct llamafile* f = llamafile_open_gguf(test_path.c_str(), "rb");
+                if (f) {
+                    llamafile_close(f);
+                    LOG_TEE("Auto-detected mmproj file: %s\n", test_path.c_str());
+                    return test_path;
+                }
+            }
+        }
+    }
+    
+    // Try in the executable itself (when running as ./llava.llamafile)
+    for (const auto& name : common_names) {
+        struct llamafile* f = llamafile_open_gguf(name.c_str(), "rb");
+        if (f) {
+            llamafile_close(f);
+            LOG_TEE("Auto-detected mmproj file: %s (embedded in executable)\n", name.c_str());
+            return name;
+        }
+    }
+    
+    LOG_TEE("No mmproj file found via auto-detection\n");
+    return "";
+}
 
 static void find_image_tag_in_prompt(const std::string& prompt, size_t& begin_out, size_t& end_out) {
     begin_out = prompt.find(IMG_BASE64_TAG_BEGIN);
@@ -132,6 +196,8 @@ static void print_usage(int argc, char ** argv, const gpt_params & params) {
 
     LOG_TEE("\n example usage:\n");
     LOG_TEE("\n     %s -m <llava-v1.5-7b/ggml-model-q5_k.gguf> --mmproj <llava-v1.5-7b/mmproj-model-f16.gguf> --image <path/to/an/image.jpg> --image <path/to/another/image.jpg> [--temp 0.1] [-p \"describe the image in detail.\"]\n", argv[0]);
+    LOG_TEE("\n     %s -m <llava.llamafile> --image <path/to/an/image.jpg> [-p \"describe the image in detail.\"]\n", argv[0]);
+    LOG_TEE("\n note: --mmproj is optional when using a llamafile containing multiple GGUF files\n");
     LOG_TEE("\n note: a lower temperature value like 0.1 is recommended for better quality.\n");
 }
 
@@ -307,6 +373,23 @@ int llava_cli(int argc, char ** argv, gpt_params & params) {
     llama_log_set(llama_log_callback_logTee, nullptr);
 #endif // LOG_DISABLE_LOGS
 
+    // Handle running as llamafile executable
+    if (params.model.empty()) {
+        // Check if we're running as a llamafile with embedded model
+        const char* prog = GetProgramExecutableName();
+        struct llamafile* test = llamafile_open_gguf(prog, "rb");
+        if (test) {
+            llamafile_close(test);
+            params.model = prog;
+            LOG_TEE("Running as llamafile, using embedded model: %s\n", prog);
+        }
+    }
+
+    // Auto-detect mmproj if not provided
+    if (params.mmproj.empty()) {
+        params.mmproj = auto_detect_mmproj(params.model);
+    }
+    
     if (params.mmproj.empty() || (params.image.empty() && !prompt_contains_image(params.prompt))) {
         print_usage(argc, argv, {});
         return 1;
