@@ -10,6 +10,7 @@
 #include "llamafile/version.h"
 #include "llamafile/llamafile.h"
 
+#include <cosmo.h>
 #include <cstdio>
 #include <cstdlib>
 #include <vector>
@@ -372,8 +373,20 @@ int llava_cli(int argc, char ** argv, gpt_params & params) {
     llama_log_set(llama_log_callback_logTee, nullptr);
 #endif // LOG_DISABLE_LOGS
 
+    // Handle running as llamafile executable
+    if (params.model.empty()) {
+        // Check if we're running as a llamafile with embedded model
+        const char* prog = GetProgramExecutableName();
+        struct llamafile* test = llamafile_open_gguf(prog, "rb");
+        if (test) {
+            llamafile_close(test);
+            params.model = prog;
+            LOG_TEE("Running as llamafile, using embedded model: %s\n", prog);
+        }
+    }
+
     // Auto-detect mmproj if not provided
-    if (params.mmproj.empty() && !params.model.empty()) {
+    if (params.mmproj.empty()) {
         params.mmproj = auto_detect_mmproj(params.model);
     }
     
