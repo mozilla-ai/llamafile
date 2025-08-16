@@ -79,6 +79,7 @@ bool llamafile_eof(struct llamafile *file);
 FILE *llamafile_fp(struct llamafile *);
 void llamafile_ref(struct llamafile *);
 void llamafile_unref(struct llamafile *);
+const char *llamafile_name(struct llamafile *);
 char *llamafile_get_prompt(void);
 
 void llamafile_govern(void);

@@ -177,10 +177,12 @@ static struct llamafile *llamafile_open_zip(const char *prog, const char *fname,
         goto Invalid;
     }
     if (found != 1) {
-        // TODO: Support opening LLaVA llamafiles.
-        fprintf(stderr, "%s: error: multiple %s files found in zip archive\n", prog,
-                fname ? fname : ".gguf");
-        goto Invalid;
+        // Multiple GGUF files found - this is OK for LLaVA models
+        // Just pick the first one found and log a message
+        fprintf(stderr, "%s: note: multiple GGUF files found in ZIP\n", prog);
+        if (!fname) {
+            fprintf(stderr, "%s: selecting '%s' (use @filename to specify)\n", prog, zip_name);
+        }
     }
     strlcat(file->fname, "@", PATH_MAX);
     strlcat(file->fname, zip_name, PATH_MAX);
@@ -396,6 +398,10 @@ static void llamafile_close_impl(struct llamafile *file) {
         munmap(file->mapping, file->mapsize);
     }
     free(file);
+}
+
+const char *llamafile_name(struct llamafile *file) {
+    return file ? file->fname : NULL;
 }
 
 void llamafile_ref(struct llamafile *file) {
