@@ -34,7 +34,7 @@ llamafile -m base_model.gguf --lora adapter1.gguf --lora-scaled adapter2.gguf 0.
 # Dynamic scale adjustment via API
 curl -X POST http://localhost:8080/lora-adapters \
   -H "Content-Type: application/json" \
-  -d '[{"id": 0, "scale": 0.8}, {"id": 1, "scale": 1.2}]'
+  -d '[{"id": 0, "scale": 0.8}, {"id": 1, "scale": 1}]'
 ```
 
 This implementation follows llama.cpp patterns for maximum compatibility and provides a foundation for advanced fine-tuning workflows with real-time adaptation capabilities.
