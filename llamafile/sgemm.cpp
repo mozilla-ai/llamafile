@@ -25,14 +25,9 @@
 // #include <cpuid.h>
 // #include <libc/sysv/consts/hwcap.h>
 #include <stdio.h>
+#include <sys/auxv.h>
 #include <cassert>
 // #include "llamafile.h"
-
-// ARM64-specific headers and constants
-#ifdef __aarch64__
-#include <sys/auxv.h>
-#include <asm/hwcap.h>
-#endif
 
 static const struct GemmFuncs {
     bool (*sgemm)(long, long, long, const void*, long, const void*, long, void*, long, int, int, int, int, int, int, int);
@@ -42,7 +37,7 @@ static const struct GemmFuncs {
     // typeof(llamafile_mixmul)* mixmul;
     // typeof(llamafile_mixmul_iqk)* iqk_mixmul = iqk_mul_mat_moe_unsupported;
     GemmFuncs() {
-#if defined(__x86_64__) || defined(_M_X64)
+//#if defined(__x86_64__) || defined(_M_X64)
         // if (X86_HAVE(AVX)) {
         //     if (X86_HAVE(FMA)) {
         //         if (X86_HAVE(AVX2)) {
@@ -95,83 +90,18 @@ static const struct GemmFuncs {
         //     mixmul = llamafile_mixmul_unsupported;
         // }
 
-#if defined(__AVX__)
-#if defined(__FMA__) || (defined(_MSC_VER) && (defined(__AVX2__) || defined(__AVX512F__)))
-#if defined(__AVX2__)
-#if defined(__AVX512F__)
-#if defined(__AVX512VL__) && defined(__AVX512BW__) && defined(__AVX512DQ__) && defined(__AVX512VNNI__) && defined(__AVX512BF16__)
-        // AMD Zen4+ (2023-)
-        sgemm = llamafile_sgemm_amd_zen4;
-        mixmul = llamafile_mixmul_amd_zen4;
-        iqk_mixmul = iqk_mul_mat_moe_zen4;
-#else
-        // Intel Xeon Skylake+ (2015-)
-        sgemm = llamafile_sgemm_amd_avx512f;
-        mixmul = llamafile_mixmul_amd_avx512f;
-        iqk_mixmul = iqk_mul_mat_moe;
-#endif
-#elif defined(__AVXVNNI__)
-        // Intel Alderlake (2021-)
-        sgemm = llamafile_sgemm_amd_avxvnni;
-        mixmul = llamafile_mixmul_amd_avxvnni;
-        iqk_mixmul = iqk_mul_mat_moe;
-#else
-        // Intel Haswell/Broadwell/Skylake (2013-2020)
-        // AMD Excavator (2015-2022)
-        sgemm = llamafile_sgemm_amd_avx2;
-        mixmul = llamafile_mixmul_amd_avx2;
-#if defined(__F16C__)
-        iqk_mixmul = iqk_mul_mat_moe;
-#endif
-#endif
-#else
-        // AMD Piledriver (2011-2014)
-        sgemm = llamafile_sgemm_amd_fma;
-        mixmul = llamafile_mixmul_amd_fma;
-#if defined(__F16C__)
-        iqk_mixmul = iqk_mul_mat_moe;
-#endif
-#endif
-#else
-        // Intel Sandybridge/Ivybridge (2010-2012)
-        // AMD Bulldozer (2011)
-        sgemm = llamafile_sgemm_amd_avx;
-        mixmul = llamafile_mixmul_amd_avx;
-#endif
-#else
-        // AMD K8/Barcelona (2003-2010)
-        // Intel Core/Nehalem (2006-2009)
-        sgemm = llamafile_sgemm_unsupported;
-        mixmul = llamafile_mixmul_unsupported;
-#endif
 
-#elif defined(__aarch64__)
-        // ARM64 hardware capability detection
-        long hwcap = 0;
-#ifdef __linux__
-        hwcap = getauxval(AT_HWCAP);
-        if ((hwcap & HWCAP_FPHP) &&     // fp16 scalar isa (ID_AA64PFR0_EL1.FP == 1)
-            (hwcap & HWCAP_ASIMDHP) &&  // fp16 vector isa (ID_AA64PFR0_EL1.AdvSIMD == 1)
-            (hwcap & HWCAP_ASIMDDP)) {  // dotprod isa (ID_AA64ISAR0_EL1.DP == 1)
+//#elif defined(__aarch64__)
+        //long hwcap = getauxval(AT_HWCAP);
+        //if ((hwcap & HWCAP_FPHP) &&     // fp16 scalar isa (ID_AA64PFR0_EL1.FP == 1)
+        //   (hwcap & HWCAP_ASIMDHP) &&  // fp16 vector isa (ID_AA64PFR0_EL1.AdvSIMD == 1)
+        //    (hwcap & HWCAP_ASIMDDP)) {  // dotprod isa (ID_AA64ISAR0_EL1.DP == 1)
             // e.g. Apple M1, Raspberry Pi 5
             sgemm = llamafile_sgemm_arm82;
             mixmul = llamafile_mixmul_arm82;
             iqk_mixmul = iqk_mul_mat_moe_arm82;
-        } else {
-            // ARM64 baseline ISA
-            sgemm = llamafile_sgemm_arm80;
-            mixmul = llamafile_mixmul_arm80;
-        }
-#else
-        // Non-Linux ARM64 systems (e.g., macOS)
-        // Use baseline ARM64 implementation
-        sgemm = llamafile_sgemm_arm80;
-        mixmul = llamafile_mixmul_arm80;
-#endif
-#else
-        sgemm = llamafile_sgemm_unsupported;
-        mixmul = llamafile_mixmul_unsupported;
-#endif
+        
+//#endif
     }
 } funcs;
 
