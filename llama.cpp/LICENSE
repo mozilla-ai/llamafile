@@ -1,12 +1,6 @@
 MIT License
 
-Copyright (c) 2023 Georgi Gerganov
-Copyright (c) 2023 Iwan Kawrakow
-Copyright (c) 2023 Jeffrey Quesnelle and Bowen Peng.
-Copyright (c) 2023 Yuji Hirose
-Copyright (c) 2022 Niels Lohmann <https://nlohmann.me>
-Copyright (c) 2022 Bjoern Hoehrmann <bjoern@hoehrmann.de>
-Copyright (c) 2017 Sean Barrett
+Copyright (c) 2023-2024 The ggml authors
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal

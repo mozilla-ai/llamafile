@@ -1,0 +1,418 @@
+# Llamafile Modernization Specification Document
+
+**Version:** 1.0  
+**Date:** October 31, 2025  
+**Status:** Planning Phase
+
+---
+
+## Executive Summary
+
+This specification outlines the modernization of llamafile by integrating the latest versions of its core dependencies: **ggml-org/llama.cpp** (upstream) and **cosmocc-4.0.2** (Cosmopolitan Libc compiler). The objective is to produce a modern, portable llamafile build that supports all contemporary model architectures while maintaining llamafile's exceptional performance characteristics and cross-platform portability.
+
+---
+
+## 1. Project Overview
+
+### 1.1 What is Llamafile?
+
+Llamafile is a revolutionary approach to distributing and running Large Language Models (LLMs) that combines:
+
+- **Single-file executables**: Weights + inference engine in one portable binary
+- **Cross-platform compatibility**: Runs on Linux, macOS, Windows, FreeBSD, OpenBSD, and NetBSD without modification
+- **Zero dependencies**: No CUDA SDK, ROCm, or runtime libraries required
+- **Exceptional performance**: 2-5x faster than standard llama.cpp for many workloads
+- **Universal GPU support**: Both NVIDIA and AMD GPUs work out-of-the-box via tinyBLAS
+
+### 1.2 Why Llamafile is Architecturally Interesting
+
+Llamafile achieves its portability through **Cosmopolitan Libc** (cosmocc), which produces "Actually Portable Executable" (APE) binaries. These executables contain multiple platform implementations in a single file that self-extracts and runs on any supported OS.
+
+The key innovations include:
+
+1. **Custom matrix multiplication kernels** optimized for LLM-specific patterns
+2. **Architectural-specific optimizations** that auto-detect and utilize CPU capabilities
+3. **Platform-agnostic GPU support** via tinyBLAS
+4. **Zero-install philosophy** that makes LLM deployment trivial
+
+---
+
+## 2. Current State vs. Target State
+
+### 2.1 Current State (Out of Date)
+
+- **llamafile**: Using outdated llama.cpp fork
+- **ggml-org/llama.cpp**: Multiple architecture updates and model support additions since last sync
+- **cosmocc**: Previous version (pre-4.0.2) with potential compatibility issues
+- **Missing features**: Recent model architectures (Llama 3, Gemma 2, Phi-3, Qwen2, etc.)
+
+### 2.2 Target State (Modernized)
+
+**Component Versions:**
+- **ggml-org/llama.cpp**: Latest main branch (includes all modern architectures)
+- **cosmocc**: 4.0.2 (latest stable release)
+- **Build system**: Updated to work with both components seamlessly
+
+**Expected Capabilities:**
+- Support for all modern model architectures (Llama 3.x, Mistral, Mixtral, Gemma, Phi, Qwen, etc.)
+- Latest quantization formats (Q4_K_M, Q5_K_M, Q6_K, IQ variants)
+- Updated KV cache implementations
+- Flash Attention 2 support where applicable
+- Latest rope scaling and context extension techniques
+
+---
+
+## 3. Performance Characteristics (Why This Matters)
+
+### 3.1 Speed Improvements
+
+Llamafile delivers exceptional performance through custom optimizations:
+
+**Benchmark Results:**
+- **2-5x faster** CPU execution for Mixture of Experts models
+- **30% faster** F16 performance on Intel Skylake
+- **60% faster** on Apple M2
+- **20% faster** on Raspberry Pi 5
+- **2x speedup** for prompt processing on Skylake systems
+- **2.8x faster** on AMD Ryzen Threadripper PRO 7995WX
+
+**Specific Improvements:**
+- Prompt processing: 30% to 500% faster with F16 and Q8_0 weights on CPU
+- Core i9-9900 using Q4_0 Mistral 7B: 65% higher prompt performance
+
+### 3.2 Technical Magic Behind the Speed
+
+#### 3.2.1 Custom Matrix Multiplication Kernels
+
+**The Problem:**
+- Matrix multiplication (GGML_OP_MUL_MAT) consumes 95% of processing time
+- Standard BLAS libraries are designed for general use, not LLM-specific patterns
+- Traditional approaches don't exploit LLM computation patterns
+
+**The Solution - Unrolling Outer Loops:**
+
+Llamafile implements **84 new matrix multiplication kernels** that unroll outer loops instead of inner loops. This approach:
+
+- Exploits instruction-level parallelism with fewer memory references
+- Shares register loads across multiple floating-point operations
+- Dramatically reduces memory bandwidth requirements
+- Achieves **810 gigaflops** on Intel i9-14900K vs Intel MKL's 295 gigaflops
+
+**Key Insight:** When computing multiple output cells, the same input value is reused for multiple calculations through a vectorized outer product approach.
+
+#### 3.2.2 LLM-Specific Optimizations
+
+Llamafile exploits patterns unique to LLMs:
+- Alpha/beta parameters are always 1 and 0
+- Matrix A is almost always transposed
+- m/k dimensions are usually divisible by 64
+
+By removing unnecessary generality, performance improves dramatically for the specific LLM use case.
+
+#### 3.2.3 tinyBLAS for GPU Support
+
+A highly efficient linear algebra library for both NVIDIA and AMD GPUs that:
+- Works out-of-the-box without CUDA SDK or ROCm installation on Windows
+- Provides unified interface for multiple GPU vendors
+- Integrates seamlessly with cosmopolitan binaries
+
+#### 3.2.4 Platform-Specific Optimizations
+
+Different kernels optimized for:
+- **ARMv8.2+** with dotprod and fp16 support (Raspberry Pi 5)
+- **Intel Alderlake** microarchitecture
+- **AVX512** for AMD Zen 4
+- Auto-detection ensures optimal kernel selection at runtime
+
+#### 3.2.5 Efficiency Core Avoidance
+
+On Intel chips with efficiency cores (P+E core designs), llamafile specifically avoids running on E-cores, preventing the lockstep thread dispatch from being slowed by weaker cores.
+
+---
+
+## 4. Integration Requirements
+
+### 4.1 Cosmocc 4.0.2 Integration
+
+**Installation Path:**
+```
+/path/to/cosmocc-4.0.2/
+├── bin/
+│   ├── cosmocc
+│   ├── cosmoc++
+│   └── ...
+├── include/
+└── lib/
+```
+
+**Required Capabilities:**
+- C++17 or later support
+- Cross-platform compilation targets (x86_64, ARM64)
+- Support for inline assembly optimization
+- SIMD intrinsics (SSE, AVX, AVX2, AVX512, NEON)
+- Thread-local storage support
+- Position-independent executable generation
+
+**Build Configuration:**
+```bash
+CC=/path/to/cosmocc-4.0.2/bin/cosmocc
+CXX=/path/to/cosmocc-4.0.2/bin/cosmoc++
+```
+
+### 4.2 Latest llama.cpp Integration
+
+**Source Path:**
+```
+/path/to/llamafile/
+└── llama.cpp/  (git submodule or direct integration)
+    ├── ggml.c
+    ├── ggml-alloc.c
+    ├── ggml-backend.c
+    ├── llama.cpp
+    └── ...
+```
+
+**Key Components to Sync:**
+1. **Core inference engine** (llama.cpp, llama.h)
+2. **GGML backend** (ggml.c, ggml.h)
+3. **Model architecture support** (all model-specific code)
+4. **Quantization implementations** (ggml-quants.c)
+5. **Backend abstractions** (ggml-backend.c)
+6. **CPU optimizations** (ggml-cpu.c)
+7. **GPU implementations** (adapt to tinyBLAS where needed)
+
+### 4.3 Architecture Support Requirements
+
+The modernized build must support:
+
+**Model Families:**
+- LLaMA (1, 2, 3, 3.1, 3.2, 3.3)
+- Mistral (7B, 8x7B Mixtral, 8x22B)
+- Gemma (1, 1.1, 2)
+- Phi (1, 2, 3, 3.5)
+- Qwen (1.5, 2, 2.5)
+- Command-R
+- DeepSeek
+- Yi
+- Falcon
+- StarCoder
+- And all other architectures in latest llama.cpp
+
+**Quantization Formats:**
+- Legacy: Q4_0, Q4_1, Q5_0, Q5_1, Q8_0
+- K-quants: Q2_K, Q3_K_S, Q3_K_M, Q3_K_L, Q4_K_S, Q4_K_M, Q5_K_S, Q5_K_M, Q6_K
+- IQ (Importance Quantization): IQ1_S, IQ2_XXS, IQ2_XS, IQ3_XXS, IQ4_XS
+- F16, F32
+
+---
+
+## 5. Compilation Process Requirements
+
+### 5.1 Build System Modifications
+
+**Makefile/CMake Changes Needed:**
+
+1. **Compiler Selection:**
+   - Detect and use cosmocc 4.0.2
+   - Set appropriate flags for APE generation
+   - Configure for multi-platform support
+
+2. **Optimization Flags:**
+   - Preserve llamafile's custom optimization flags
+   - Ensure compatibility with cosmocc
+   - Enable platform-specific SIMD where supported
+
+3. **Linking Strategy:**
+   - Static linking for portability
+   - No dynamic library dependencies
+   - Proper symbol resolution for APE format
+
+### 5.2 Code Compatibility Considerations
+
+**Potential Issues to Address:**
+
+1. **ABI Compatibility:**
+   - Verify struct layouts match between llamafile and llama.cpp
+   - Check for breaking changes in llama.cpp APIs
+   - Update llamafile wrappers if needed
+
+2. **SIMD Intrinsics:**
+   - Ensure all intrinsics are supported by cosmocc 4.0.2
+   - Verify runtime CPU feature detection works
+   - Test fallback paths for unsupported instructions
+
+3. **Threading Model:**
+   - Verify thread pool implementation compatibility
+   - Check for race conditions with new llama.cpp code
+   - Ensure efficiency core avoidance still works
+
+4. **Memory Management:**
+   - Verify allocator compatibility
+   - Check for memory leaks with new code paths
+   - Ensure mmap support works across platforms
+
+5. **GPU Backend Integration:**
+   - Adapt new llama.cpp GPU code to tinyBLAS
+   - Preserve zero-install GPU support
+   - Test on both NVIDIA and AMD hardware
+
+### 5.3 Testing Requirements
+
+**Platform Testing Matrix:**
+| Platform | Architecture | GPU Support | Priority |
+|----------|-------------|-------------|----------|
+| Linux | x86_64 | NVIDIA/AMD | High |
+| macOS | ARM64 (Apple Silicon) | Metal | High |
+| Windows | x86_64 | NVIDIA/AMD | High |
+| Linux | ARM64 | None | Medium |
+| FreeBSD | x86_64 | None | Low |
+
+**Functional Tests:**
+- Model loading for all supported architectures
+- Inference accuracy (compare outputs with upstream llama.cpp)
+- Quantization format compatibility
+- Multi-threading stability
+- Long context handling (32K+ tokens)
+- Batch processing
+
+**Performance Tests:**
+- Prompt processing throughput
+- Token generation speed
+- Memory usage
+- GPU utilization
+- Multi-model switching speed
+
+---
+
+## 6. Development Workflow
+
+### 6.1 Phase 1: Environment Setup
+1. Install cosmocc 4.0.2
+2. Clone/update llama.cpp to latest
+3. Set up build environment
+4. Verify toolchain compatibility
+
+### 6.2 Phase 2: Code Integration
+1. Merge latest llama.cpp changes
+2. Resolve API/ABI conflicts
+3. Update build scripts
+4. Preserve llamafile-specific optimizations
+
+### 6.3 Phase 3: Compilation
+1. Build with cosmocc 4.0.2
+2. Generate APE binary
+3. Verify multi-platform compatibility
+4. Test on all target platforms
+
+### 6.4 Phase 4: Validation
+1. Run functional test suite
+2. Benchmark performance
+3. Verify no regressions
+4. Test with various model sizes and architectures
+
+### 6.5 Phase 5: Documentation
+1. Update build instructions
+2. Document new features
+3. Create migration guide
+4. Update performance benchmarks
+
+---
+
+## 7. Technical Considerations for Smooth Compilation
+
+### 7.1 Cosmopolitan Libc Specifics
+
+**What Makes Cosmocc Special:**
+- Produces "Actually Portable Executable" format
+- Single binary runs on multiple OSes without recompilation
+- Includes multiple platform implementations via polyfill technique
+- Auto-detects runtime environment and selects appropriate code path
+
+**Compilation Best Practices:**
+- Use `-static` linking exclusively
+- Avoid OS-specific system calls in hot paths
+- Leverage cosmo's built-in platform abstractions
+- Test binary on all target platforms before release
+
+### 7.2 Performance Preservation Checklist
+
+To ensure llamafile's performance advantages are maintained:
+
+- [ ] Verify all 84 custom matrix kernels compile correctly
+- [ ] Test runtime kernel selection on each CPU architecture
+- [ ] Confirm outer-loop unrolling optimizations are preserved
+- [ ] Validate tinyBLAS integration for GPU support
+- [ ] Test efficiency core avoidance on Intel 12th+ gen
+- [ ] Benchmark against both old llamafile and stock llama.cpp
+- [ ] Profile with `perf` to identify any new hotspots
+- [ ] Verify vectorized operations use optimal instructions
+
+### 7.3 Common Pitfalls to Avoid
+
+1. **Don't break portability:** Avoid platform-specific code outside detection wrappers
+2. **Preserve custom kernels:** Don't accidentally overwrite llamafile's optimized implementations
+3. **Test quantization formats:** Ensure all formats work, especially new IQ variants
+4. **GPU support:** Don't break the zero-install GPU capability
+5. **Binary size:** Keep executable size reasonable (balance between size and included optimizations)
+6. **Backward compatibility:** Ensure older GGUF models still load
+
+---
+
+## 8. Success Criteria
+
+The modernization effort will be considered successful when:
+
+1. **Functionality:**
+   - All modern model architectures load and run correctly
+   - All quantization formats work as expected
+   - Single binary runs on Linux, macOS, Windows without modification
+
+2. **Performance:**
+   - Maintains or improves upon current llamafile performance benchmarks
+   - No regressions in speed compared to current llamafile
+   - Competitive or superior to standalone llama.cpp
+
+3. **Compatibility:**
+   - Loads all GGUF files compatible with latest llama.cpp
+   - Backward compatible with older GGUF formats where possible
+   - GPU support works on NVIDIA and AMD without driver installations
+
+4. **Stability:**
+   - Passes all functional tests
+   - No crashes or memory leaks under normal operation
+   - Handles edge cases gracefully (OOM, invalid models, etc.)
+
+---
+
+## 9. Next Steps
+
+1. **Immediate Actions:**
+   - Set up development environment with cosmocc 4.0.2
+   - Fork/clone latest llama.cpp repository
+   - Audit current llamafile codebase for compatibility issues
+
+2. **Development Timeline:**
+   - Week 1-2: Environment setup and code audit
+   - Week 3-4: Integration and compilation fixes
+   - Week 5-6: Testing and optimization
+   - Week 7: Documentation and release preparation
+
+3. **Resources Needed:**
+   - Development machines (Linux, macOS, Windows)
+   - Test hardware (various CPUs, NVIDIA/AMD GPUs)
+   - Suite of test models (various architectures and sizes)
+   - Performance profiling tools
+
+---
+
+## 10. Conclusion
+
+Modernizing llamafile with the latest llama.cpp and cosmocc 4.0.2 will bring state-of-the-art model support while preserving llamafile's unique advantages: exceptional performance through custom optimizations, true cross-platform portability, and zero-dependency deployment. The key to success is careful integration that respects llamafile's custom optimizations while embracing llama.cpp's expanded model support.
+
+The resulting binary will represent the best of both worlds: llamafile's blazing speed and universal compatibility combined with llama.cpp's comprehensive modern architecture support.
+
+---
+
+**Document Version:** 1.0  
+**Last Updated:** October 31, 2025  
+**Status:** Ready for Implementation
