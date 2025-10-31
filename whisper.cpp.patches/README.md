@@ -59,7 +59,7 @@ The submodule itself remains at the clean upstream commit `6739eb83`.
 To reset the submodule back to its clean upstream state:
 
 ```bash
-cd whisper.cpp.submodule
+cd whisper.cpp
 git reset --hard 6739eb83c3ca5cf40d24c6fe8442a761a1eb6248
 git clean -fd
 ```
@@ -75,21 +75,21 @@ If you need to update the patches after making changes:
 
 ```bash
 # From /Users/nbrake/scm/llamafile
-diff -u whisper.cpp.submodule/examples/server/server.cpp whisper.cpp.submodule/server.cpp | \
-  sed 's|whisper.cpp.submodule/examples/server/|examples/server/|' | \
-  sed 's|whisper.cpp.submodule/|examples/server/|' > whisper.cpp.patches/001-server-llamafile-integration.patch
+diff -u whisper.cpp/examples/server/server.cpp whisper.cpp/server.cpp | \
+  sed 's|whisper.cpp/examples/server/|examples/server/|' | \
+  sed 's|whisper.cpp/|examples/server/|' > whisper.cpp.patches/001-server-llamafile-integration.patch
 
-diff -u whisper.cpp.submodule/examples/common.cpp whisper.cpp.submodule/common.cpp | \
-  sed 's|whisper.cpp.submodule/examples/|examples/|' | \
-  sed 's|whisper.cpp.submodule/|examples/|' > whisper.cpp.patches/002-common-llamafile-integration.patch
+diff -u whisper.cpp/examples/common.cpp whisper.cpp/common.cpp | \
+  sed 's|whisper.cpp/examples/|examples/|' | \
+  sed 's|whisper.cpp/|examples/|' > whisper.cpp.patches/002-common-llamafile-integration.patch
 
-diff -u whisper.cpp.submodule/src/whisper.cpp whisper.cpp.submodule/whisper.cpp | \
-  sed 's|whisper.cpp.submodule/src/|src/|' | \
-  sed 's|whisper.cpp.submodule/|src/|' > whisper.cpp.patches/003-whisper-core-llamafile-integration.patch
+diff -u whisper.cpp/src/whisper.cpp whisper.cpp/whisper.cpp | \
+  sed 's|whisper.cpp/src/|src/|' | \
+  sed 's|whisper.cpp/|src/|' > whisper.cpp.patches/003-whisper-core-llamafile-integration.patch
 
-diff -u whisper.cpp.submodule/examples/common.h whisper.cpp.submodule/common.h | \
-  sed 's|whisper.cpp.submodule/examples/|examples/|' | \
-  sed 's|whisper.cpp.submodule/|examples/|' > whisper.cpp.patches/004-common-header.patch
+diff -u whisper.cpp/examples/common.h whisper.cpp/common.h | \
+  sed 's|whisper.cpp/examples/|examples/|' | \
+  sed 's|whisper.cpp/|examples/|' > whisper.cpp.patches/004-common-header.patch
 ```
 
 ## Workflow
@@ -98,4 +98,4 @@ diff -u whisper.cpp.submodule/examples/common.h whisper.cpp.submodule/common.h |
 2. Apply patches: `cd whisper.cpp.patches && ./apply-patches.sh`
 3. Build as normal: `make`
 
-The build system references `whisper.cpp.submodule/` and expects the patches to be applied.
+The build system references `whisper.cpp/` and expects the patches to be applied.

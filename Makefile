@@ -15,7 +15,7 @@ include third_party/BUILD.mk
 include llamafile/BUILD.mk
 include llama.cpp/BUILD.mk
 include stable-diffusion.cpp/BUILD.mk
-include whisper.cpp.submodule/BUILD.mk
+include whisper.cpp/BUILD.mk
 include localscore/BUILD.mk
 
 # the root package is `o//` by default
@@ -24,7 +24,7 @@ include localscore/BUILD.mk
 o/$(MODE)/:	o/$(MODE)/llamafile					\
 		o/$(MODE)/llama.cpp					\
 		o/$(MODE)/stable-diffusion.cpp				\
-		o/$(MODE)/whisper.cpp.submodule				\
+		o/$(MODE)/whisper.cpp					\
 		o/$(MODE)/localscore					\
 		o/$(MODE)/third_party					\
 		o/$(MODE)/depend.test
@@ -38,7 +38,7 @@ install:	llamafile/zipalign.1					\
 		llama.cpp/quantize/quantize.1				\
 		llama.cpp/perplexity/perplexity.1			\
 		llama.cpp/llava/llava-quantize.1			\
-		whisper.cpp.submodule/main.1				\
+		whisper.cpp/main.1					\
 		o/$(MODE)/llamafile/zipalign				\
 		o/$(MODE)/llamafile/tokenize				\
 		o/$(MODE)/llama.cpp/main/main				\
@@ -49,7 +49,7 @@ install:	llamafile/zipalign.1					\
 		o/$(MODE)/llama.cpp/perplexity/perplexity		\
 		o/$(MODE)/llama.cpp/llava/llava-quantize		\
 		o/$(MODE)/stable-diffusion.cpp/main			\
-		o/$(MODE)/whisper.cpp.submodule/main			\
+		o/$(MODE)/whisper.cpp/main				\
 		o/$(MODE)/llamafile/server/main
 	mkdir -p $(PREFIX)/bin
 	$(INSTALL) o/$(MODE)/llamafile/zipalign $(PREFIX)/bin/zipalign
@@ -65,7 +65,7 @@ install:	llamafile/zipalign.1					\
 	$(INSTALL) o/$(MODE)/llama.cpp/llava/llava-quantize $(PREFIX)/bin/llava-quantize
 	$(INSTALL) o/$(MODE)/llamafile/server/main $(PREFIX)/bin/llamafiler
 	$(INSTALL) o/$(MODE)/stable-diffusion.cpp/main $(PREFIX)/bin/sdfile
-	$(INSTALL) o/$(MODE)/whisper.cpp.submodule/main $(PREFIX)/bin/whisperfile
+	$(INSTALL) o/$(MODE)/whisper.cpp/main $(PREFIX)/bin/whisperfile
 	mkdir -p $(PREFIX)/share/man/man1
 	$(INSTALL) -m 0644 llamafile/zipalign.1 $(PREFIX)/share/man/man1/zipalign.1
 	$(INSTALL) -m 0644 llamafile/server/main.1 $(PREFIX)/share/man/man1/llamafiler.1
@@ -74,7 +74,7 @@ install:	llamafile/zipalign.1					\
 	$(INSTALL) -m 0644 llama.cpp/quantize/quantize.1 $(PREFIX)/share/man/man1/llamafile-quantize.1
 	$(INSTALL) -m 0644 llama.cpp/perplexity/perplexity.1 $(PREFIX)/share/man/man1/llamafile-perplexity.1
 	$(INSTALL) -m 0644 llama.cpp/llava/llava-quantize.1 $(PREFIX)/share/man/man1/llava-quantize.1
-	$(INSTALL) -m 0644 whisper.cpp.submodule/main.1 $(PREFIX)/share/man/man1/whisperfile.1
+	$(INSTALL) -m 0644 whisper.cpp/main.1 $(PREFIX)/share/man/man1/whisperfile.1
 
 .PHONY: check
 check: o/$(MODE)/llamafile/check

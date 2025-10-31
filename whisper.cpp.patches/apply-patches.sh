@@ -4,7 +4,7 @@
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-WHISPER_DIR="$SCRIPT_DIR/../whisper.cpp.submodule"
+WHISPER_DIR="$SCRIPT_DIR/../whisper.cpp"
 
 cd "$WHISPER_DIR"
 
@@ -60,4 +60,4 @@ echo ""
 echo "Patches applied successfully!"
 echo "Note: These changes are not committed to the submodule."
 echo "To reset the submodule to its clean state, run:"
-echo "  cd whisper.cpp.submodule && git reset --hard && git clean -fd"
+echo "  cd whisper.cpp && git reset --hard && git clean -fd"
