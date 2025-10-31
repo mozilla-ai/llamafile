@@ -33,10 +33,13 @@ patch -p0 < "$SCRIPT_DIR/004-common-header.patch"
 echo "Copying llamafile-specific files..."
 cp "$SCRIPT_DIR/BUILD.mk" .
 cp "$SCRIPT_DIR/README.llamafile" .
-cp "$SCRIPT_DIR/color.cpp" .
-cp "$SCRIPT_DIR/color.h" .
-cp "$SCRIPT_DIR/slurp.cpp" .
-cp "$SCRIPT_DIR/slurp.h" .
+cp $SCRIPT_DIR/README.md .
+cp $SCRIPT_DIR/*.h .
+cp $SCRIPT_DIR/*.c* .
+cp $SCRIPT_DIR/*.hpp .
+cp $SCRIPT_DIR/main.1* .
+cp $SCRIPT_DIR/jfk.wav .
+cp -r $SCRIPT_DIR/doc .
 
 # Copy server.cpp from examples/server/ to root
 echo "Copying server.cpp to root..."
@@ -47,14 +50,22 @@ echo "Copying common files to root..."
 cp examples/common.cpp .
 cp examples/common.h .
 
-# Copy core whisper files from src/ and include/ to root
-echo "Copying whisper core files to root..."
-cp src/whisper.cpp .
-cp include/whisper.h .
-
-# Copy httplib.h from examples/server/ to root
-echo "Copying httplib.h to root..."
-cp examples/server/httplib.h .
+rm -rf bindings
+rm -rf .github
+rm -rf .devops
+rm -rf examples
+rm -rf ggml
+rm -rf src
+rm -rf tests
+rm -rf scripts
+rm -rf spm-headers
+rm -rf cmake
+rm -rf models
+rm -rf samples
+rm .gitignore
+rm .gitmodules Package.swift README_sycl.md AUTHORS CMakeLists.txt Makefile
+rm grammars/assistant.gbnf grammars/chess.gbnf grammars/colors.gbnf
+rm include/whisper.h
 
 echo ""
 echo "Patches applied successfully!"

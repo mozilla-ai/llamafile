@@ -1,0 +1,66 @@
+.Dd August 17, 2024
+.Dt WHISPERFILE 1
+.Os Mozilla Ocho
+.Sh NAME
+.Nm whisperfile
+.Nd speech to text engine
+.Sh SYNOPSIS
+.Nm
+.Op flags...
+.Fl m Ar model.gguf
+.Fl f Ar audio.wav
+.Nm
+.Op flags...
+.Fl Fl server
+.Fl m Ar model.gguf
+.Sh DESCRIPTION
+.Nm
+is a high-performance implementation of OpenAI's Whisper model that's
+based off the whisper.cpp software written by Georgi Gerganov, et al.
+It's able to convert speech to text. It can also translate different
+languages into English while transcribing.
+.Sh OPTIONS
+The following options are available:
+.Bl -tag -width indent
+.It Fl Fl version
+Print version and exit.
+.It Fl h , Fl Fl help
+Show help message and exit.
+.It Fl Fl server
+Puts program in HTTP server mode.
+.It Fl m Ar FNAME , Fl Fl model Ar FNAME
+Path of Whisper model weights. See
+https://huggingface.co/ggerganov/whisper.cpp
+.It Fl f Ar FNAME , Fl Fl file Ar FNAME
+Path of audio file to transcribe. The preferred audio format is a 16khz
+16-bit signed linear WAV file, which can be stereo or mono. It's also
+permissible to pass an MP3, FLAC, or OGG file, in which case it'll be
+converted to .wav file in your temp directory before transcribing.
+.It Fl tr , Fl Fl translate
+Translate audio into English text.
+.It Fl ot Ar N , Fl Fl offset-t Ar N
+Time offset in milliseconds.
+.It Fl d Ar N , Fl Fl duration Ar N
+Duration of audio to process in milliseconds.
+.It Fl np , Fl Fl no-prints
+Do not print anything other than the results.
+.It Fl pc , Fl Fl print-colors
+Enables CLI printing of ANSI color codes.
+.Pp
+Transcribed text will appear in the terminal on a spectrum of color
+ranging from green to red. Green represents confidence whereas red
+represents uncertainty.
+.It Fl t Ar N , Fl Fl threads Ar N
+Overrides number of threads to use.
+.Pp
+The default is the number of cores available on the current system. On
+systems with hyperthreading, that's half the number of CPUs reported by
+the system. On systems that have efficiency cores, e.g. Intel Alderlake,
+the default behavior is to use only the performance cores.
+.Sh DOCUMENTATION
+Read our Markdown documentation for additional help and tutorials. See
+whisper.cpp/doc/index.md in the llamafile source repository on GitHub.
+.Sh SEE ALSO
+.Xr llamafile 1 ,
+.Xr zipalign 1 ,
+.Xr unzip 1
