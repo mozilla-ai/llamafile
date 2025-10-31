@@ -2,6 +2,43 @@
 
 There are a few steps in making a Llamafile release which will be detailed in this document.
 
+## What's New in This Release
+
+### LoRA Adapter Support
+
+This release adds comprehensive support for LoRA (Low-Rank Adaptation) adapters, enabling fine-tuning capabilities compatible with llama.cpp. Key features include:
+
+- **Multiple LoRA Adapter Support**: Load and apply multiple LoRA adapters simultaneously with individual scaling factors
+- **Dynamic Hot-Swapping API**: Adjust LoRA adapter scales in real-time during inference without restarting the server
+- **Server Integration**: Full integration with the llamafile server (`--server` mode) for LoRA-enhanced inference
+- **REST API Endpoints**:
+  - `GET /lora-adapters`: View current adapter configuration
+  - `POST /lora-adapters`: Update adapter scales dynamically
+- **Compatible Flags**:
+  - `--lora [FNAME]`: Apply a LoRA adapter with default scale (1.0)
+  - `--lora-scaled [FNAME] [SCALE]`: Apply a LoRA adapter with custom scaling factor
+  - `--lora-init-without-apply`: Load LoRA adapters without applying (lora hot-swapping)
+- **Automatic Optimizations**: Memory mapping is automatically disabled when using LoRA adapters for optimal compatibility
+- **Thread-Safe Operations**: Hot-swapping includes proper mutex locking for concurrent access safety
+- **Clean Resource Management**: Proper loading, application, and cleanup of LoRA adapters across server lifecycle
+
+Example usage:
+
+```bash
+# Single adapter with default scale
+llamafile -m base_model.gguf --lora adapter.gguf --server
+
+# Multiple adapters with different scales
+llamafile -m base_model.gguf --lora adapter1.gguf --lora-scaled adapter2.gguf 0.5 --server
+
+# Dynamic scale adjustment via API
+curl -X POST http://localhost:8080/lora-adapters \
+  -H "Content-Type: application/json" \
+  -d '[{"id": 0, "scale": 0.8}, {"id": 1, "scale": 1}]'
+```
+
+This implementation follows llama.cpp patterns for maximum compatibility and provides a foundation for advanced fine-tuning workflows with real-time adaptation capabilities.
+
 The two primary artifacts of the release are the `llamafile-<version>.zip` and the binaries for the GitHub release.
 
 ## Release Process
@@ -10,13 +47,13 @@ Note: Step 2 and 3 are only needed if you are making a new release of the ggml-c
 
 1. Update the version number in `version.h`
 2. Build the ggml-cuda.so and ggml-rocm.so shared libraries on Linux. You need to do this for Llamafile and LocalScore. Llamafile uses TINYBLAS as a default and LocalScore uses CUBLAS as a default for CUDA.
-    - For Llamafile you can do this by running the script `./llamafile/cuda.sh` and `./llamafile/rocm.sh` respectively.
-    - For LocalScore you can do this by running the script `./localscore/cuda.sh`.
-    - The files will be built and placed your home directory.
+   - For Llamafile you can do this by running the script `./llamafile/cuda.sh` and `./llamafile/rocm.sh` respectively.
+   - For LocalScore you can do this by running the script `./localscore/cuda.sh`.
+   - The files will be built and placed your home directory.
 3. Build the ggml-cuda.dll and ggml-rocm.dll shared libraries on Windows. You need to do this for Llamafile and LocalScore.
-    - You can do this by running the script `./llamafile/cuda.bat` and `./llamafile/rocm.bat` respectively.
-    - For LocalScore you can do this by running the script `./localscore/cuda.bat`.
-    - The files will be built and placed in the `build/release` directory.
+   - You can do this by running the script `./llamafile/cuda.bat` and `./llamafile/rocm.bat` respectively.
+   - For LocalScore you can do this by running the script `./localscore/cuda.bat`.
+   - The files will be built and placed in the `build/release` directory.
 4. Build the project with `make -j8`
 5. Install the built project to your /usr/local/bin directory with `sudo make install PREFIX=/usr/local`
 

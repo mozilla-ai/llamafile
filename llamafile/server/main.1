@@ -29,6 +29,23 @@ recommended that you run multiple instances of llamafiler behind a
 reverse proxy such as NGINX or Redbean.
 .It Fl mm Ar FNAME , Fl Fl mmproj Ar FNAME
 Path of vision model weights.
+.It Fl Fl lora Ar FNAME
+Path to LoRA adapter weights. This flag may be repeated to load multiple
+LoRA adapters. Each adapter will be applied with a default scale of 1.0.
+The base model specified by
+.Fl m
+will be used as the foundation for all LoRA adaptations.
+.It Fl Fl lora-scaled Ar FNAME Ar SCALE
+Path to LoRA adapter weights with custom scaling factor. The
+.Ar SCALE
+parameter is a floating point number that controls the strength of the
+LoRA adaptation (e.g., 0.5 for half strength, 1.5 for enhanced strength).
+This flag may be repeated to load multiple scaled LoRA adapters.
+.It Fl Fl lora-init-without-apply
+Load LoRA adapters at startup without automatically applying them. When
+this flag is used, adapters are initialized but not active until
+explicitly applied via the API. This is useful for dynamic LoRA adapter
+management through the HTTP endpoints.
 .It Fl Fl db Ar FILE
 Specifies path of sqlite3 database.
 .Pp
@@ -214,6 +231,14 @@ multiplied by 100 to get the percent.
 Here's an example of how you might start this server:
 .Pp
 .Dl "llamafiler -m all-MiniLM-L6-v2.F32.gguf"
+.Pp
+Here's how to start with a LoRA adapter:
+.Pp
+.Dl "llamafiler -m base_model.gguf --lora adapter.gguf"
+.Pp
+Here's how to use multiple LoRA adapters with custom scaling:
+.Pp
+.Dl "llamafiler -m base_model.gguf --lora adapter1.gguf --lora-scaled adapter2.gguf 0.8"
 .Pp
 Here's how to send a tokenization request:
 .Pp

@@ -705,6 +705,8 @@ Client::dispatcher()
         return slotz();
     if (p1 == "flagz")
         return flagz();
+    if (p1 == "lora-adapters")
+        return lora_adapters();
 
 #if 0
     // TODO: implement frontend for database

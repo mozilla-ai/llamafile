@@ -26,8 +26,27 @@
 #include "llamafile/server/tokenbucket.h"
 #include "llamafile/server/utils.h"
 #include "llamafile/version.h"
+#include "llama.cpp/common.h"
 #include <cassert>
 #include <cosmo.h>
+
+// Global LoRA adapter storage using llama.cpp structures
+std::vector<llama_lora_adapter_container> g_lora_adapters;
+
+// Function to get the first global LoRA adapter for backward compatibility
+extern "C" struct llama_lora_adapter* llamafiler_get_lora_adapter() {
+    return g_lora_adapters.empty() ? nullptr : g_lora_adapters[0].adapter;
+}
+
+// Function to get all LoRA adapters and their count
+extern "C" int llamafiler_get_lora_adapters(struct llama_lora_adapter** adapters, float* scales, int max_adapters) {
+    int count = std::min((int)g_lora_adapters.size(), max_adapters);
+    for (int i = 0; i < count; i++) {
+        adapters[i] = g_lora_adapters[i].adapter;
+        scales[i] = g_lora_adapters[i].scale;
+    }
+    return count;
+}
 
 namespace lf {
 namespace server {
@@ -69,6 +88,8 @@ main(int argc, char* argv[])
         FLAG_log_disable = true;
 
     // load model
+    // --lora implies --no-mmap (as per llama.cpp server)
+    bool use_mmap = FLAG_mmap && (FLAG_lora_adapters_count == 0);
     llama_model_params mparams = {
         .n_gpu_layers = FLAG_n_gpu_layers,
         .split_mode = (enum llama_split_mode)FLAG_split_mode,
@@ -79,14 +100,57 @@ main(int argc, char* argv[])
         .progress_callback_user_data = nullptr,
         .kv_overrides = nullptr,
         .vocab_only = false,
-        .use_mmap = true,
-        .use_mlock = false,
+        .use_mmap = use_mmap,
+        .use_mlock = FLAG_mlock,
         .check_tensors = false,
     };
     llama_model* model = llama_load_model_from_file(FLAG_model, mparams);
     if (!model) {
         fprintf(stderr, "%s: failed to load model\n", FLAG_model);
         exit(1);
+    }
+
+    // load LoRA adapters if specified
+    if (FLAG_lora_adapters_count > 0) {
+        const char* apply_mode = FLAG_lora_init_without_apply ? "without applying" : "and applying";
+        SLOG("loading %d LoRA adapter(s) %s", FLAG_lora_adapters_count, apply_mode);
+        
+        for (int i = 0; i < FLAG_lora_adapters_count; i++) {
+            char scale_buf[32];
+            snprintf(scale_buf, sizeof(scale_buf), "%.2f", FLAG_lora_adapters[i].scale);
+            
+            // Generate model name from filename for identification
+            const char* path = FLAG_lora_adapters[i].path;
+            const char* filename = strrchr(path, '/');
+            filename = filename ? filename + 1 : path;
+            
+            SLOG("loading LoRA adapter %d ('%s') from %s with scale %s", i + 1, 
+                 filename, path, scale_buf);
+            
+            llama_lora_adapter_container adapter_container;
+            adapter_container.path = std::string(path);
+            adapter_container.scale = FLAG_lora_adapters[i].scale;
+            adapter_container.adapter = llama_lora_adapter_init(model, path);
+            
+            if (!adapter_container.adapter) {
+                fprintf(stderr, "%s: failed to load LoRA adapter from %s\n", FLAG_model, path);
+                // Cleanup previously loaded adapters
+                for (auto& la : g_lora_adapters) {
+                    if (la.adapter) {
+                        llama_lora_adapter_free(la.adapter);
+                    }
+                }
+                llama_free_model(model);
+                exit(1);
+            }
+            g_lora_adapters.push_back(adapter_container);
+        }
+        
+        if (FLAG_lora_init_without_apply) {
+            SLOG("all LoRA adapters loaded successfully but not applied (use /lora-adapters API to apply)");
+        } else {
+            SLOG("all LoRA adapters loaded and applied successfully");
+        }
     }
 
     // create slots
@@ -120,6 +184,14 @@ main(int argc, char* argv[])
     g_server->close();
     delete g_server;
     delete slots;
+    
+    // Cleanup LoRA adapters
+    for (auto& la : g_lora_adapters) {
+        if (la.adapter) {
+            llama_lora_adapter_free(la.adapter);
+        }
+    }
+    
     llama_free_model(model);
     tokenbucket_destroy();
     time_destroy();

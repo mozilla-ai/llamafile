@@ -24,6 +24,7 @@ extern bool FLAG_trace;
 extern bool FLAG_trap;
 extern bool FLAG_unsecure;
 extern bool FLAG_v2;
+extern bool FLAG_lora_init_without_apply;
 extern const char *FLAG_chat_template;
 extern const char *FLAG_db;
 extern const char *FLAG_db_startup_sql;
@@ -36,6 +37,18 @@ extern const char *FLAG_prompt;
 extern const char *FLAG_url_prefix;
 extern const char *FLAG_www_root;
 extern double FLAG_token_rate;
+extern const char *FLAG_lora;
+
+// LoRA adapter info structure to match llama.cpp
+struct llamafile_lora_adapter_info {
+    const char* path;
+    const char* name;  // Model/adapter name for identification
+    float scale;
+};
+
+#define MAX_LORA_ADAPTERS 8
+extern struct llamafile_lora_adapter_info FLAG_lora_adapters[MAX_LORA_ADAPTERS];
+extern int FLAG_lora_adapters_count;
 extern float FLAG_decay_growth;
 extern float FLAG_frequency_penalty;
 extern float FLAG_presence_penalty;
