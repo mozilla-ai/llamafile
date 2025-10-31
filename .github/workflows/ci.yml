@@ -15,7 +15,7 @@ jobs:
         id: checkout
         uses: actions/checkout@v4
         with:
-          submodules: true
+          submodules: recursive
 
       - name: Dependencies
         id: depends
