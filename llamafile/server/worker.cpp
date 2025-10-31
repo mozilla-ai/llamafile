@@ -56,13 +56,6 @@ Worker::begin()
         tokens = tokenbucket_acquire(client_.client_ip_);
     server_->lock();
     dll_remove(&server_->idle_workers, &elem_);
-    if (dll_is_empty(server_->idle_workers)) {
-        Dll* slowbro;
-        if ((slowbro = dll_last(server_->active_workers))) {
-            SLOG("all threads active! dropping oldest client");
-            WORKER(slowbro)->kill();
-        }
-    }
     working_ = true;
     if (tokens > FLAG_token_burst) {
         dll_make_last(&server_->active_workers, &elem_);

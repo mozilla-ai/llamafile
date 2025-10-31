@@ -520,14 +520,23 @@ Client::send_response_finish()
 //
 // unlike send() this won't fail if binary content is detected.
 bool
-Client::send_binary(const void* p, size_t n)
-{
-    ssize_t sent;
-    if ((sent = write(fd_, p, n)) != n) {
-        if (sent == -1 && errno != EAGAIN && errno != ECONNRESET)
-            SLOG("write failed %m");
-        close_connection_ = true;
-        return false;
+Client::send_binary(const void* p, size_t n) {
+    const char* buf = (const char*)p;
+    size_t written = 0;
+    while (written < n) {
+        ssize_t sent = write(fd_, buf + written, n - written);
+        if (sent == -1) {
+            if (errno == EAGAIN || errno == EWOULDBLOCK) {
+                // no data can be written right now; retry
+                continue;
+            }
+            if (errno != ECONNRESET)
+                SLOG("write failed %m");
+            close_connection_ = true;
+            return false;
+        }
+        // sent ≥ 0
+        written += sent;
     }
     return true;
 }
@@ -775,7 +784,7 @@ Client::dispatcher()
     should_send_error_if_canceled_ = false;
     if (!send(std::string_view(obuf_.p, p - obuf_.p)))
         return false;
-    char buf[512];
+    char buf[16384];
     size_t i, chunk;
     for (i = 0; i < size; i += chunk) {
         chunk = size - i;
