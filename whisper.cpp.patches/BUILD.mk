@@ -3,7 +3,7 @@
 
 PKGS += WHISPER_CPP
 
-WHISPER_CPP_FILES := $(wildcard whisper.cpp/*.*)
+WHISPER_CPP_FILES := $(wildcard whisper.cpp.submodule/*.*)
 WHISPER_CPP_INCS = $(filter %.inc,$(WHISPER_CPP_FILES))
 WHISPER_CPP_SRCS_C = $(filter %.c,$(WHISPER_CPP_FILES))
 WHISPER_CPP_SRCS_CPP = $(filter %.cpp,$(WHISPER_CPP_FILES))
@@ -17,7 +17,7 @@ WHISPER_CPP_OBJS =					\
 	$(WHISPER_CPP_SRCS_C:%.c=o/$(MODE)/%.o)		\
 	$(WHISPER_CPP_SRCS_CPP:%.cpp=o/$(MODE)/%.o)
 
-o/$(MODE)/whisper.cpp/whisper.cpp.a: $(WHISPER_CPP_OBJS)
+o/$(MODE)/whisper.cpp.submodule/whisper.cpp.a: $(WHISPER_CPP_OBJS)
 
 $(WHISPER_CPP_OBJS): private				\
 		CCFLAGS +=				\
@@ -28,33 +28,33 @@ $(WHISPER_CPP_OBJS): private				\
 			-frtti				\
 			-Wno-deprecated-declarations
 
-o/$(MODE)/whisper.cpp/main:				\
-		o/$(MODE)/whisper.cpp/main.o		\
-		o/$(MODE)/whisper.cpp/main.1.asc.zip.o	\
-		o/$(MODE)/whisper.cpp/whisper.cpp.a	\
+o/$(MODE)/whisper.cpp.submodule/main:				\
+		o/$(MODE)/whisper.cpp.submodule/main.o		\
+		o/$(MODE)/whisper.cpp.submodule/main.1.asc.zip.o	\
+		o/$(MODE)/whisper.cpp.submodule/whisper.cpp.a	\
 		o/$(MODE)/llama.cpp/llama.cpp.a		\
 		o/$(MODE)/third_party/stb/stb.a		\
 
-o/$(MODE)/whisper.cpp/stream:				\
-		o/$(MODE)/whisper.cpp/whisper.cpp.a	\
+o/$(MODE)/whisper.cpp.submodule/stream:				\
+		o/$(MODE)/whisper.cpp.submodule/whisper.cpp.a	\
 		o/$(MODE)/llama.cpp/llama.cpp.a		\
 		o/$(MODE)/third_party/stb/stb.a		\
 
-o/$(MODE)/whisper.cpp/mic2txt:				\
-		o/$(MODE)/whisper.cpp/whisper.cpp.a	\
+o/$(MODE)/whisper.cpp.submodule/mic2txt:				\
+		o/$(MODE)/whisper.cpp.submodule/whisper.cpp.a	\
 		o/$(MODE)/llama.cpp/llama.cpp.a		\
 
-o/$(MODE)/whisper.cpp/mic2raw:				\
-		o/$(MODE)/whisper.cpp/whisper.cpp.a	\
+o/$(MODE)/whisper.cpp.submodule/mic2raw:				\
+		o/$(MODE)/whisper.cpp.submodule/whisper.cpp.a	\
 		o/$(MODE)/llama.cpp/llama.cpp.a		\
 
-o/$(MODE)/whisper.cpp/miniaudio.o: private COPTS += -O3
+o/$(MODE)/whisper.cpp.submodule/miniaudio.o: private COPTS += -O3
 
-$(WHISPER_CPP_OBJS): whisper.cpp/BUILD.mk
+$(WHISPER_CPP_OBJS): whisper.cpp.submodule/BUILD.mk
 
-.PHONY: o/$(MODE)/whisper.cpp
-o/$(MODE)/whisper.cpp:					\
-		o/$(MODE)/whisper.cpp/main		\
-		o/$(MODE)/whisper.cpp/stream		\
-		o/$(MODE)/whisper.cpp/mic2txt		\
-		o/$(MODE)/whisper.cpp/mic2raw		\
+.PHONY: o/$(MODE)/whisper.cpp.submodule
+o/$(MODE)/whisper.cpp.submodule:					\
+		o/$(MODE)/whisper.cpp.submodule/main		\
+		o/$(MODE)/whisper.cpp.submodule/stream		\
+		o/$(MODE)/whisper.cpp.submodule/mic2txt		\
+		o/$(MODE)/whisper.cpp.submodule/mic2raw		\
