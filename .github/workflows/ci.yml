@@ -14,8 +14,9 @@ jobs:
       - name: Clone
         id: checkout
         uses: actions/checkout@v4
-        with:
-          submodules: true
+      - name: Initialize submodules  # <-- ADD THIS STEP
+        run: |
+          git submodule update --init --recursive
 
       - name: Dependencies
         id: depends
