@@ -1,5 +1,5 @@
---- examples/common.h	2025-10-31 13:50:30
-+++ examples/common.h	2025-10-31 13:42:06
+--- examples/common.h	2025-10-31 16:34:53
++++ ../non_submodule_llamafile/whisper.cpp/common.h	2025-10-31 16:53:51
 @@ -1,153 +1,26 @@
 +// -*- mode:c++;indent-tabs-mode:nil;c-basic-offset:4;tab-width:8;coding:utf-8 -*-
 +// vi: set et ft=cpp ts=4 sts=4 sw=4 fenc=utf-8 :vi

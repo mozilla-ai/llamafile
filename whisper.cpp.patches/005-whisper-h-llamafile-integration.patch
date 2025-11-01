@@ -1,0 +1,19 @@
+--- include/whisper.h	2025-10-31 16:34:53
++++ ../non_submodule_llamafile/whisper.cpp/whisper.h	2025-10-31 16:53:51
+@@ -1,7 +1,7 @@
+ #ifndef WHISPER_H
+ #define WHISPER_H
+ 
+-#include "ggml.h"
++#include "ggml_extend.hpp"
+ 
+ #include <stddef.h>
+ #include <stdint.h>
+@@ -114,7 +114,6 @@
+     } whisper_aheads;
+ 
+     struct whisper_context_params {
+-        bool  use_gpu;
+         bool  flash_attn;
+         int   gpu_device;  // CUDA device
+ 
