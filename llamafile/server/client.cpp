@@ -522,13 +522,25 @@ Client::send_response_finish()
 bool
 Client::send_binary(const void* p, size_t n)
 {
-    ssize_t sent;
-    if ((sent = write(fd_, p, n)) != n) {
-        if (sent == -1 && errno != EAGAIN && errno != ECONNRESET)
+    ssize_t sent = write(fd_, p, n);
+    
+    // Handle partial write - try once more for the remainder
+    if (sent > 0 && sent < n) {
+        ssize_t sent2 = write(fd_, (char*)p + sent, n - sent);
+        if (sent2 > 0) {
+            sent += sent2;
+        }
+    }
+    
+    // Check if we sent everything
+    if (sent != n) {
+        if (sent == -1 && errno != EAGAIN && errno != ECONNRESET) {
             SLOG("write failed %m");
+        }
         close_connection_ = true;
         return false;
     }
+    
     return true;
 }
 
@@ -775,7 +787,7 @@ Client::dispatcher()
     should_send_error_if_canceled_ = false;
     if (!send(std::string_view(obuf_.p, p - obuf_.p)))
         return false;
-    char buf[512];
+    char buf[16384]; // Increase buffer size from 512 to 16KB
     size_t i, chunk;
     for (i = 0; i < size; i += chunk) {
         chunk = size - i;
