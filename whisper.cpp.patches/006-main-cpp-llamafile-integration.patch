@@ -1,0 +1,248 @@
+--- examples/main/main.cpp	2025-10-31 22:21:46
++++ ../whisper.cpp.patches/main.cpp	2025-10-31 16:01:53
+@@ -1,4 +1,11 @@
++// -*- mode:c++;indent-tabs-mode:nil;c-basic-offset:4;tab-width:8;coding:utf-8 -*-
++// vi: set et ft=cpp ts=4 sts=4 sw=4 fenc=utf-8 :vi
++
++#include "llamafile/version.h"
++#include "llamafile/llamafile.h"
++#include "llama.cpp/cores.h"
+ #include "common.h"
++#include "slurp.h"
+ 
+ #include "whisper.h"
+ #include "grammar-parser.h"
+@@ -11,24 +18,19 @@
+ #include <thread>
+ #include <vector>
+ #include <cstring>
++#include <cosmo.h>
+ 
++#include "llamafile/llamafile.h"
++#include "llamafile/debug.h"
++#include "llama.cpp/string.h"
++
+ #if defined(_MSC_VER)
+ #pragma warning(disable: 4244 4267) // possible loss of data
+ #endif
+ 
+-// helper function to replace substrings
+-static void replace_all(std::string & s, const std::string & search, const std::string & replace) {
+-    for (size_t pos = 0; ; pos += replace.length()) {
+-        pos = s.find(search, pos);
+-        if (pos == std::string::npos) break;
+-        s.erase(pos, search.length());
+-        s.insert(pos, replace);
+-    }
+-}
+-
+ // command-line parameters
+ struct whisper_params {
+-    int32_t n_threads     = std::min(4, (int32_t) std::thread::hardware_concurrency());
++    int32_t n_threads     = std::min(16, cpu_get_num_math());
+     int32_t n_processors  = 1;
+     int32_t offset_t_ms   = 0;
+     int32_t offset_n      = 0;
+@@ -68,7 +70,6 @@
+     bool print_progress  = false;
+     bool no_timestamps   = false;
+     bool log_score       = false;
+-    bool use_gpu         = true;
+     bool flash_attn      = false;
+ 
+     std::string language  = "en";
+@@ -91,7 +92,7 @@
+     std::vector<std::string> fname_inp = {};
+     std::vector<std::string> fname_out = {};
+ 
+-    grammar_parser::parse_state grammar_parsed;
++    whisper_grammar_parser::parse_state grammar_parsed;
+ };
+ 
+ static void whisper_print_usage(int argc, char ** argv, const whisper_params & params);
+@@ -118,6 +119,40 @@
+             continue;
+         }
+ 
++        if (arg == "--log-disable") {
++            FLAG_log_disable = true;
++        } else if (arg == "--cli") {
++        } else if (arg == "--server") {
++        } else if (arg == "--fast") {
++            FLAG_fast = true;
++        } else if (arg == "--precise") {
++            FLAG_precise = true;
++        } else if (arg == "--trace") {
++            FLAG_trace = true;
++        } else if (arg == "--trap") {
++            FLAG_trap = true;
++            FLAG_unsecure = true; // for better backtraces
++            llamafile_trapping_enabled(+1);
++        } else if (arg == "--unsecure") {
++            FLAG_unsecure = true;
++        } else if (arg == "--nocompile") {
++            FLAG_nocompile = true;
++        } else if (arg == "--recompile") {
++            FLAG_recompile = true;
++        } else if (arg == "--tinyblas") {
++            FLAG_tinyblas = true;  // undocumented
++        } else if (arg == "--gpu") {
++            if (++i >= argc) {
++                fprintf(stderr, "error: missing --gpu flag value\n");
++                exit(1);
++            }
++            FLAG_gpu = llamafile_gpu_parse(argv[i]);
++            if (FLAG_gpu == LLAMAFILE_GPU_ERROR) {
++                fprintf(stderr, "error: invalid --gpu flag value: %s\n", argv[i]);
++                exit(1);
++            }
++        } else
++
+         if (arg == "-h" || arg == "--help") {
+             whisper_print_usage(argc, argv, params);
+             exit(0);
+@@ -153,7 +188,7 @@
+         else if (arg == "-oj"   || arg == "--output-json")     { params.output_jsn      = true; }
+         else if (arg == "-ojf"  || arg == "--output-json-full"){ params.output_jsn_full = params.output_jsn = true; }
+         else if (arg == "-of"   || arg == "--output-file")     { params.fname_out.emplace_back(argv[++i]); }
+-        else if (arg == "-np"   || arg == "--no-prints")       { params.no_prints       = true; }
++        else if (arg == "-np"   || arg == "--no-prints")       { params.no_prints       = true; FLAG_log_disable = true; }
+         else if (arg == "-ps"   || arg == "--print-special")   { params.print_special   = true; }
+         else if (arg == "-pc"   || arg == "--print-colors")    { params.print_colors    = true; }
+         else if (arg == "-pp"   || arg == "--print-progress")  { params.print_progress  = true; }
+@@ -166,18 +201,20 @@
+         else if (arg == "-oved" || arg == "--ov-e-device")     { params.openvino_encode_device = argv[++i]; }
+         else if (arg == "-dtw"  || arg == "--dtw")             { params.dtw             = argv[++i]; }
+         else if (arg == "-ls"   || arg == "--log-score")       { params.log_score       = true; }
+-        else if (arg == "-ng"   || arg == "--no-gpu")          { params.use_gpu         = false; }
++        else if (arg == "-ng"   || arg == "--no-gpu")          { FLAG_gpu = LLAMAFILE_GPU_DISABLE; }
+         else if (arg == "-fa"   || arg == "--flash-attn")      { params.flash_attn      = true; }
+         else if (                  arg == "--suppress-regex")  { params.suppress_regex  = argv[++i]; }
+         else if (                  arg == "--grammar")         { params.grammar         = argv[++i]; }
+         else if (                  arg == "--grammar-rule")    { params.grammar_rule    = argv[++i]; }
+         else if (                  arg == "--grammar-penalty") { params.grammar_penalty = std::stof(argv[++i]); }
+         else {
+-            fprintf(stderr, "error: unknown argument: %s\n", arg.c_str());
+-            whisper_print_usage(argc, argv, params);
++            fprintf(stderr, "error: unknown argument: %s\n", arg.c_str()); // [jart]
++            // whisper_print_usage(argc, argv, params); // [jart]
+             exit(0);
+         }
+     }
++
++    FLAGS_READY = true;
+ 
+     return true;
+ }
+@@ -232,7 +269,7 @@
+     fprintf(stderr, "  -oved D,   --ov-e-device DNAME [%-7s] the OpenVINO device used for encode inference\n",  params.openvino_encode_device.c_str());
+     fprintf(stderr, "  -dtw MODEL --dtw MODEL         [%-7s] compute token-level timestamps\n",                 params.dtw.c_str());
+     fprintf(stderr, "  -ls,       --log-score         [%-7s] log best decoder scores of tokens\n",              params.log_score?"true":"false");
+-    fprintf(stderr, "  -ng,       --no-gpu            [%-7s] disable GPU\n",                                    params.use_gpu ? "false" : "true");
++    fprintf(stderr, "  -ng,       --no-gpu            [%-7s] disable GPU\n",                                    FLAG_gpu == LLAMAFILE_GPU_DISABLE ? "false" : "true");
+     fprintf(stderr, "  -fa,       --flash-attn        [%-7s] flash attention\n",                                params.flash_attn ? "true" : "false");
+     fprintf(stderr, "  --suppress-regex REGEX         [%-7s] regular expression matching tokens to suppress\n", params.suppress_regex.c_str());
+     fprintf(stderr, "  --grammar GRAMMAR              [%-7s] GBNF grammar to guide decoding\n",                 params.grammar.c_str());
+@@ -825,10 +862,10 @@
+                     }
+                 }
+ 
+-                ::replace_all(txt_bg, "'", "\u2019");
+-                ::replace_all(txt_bg, "\"", "\\\"");
+-                ::replace_all(txt_fg, "'", "\u2019");
+-                ::replace_all(txt_fg, "\"", "\\\"");
++                txt_bg = replace_all(txt_bg, "'", "\u2019");
++                txt_bg = replace_all(txt_bg, "\"", "\\\"");
++                txt_fg = replace_all(txt_fg, "'", "\u2019");
++                txt_fg = replace_all(txt_fg, "\"", "\\\"");
+             }
+ 
+             if (is_first) {
+@@ -903,9 +940,37 @@
+ 
+ static void cb_log_disable(enum ggml_log_level , const char * , void * ) { }
+ 
++int whisper_server_main(int argc, char ** argv);
++
+ int main(int argc, char ** argv) {
+-    whisper_params params;
+ 
++    mallopt(M_GRANULARITY, 1 * 1024 * 1024);
++    mallopt(M_MMAP_THRESHOLD, 1 * 1024 * 1024);
++    mallopt(M_TRIM_THRESHOLD, 32 * 1024 * 1024);
++    FLAG_gpu = LLAMAFILE_GPU_DISABLE;  // pass `--gpu auto` to enable it
++    llamafile_check_cpu();
++    ShowCrashReports();
++
++    if (llamafile_has(argv, "--version")) {
++        puts("whisperfile v" LLAMAFILE_VERSION_STRING);
++        return 0;
++    }
++
++    if (llamafile_has(argv, "-h") ||
++        llamafile_has(argv, "-help") ||
++        llamafile_has(argv, "--help")) {
++        llamafile_help("/zip/whisper.cpp/main.1.asc");
++        __builtin_unreachable();
++    }
++
++    argc = cosmo_args("/zip/.args", &argv);
++
++    if (!llamafile_has(argv, "--cli") &&
++        (llamafile_has(argv, "--server") ||
++         !llamafile_has(argv, "-f"))) {
++        return whisper_server_main(argc, argv);
++    }
++
+     // If the only argument starts with "@", read arguments line-by-line
+     // from the given file.
+     std::vector<std::string> vec_args;
+@@ -935,6 +1000,7 @@
+         }
+     }
+ 
++    whisper_params params;
+     if (whisper_params_parse(argc, argv, params) == false) {
+         whisper_print_usage(argc, argv, params);
+         return 1;
+@@ -979,7 +1045,6 @@
+ 
+     struct whisper_context_params cparams = whisper_context_default_params();
+ 
+-    cparams.use_gpu    = params.use_gpu;
+     cparams.flash_attn = params.flash_attn;
+ 
+     if (!params.dtw.empty()) {
+@@ -1020,10 +1085,10 @@
+             // read grammar from file
+             std::ifstream ifs(params.grammar.c_str());
+             const std::string txt = std::string((std::istreambuf_iterator<char>(ifs)), std::istreambuf_iterator<char>());
+-            grammar = grammar_parser::parse(txt.c_str());
++            grammar = whisper_grammar_parser::parse(txt.c_str());
+         } else {
+             // read grammar from string
+-            grammar = grammar_parser::parse(params.grammar.c_str());
++            grammar = whisper_grammar_parser::parse(params.grammar.c_str());
+         }
+ 
+         // will be empty (default) if there are parse errors
+@@ -1032,7 +1097,7 @@
+             return 4;
+         } else {
+             fprintf(stderr, "%s: grammar:\n", __func__);
+-            grammar_parser::print_grammar(stderr, grammar);
++            whisper_grammar_parser::print_grammar(stderr, grammar);
+             fprintf(stderr, "\n");
+         }
+     }
+@@ -1044,8 +1109,8 @@
+         std::vector<float> pcmf32;               // mono-channel F32 PCM
+         std::vector<std::vector<float>> pcmf32s; // stereo-channel F32 PCM
+ 
+-        if (!::read_wav(fname_inp, pcmf32, pcmf32s, params.diarize)) {
+-            fprintf(stderr, "error: failed to read WAV file '%s'\n", fname_inp.c_str());
++        if (!slurp_audio_file(fname_inp.c_str(), pcmf32, pcmf32s, params.diarize)) {
++            fprintf(stderr, "error: failed to read audio file '%s'\n", fname_inp.c_str());
+             continue;
+         }
+ 

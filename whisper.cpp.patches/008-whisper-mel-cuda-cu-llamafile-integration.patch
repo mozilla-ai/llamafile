@@ -1,0 +1,9 @@
+--- src/whisper-mel-cuda.cu	2025-10-31 22:21:46
++++ ../whisper.cpp.patches/whisper-mel-cuda.cu	2025-10-31 16:01:53
+@@ -1,5 +1,5 @@
+ #define CUB_IGNORE_DEPRECATED_CPP_DIALECT
+-#include "whisper-mel-cuda.hpp"
++#include "whisper.cpp/whisper-mel-cuda.hpp"
+ #include "whisper.h"
+ 
+ #include <ggml-backend.h>

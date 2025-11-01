@@ -23,13 +23,27 @@ patch -p0 < "$SCRIPT_DIR/002-common-cpp-llamafile-integration.patch"
 patch -p0 < "$SCRIPT_DIR/003-common-h-llamafile-integration.patch"
 patch -p0 < "$SCRIPT_DIR/004-whisper-cpp-llamafile-integration.patch"
 patch -p0 < "$SCRIPT_DIR/005-whisper-h-llamafile-integration.patch"
+patch -p0 < "$SCRIPT_DIR/006-main-cpp-llamafile-integration.patch"
+patch -p0 < "$SCRIPT_DIR/007-stream-cpp-llamafile-integration.patch"
+patch -p0 < "$SCRIPT_DIR/008-whisper-mel-cuda-cu-llamafile-integration.patch"
+patch -p0 < "$SCRIPT_DIR/009-grammar-parser-cpp-llamafile-integration.patch"
+patch -p0 < "$SCRIPT_DIR/010-grammar-parser-h-llamafile-integration.patch"
+patch -p0 < "$SCRIPT_DIR/011-dr-wav-h-llamafile-integration.patch"
+patch -p0 < "$SCRIPT_DIR/012-httplib-h-llamafile-integration.patch"
 
 # Step 2: Copy modified files from their original locations to root
 echo "Copying modified files to root directory..."
 cp examples/server/server.cpp .
 cp examples/common.cpp .
 cp examples/common.h .
+cp examples/main/main.cpp .
+cp examples/stream/stream.cpp .
+cp examples/grammar-parser.cpp .
+cp examples/grammar-parser.h .
+cp examples/dr_wav.h .
+cp examples/server/httplib.h .
 cp src/whisper.cpp .
+cp src/whisper-mel-cuda.cu .
 cp include/whisper.h .
 
 # Step 3: Copy new llamafile-specific files to root
@@ -37,23 +51,27 @@ echo "Copying llamafile-specific files..."
 cp "$SCRIPT_DIR/BUILD.mk" .
 cp "$SCRIPT_DIR/README.llamafile" .
 cp "$SCRIPT_DIR/README.md" .
-# Copy header files, excluding common.h and whisper.h which were already patched
+# Copy header files, excluding those that were patched
 for file in "$SCRIPT_DIR"/*.h; do
     filename=$(basename "$file")
-    if [ "$filename" != "common.h" ] && [ "$filename" != "whisper.h" ]; then
+    if [ "$filename" != "common.h" ] && [ "$filename" != "whisper.h" ] && \
+       [ "$filename" != "grammar-parser.h" ] && [ "$filename" != "dr_wav.h" ] && \
+       [ "$filename" != "httplib.h" ]; then
         cp "$file" .
     fi
 done
 cp "$SCRIPT_DIR"/*.c .
-# Copy cpp files, excluding common.cpp, server.cpp, and whisper.cpp which were already patched
+# Copy cpp files, excluding those that were patched
 for file in "$SCRIPT_DIR"/*.cpp; do
     filename=$(basename "$file")
-    if [ "$filename" != "common.cpp" ] && [ "$filename" != "server.cpp" ] && [ "$filename" != "whisper.cpp" ]; then
+    if [ "$filename" != "common.cpp" ] && [ "$filename" != "server.cpp" ] && \
+       [ "$filename" != "whisper.cpp" ] && [ "$filename" != "main.cpp" ] && \
+       [ "$filename" != "stream.cpp" ] && [ "$filename" != "grammar-parser.cpp" ]; then
         cp "$file" .
     fi
 done
 cp "$SCRIPT_DIR"/*.hpp .
-cp "$SCRIPT_DIR"/*.cu . 2>/dev/null || true
+# Don't copy .cu files since whisper-mel-cuda.cu is now patched
 cp "$SCRIPT_DIR/main.1" .
 cp "$SCRIPT_DIR/main.1.asc" .
 cp "$SCRIPT_DIR/jfk.wav" .

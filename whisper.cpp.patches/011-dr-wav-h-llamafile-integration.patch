@@ -1,0 +1,541 @@
+--- examples/dr_wav.h	2025-10-31 22:21:46
++++ ../whisper.cpp.patches/dr_wav.h	2025-10-31 16:01:53
+@@ -2553,404 +2553,402 @@
+ #include <errno.h>
+ static drwav_result drwav_result_from_errno(int e)
+ {
+-    switch (e)
+-    {
+-        case 0: return DRWAV_SUCCESS;
++    // [jart] errno toil
++    if (e == 0) return DRWAV_SUCCESS;
+     #ifdef EPERM
+-        case EPERM: return DRWAV_INVALID_OPERATION;
++    if (e == EPERM) return DRWAV_INVALID_OPERATION;
+     #endif
+     #ifdef ENOENT
+-        case ENOENT: return DRWAV_DOES_NOT_EXIST;
++    if (e == ENOENT) return DRWAV_DOES_NOT_EXIST;
+     #endif
+     #ifdef ESRCH
+-        case ESRCH: return DRWAV_DOES_NOT_EXIST;
++    if (e == ESRCH) return DRWAV_DOES_NOT_EXIST;
+     #endif
+     #ifdef EINTR
+-        case EINTR: return DRWAV_INTERRUPT;
++    if (e == EINTR) return DRWAV_INTERRUPT;
+     #endif
+     #ifdef EIO
+-        case EIO: return DRWAV_IO_ERROR;
++    if (e == EIO) return DRWAV_IO_ERROR;
+     #endif
+     #ifdef ENXIO
+-        case ENXIO: return DRWAV_DOES_NOT_EXIST;
++    if (e == ENXIO) return DRWAV_DOES_NOT_EXIST;
+     #endif
+     #ifdef E2BIG
+-        case E2BIG: return DRWAV_INVALID_ARGS;
++    if (e == E2BIG) return DRWAV_INVALID_ARGS;
+     #endif
+     #ifdef ENOEXEC
+-        case ENOEXEC: return DRWAV_INVALID_FILE;
++    if (e == ENOEXEC) return DRWAV_INVALID_FILE;
+     #endif
+     #ifdef EBADF
+-        case EBADF: return DRWAV_INVALID_FILE;
++    if (e == EBADF) return DRWAV_INVALID_FILE;
+     #endif
+     #ifdef ECHILD
+-        case ECHILD: return DRWAV_ERROR;
++    if (e == ECHILD) return DRWAV_ERROR;
+     #endif
+     #ifdef EAGAIN
+-        case EAGAIN: return DRWAV_UNAVAILABLE;
++    if (e == EAGAIN) return DRWAV_UNAVAILABLE;
+     #endif
+     #ifdef ENOMEM
+-        case ENOMEM: return DRWAV_OUT_OF_MEMORY;
++    if (e == ENOMEM) return DRWAV_OUT_OF_MEMORY;
+     #endif
+     #ifdef EACCES
+-        case EACCES: return DRWAV_ACCESS_DENIED;
++    if (e == EACCES) return DRWAV_ACCESS_DENIED;
+     #endif
+     #ifdef EFAULT
+-        case EFAULT: return DRWAV_BAD_ADDRESS;
++    if (e == EFAULT) return DRWAV_BAD_ADDRESS;
+     #endif
+     #ifdef ENOTBLK
+-        case ENOTBLK: return DRWAV_ERROR;
++    if (e == ENOTBLK) return DRWAV_ERROR;
+     #endif
+     #ifdef EBUSY
+-        case EBUSY: return DRWAV_BUSY;
++    if (e == EBUSY) return DRWAV_BUSY;
+     #endif
+     #ifdef EEXIST
+-        case EEXIST: return DRWAV_ALREADY_EXISTS;
++    if (e == EEXIST) return DRWAV_ALREADY_EXISTS;
+     #endif
+     #ifdef EXDEV
+-        case EXDEV: return DRWAV_ERROR;
++    if (e == EXDEV) return DRWAV_ERROR;
+     #endif
+     #ifdef ENODEV
+-        case ENODEV: return DRWAV_DOES_NOT_EXIST;
++    if (e == ENODEV) return DRWAV_DOES_NOT_EXIST;
+     #endif
+     #ifdef ENOTDIR
+-        case ENOTDIR: return DRWAV_NOT_DIRECTORY;
++    if (e == ENOTDIR) return DRWAV_NOT_DIRECTORY;
+     #endif
+     #ifdef EISDIR
+-        case EISDIR: return DRWAV_IS_DIRECTORY;
++    if (e == EISDIR) return DRWAV_IS_DIRECTORY;
+     #endif
+     #ifdef EINVAL
+-        case EINVAL: return DRWAV_INVALID_ARGS;
++    if (e == EINVAL) return DRWAV_INVALID_ARGS;
+     #endif
+     #ifdef ENFILE
+-        case ENFILE: return DRWAV_TOO_MANY_OPEN_FILES;
++    if (e == ENFILE) return DRWAV_TOO_MANY_OPEN_FILES;
+     #endif
+     #ifdef EMFILE
+-        case EMFILE: return DRWAV_TOO_MANY_OPEN_FILES;
++    if (e == EMFILE) return DRWAV_TOO_MANY_OPEN_FILES;
+     #endif
+     #ifdef ENOTTY
+-        case ENOTTY: return DRWAV_INVALID_OPERATION;
++    if (e == ENOTTY) return DRWAV_INVALID_OPERATION;
+     #endif
+     #ifdef ETXTBSY
+-        case ETXTBSY: return DRWAV_BUSY;
++    if (e == ETXTBSY) return DRWAV_BUSY;
+     #endif
+     #ifdef EFBIG
+-        case EFBIG: return DRWAV_TOO_BIG;
++    if (e == EFBIG) return DRWAV_TOO_BIG;
+     #endif
+     #ifdef ENOSPC
+-        case ENOSPC: return DRWAV_NO_SPACE;
++    if (e == ENOSPC) return DRWAV_NO_SPACE;
+     #endif
+     #ifdef ESPIPE
+-        case ESPIPE: return DRWAV_BAD_SEEK;
++    if (e == ESPIPE) return DRWAV_BAD_SEEK;
+     #endif
+     #ifdef EROFS
+-        case EROFS: return DRWAV_ACCESS_DENIED;
++    if (e == EROFS) return DRWAV_ACCESS_DENIED;
+     #endif
+     #ifdef EMLINK
+-        case EMLINK: return DRWAV_TOO_MANY_LINKS;
++    if (e == EMLINK) return DRWAV_TOO_MANY_LINKS;
+     #endif
+     #ifdef EPIPE
+-        case EPIPE: return DRWAV_BAD_PIPE;
++    if (e == EPIPE) return DRWAV_BAD_PIPE;
+     #endif
+     #ifdef EDOM
+-        case EDOM: return DRWAV_OUT_OF_RANGE;
++    if (e == EDOM) return DRWAV_OUT_OF_RANGE;
+     #endif
+     #ifdef ERANGE
+-        case ERANGE: return DRWAV_OUT_OF_RANGE;
++    if (e == ERANGE) return DRWAV_OUT_OF_RANGE;
+     #endif
+     #ifdef EDEADLK
+-        case EDEADLK: return DRWAV_DEADLOCK;
++    if (e == EDEADLK) return DRWAV_DEADLOCK;
+     #endif
+     #ifdef ENAMETOOLONG
+-        case ENAMETOOLONG: return DRWAV_PATH_TOO_LONG;
++    if (e == ENAMETOOLONG) return DRWAV_PATH_TOO_LONG;
+     #endif
+     #ifdef ENOLCK
+-        case ENOLCK: return DRWAV_ERROR;
++    if (e == ENOLCK) return DRWAV_ERROR;
+     #endif
+     #ifdef ENOSYS
+-        case ENOSYS: return DRWAV_NOT_IMPLEMENTED;
++    if (e == ENOSYS) return DRWAV_NOT_IMPLEMENTED;
+     #endif
+     #ifdef ENOTEMPTY
+-        case ENOTEMPTY: return DRWAV_DIRECTORY_NOT_EMPTY;
++    if (e == ENOTEMPTY) return DRWAV_DIRECTORY_NOT_EMPTY;
+     #endif
+     #ifdef ELOOP
+-        case ELOOP: return DRWAV_TOO_MANY_LINKS;
++    if (e == ELOOP) return DRWAV_TOO_MANY_LINKS;
+     #endif
+     #ifdef ENOMSG
+-        case ENOMSG: return DRWAV_NO_MESSAGE;
++    if (e == ENOMSG) return DRWAV_NO_MESSAGE;
+     #endif
+     #ifdef EIDRM
+-        case EIDRM: return DRWAV_ERROR;
++    if (e == EIDRM) return DRWAV_ERROR;
+     #endif
+     #ifdef ECHRNG
+-        case ECHRNG: return DRWAV_ERROR;
++    if (e == ECHRNG) return DRWAV_ERROR;
+     #endif
+     #ifdef EL2NSYNC
+-        case EL2NSYNC: return DRWAV_ERROR;
++    if (e == EL2NSYNC) return DRWAV_ERROR;
+     #endif
+     #ifdef EL3HLT
+-        case EL3HLT: return DRWAV_ERROR;
++    if (e == EL3HLT) return DRWAV_ERROR;
+     #endif
+     #ifdef EL3RST
+-        case EL3RST: return DRWAV_ERROR;
++    if (e == EL3RST) return DRWAV_ERROR;
+     #endif
+     #ifdef ELNRNG
+-        case ELNRNG: return DRWAV_OUT_OF_RANGE;
++    if (e == ELNRNG) return DRWAV_OUT_OF_RANGE;
+     #endif
+     #ifdef EUNATCH
+-        case EUNATCH: return DRWAV_ERROR;
++    if (e == EUNATCH) return DRWAV_ERROR;
+     #endif
+     #ifdef ENOCSI
+-        case ENOCSI: return DRWAV_ERROR;
++    if (e == ENOCSI) return DRWAV_ERROR;
+     #endif
+     #ifdef EL2HLT
+-        case EL2HLT: return DRWAV_ERROR;
++    if (e == EL2HLT) return DRWAV_ERROR;
+     #endif
+     #ifdef EBADE
+-        case EBADE: return DRWAV_ERROR;
++    if (e == EBADE) return DRWAV_ERROR;
+     #endif
+     #ifdef EBADR
+-        case EBADR: return DRWAV_ERROR;
++    if (e == EBADR) return DRWAV_ERROR;
+     #endif
+     #ifdef EXFULL
+-        case EXFULL: return DRWAV_ERROR;
++    if (e == EXFULL) return DRWAV_ERROR;
+     #endif
+     #ifdef ENOANO
+-        case ENOANO: return DRWAV_ERROR;
++    if (e == ENOANO) return DRWAV_ERROR;
+     #endif
+     #ifdef EBADRQC
+-        case EBADRQC: return DRWAV_ERROR;
++    if (e == EBADRQC) return DRWAV_ERROR;
+     #endif
+     #ifdef EBADSLT
+-        case EBADSLT: return DRWAV_ERROR;
++    if (e == EBADSLT) return DRWAV_ERROR;
+     #endif
+     #ifdef EBFONT
+-        case EBFONT: return DRWAV_INVALID_FILE;
++    if (e == EBFONT) return DRWAV_INVALID_FILE;
+     #endif
+     #ifdef ENOSTR
+-        case ENOSTR: return DRWAV_ERROR;
++    if (e == ENOSTR) return DRWAV_ERROR;
+     #endif
+     #ifdef ENODATA
+-        case ENODATA: return DRWAV_NO_DATA_AVAILABLE;
++    if (e == ENODATA) return DRWAV_NO_DATA_AVAILABLE;
+     #endif
+     #ifdef ETIME
+-        case ETIME: return DRWAV_TIMEOUT;
++    if (e == ETIME) return DRWAV_TIMEOUT;
+     #endif
+     #ifdef ENOSR
+-        case ENOSR: return DRWAV_NO_DATA_AVAILABLE;
++    if (e == ENOSR) return DRWAV_NO_DATA_AVAILABLE;
+     #endif
+     #ifdef ENONET
+-        case ENONET: return DRWAV_NO_NETWORK;
++    if (e == ENONET) return DRWAV_NO_NETWORK;
+     #endif
+     #ifdef ENOPKG
+-        case ENOPKG: return DRWAV_ERROR;
++    if (e == ENOPKG) return DRWAV_ERROR;
+     #endif
+     #ifdef EREMOTE
+-        case EREMOTE: return DRWAV_ERROR;
++    if (e == EREMOTE) return DRWAV_ERROR;
+     #endif
+     #ifdef ENOLINK
+-        case ENOLINK: return DRWAV_ERROR;
++    if (e == ENOLINK) return DRWAV_ERROR;
+     #endif
+     #ifdef EADV
+-        case EADV: return DRWAV_ERROR;
++    if (e == EADV) return DRWAV_ERROR;
+     #endif
+     #ifdef ESRMNT
+-        case ESRMNT: return DRWAV_ERROR;
++    if (e == ESRMNT) return DRWAV_ERROR;
+     #endif
+     #ifdef ECOMM
+-        case ECOMM: return DRWAV_ERROR;
++    if (e == ECOMM) return DRWAV_ERROR;
+     #endif
+     #ifdef EPROTO
+-        case EPROTO: return DRWAV_ERROR;
++    if (e == EPROTO) return DRWAV_ERROR;
+     #endif
+     #ifdef EMULTIHOP
+-        case EMULTIHOP: return DRWAV_ERROR;
++    if (e == EMULTIHOP) return DRWAV_ERROR;
+     #endif
+     #ifdef EDOTDOT
+-        case EDOTDOT: return DRWAV_ERROR;
++    if (e == EDOTDOT) return DRWAV_ERROR;
+     #endif
+     #ifdef EBADMSG
+-        case EBADMSG: return DRWAV_BAD_MESSAGE;
++    if (e == EBADMSG) return DRWAV_BAD_MESSAGE;
+     #endif
+     #ifdef EOVERFLOW
+-        case EOVERFLOW: return DRWAV_TOO_BIG;
++    if (e == EOVERFLOW) return DRWAV_TOO_BIG;
+     #endif
+     #ifdef ENOTUNIQ
+-        case ENOTUNIQ: return DRWAV_NOT_UNIQUE;
++    if (e == ENOTUNIQ) return DRWAV_NOT_UNIQUE;
+     #endif
+     #ifdef EBADFD
+-        case EBADFD: return DRWAV_ERROR;
++    if (e == EBADFD) return DRWAV_ERROR;
+     #endif
+     #ifdef EREMCHG
+-        case EREMCHG: return DRWAV_ERROR;
++    if (e == EREMCHG) return DRWAV_ERROR;
+     #endif
+     #ifdef ELIBACC
+-        case ELIBACC: return DRWAV_ACCESS_DENIED;
++    if (e == ELIBACC) return DRWAV_ACCESS_DENIED;
+     #endif
+     #ifdef ELIBBAD
+-        case ELIBBAD: return DRWAV_INVALID_FILE;
++    if (e == ELIBBAD) return DRWAV_INVALID_FILE;
+     #endif
+     #ifdef ELIBSCN
+-        case ELIBSCN: return DRWAV_INVALID_FILE;
++    if (e == ELIBSCN) return DRWAV_INVALID_FILE;
+     #endif
+     #ifdef ELIBMAX
+-        case ELIBMAX: return DRWAV_ERROR;
++    if (e == ELIBMAX) return DRWAV_ERROR;
+     #endif
+     #ifdef ELIBEXEC
+-        case ELIBEXEC: return DRWAV_ERROR;
++    if (e == ELIBEXEC) return DRWAV_ERROR;
+     #endif
+     #ifdef EILSEQ
+-        case EILSEQ: return DRWAV_INVALID_DATA;
++    if (e == EILSEQ) return DRWAV_INVALID_DATA;
+     #endif
+     #ifdef ERESTART
+-        case ERESTART: return DRWAV_ERROR;
++    if (e == ERESTART) return DRWAV_ERROR;
+     #endif
+     #ifdef ESTRPIPE
+-        case ESTRPIPE: return DRWAV_ERROR;
++    if (e == ESTRPIPE) return DRWAV_ERROR;
+     #endif
+     #ifdef EUSERS
+-        case EUSERS: return DRWAV_ERROR;
++    if (e == EUSERS) return DRWAV_ERROR;
+     #endif
+     #ifdef ENOTSOCK
+-        case ENOTSOCK: return DRWAV_NOT_SOCKET;
++    if (e == ENOTSOCK) return DRWAV_NOT_SOCKET;
+     #endif
+     #ifdef EDESTADDRREQ
+-        case EDESTADDRREQ: return DRWAV_NO_ADDRESS;
++    if (e == EDESTADDRREQ) return DRWAV_NO_ADDRESS;
+     #endif
+     #ifdef EMSGSIZE
+-        case EMSGSIZE: return DRWAV_TOO_BIG;
++    if (e == EMSGSIZE) return DRWAV_TOO_BIG;
+     #endif
+     #ifdef EPROTOTYPE
+-        case EPROTOTYPE: return DRWAV_BAD_PROTOCOL;
++    if (e == EPROTOTYPE) return DRWAV_BAD_PROTOCOL;
+     #endif
+     #ifdef ENOPROTOOPT
+-        case ENOPROTOOPT: return DRWAV_PROTOCOL_UNAVAILABLE;
++    if (e == ENOPROTOOPT) return DRWAV_PROTOCOL_UNAVAILABLE;
+     #endif
+     #ifdef EPROTONOSUPPORT
+-        case EPROTONOSUPPORT: return DRWAV_PROTOCOL_NOT_SUPPORTED;
++    if (e == EPROTONOSUPPORT) return DRWAV_PROTOCOL_NOT_SUPPORTED;
+     #endif
+     #ifdef ESOCKTNOSUPPORT
+-        case ESOCKTNOSUPPORT: return DRWAV_SOCKET_NOT_SUPPORTED;
++    if (e == ESOCKTNOSUPPORT) return DRWAV_SOCKET_NOT_SUPPORTED;
+     #endif
+     #ifdef EOPNOTSUPP
+-        case EOPNOTSUPP: return DRWAV_INVALID_OPERATION;
++    if (e == EOPNOTSUPP) return DRWAV_INVALID_OPERATION;
+     #endif
+     #ifdef EPFNOSUPPORT
+-        case EPFNOSUPPORT: return DRWAV_PROTOCOL_FAMILY_NOT_SUPPORTED;
++    if (e == EPFNOSUPPORT) return DRWAV_PROTOCOL_FAMILY_NOT_SUPPORTED;
+     #endif
+     #ifdef EAFNOSUPPORT
+-        case EAFNOSUPPORT: return DRWAV_ADDRESS_FAMILY_NOT_SUPPORTED;
++    if (e == EAFNOSUPPORT) return DRWAV_ADDRESS_FAMILY_NOT_SUPPORTED;
+     #endif
+     #ifdef EADDRINUSE
+-        case EADDRINUSE: return DRWAV_ALREADY_IN_USE;
++    if (e == EADDRINUSE) return DRWAV_ALREADY_IN_USE;
+     #endif
+     #ifdef EADDRNOTAVAIL
+-        case EADDRNOTAVAIL: return DRWAV_ERROR;
++    if (e == EADDRNOTAVAIL) return DRWAV_ERROR;
+     #endif
+     #ifdef ENETDOWN
+-        case ENETDOWN: return DRWAV_NO_NETWORK;
++    if (e == ENETDOWN) return DRWAV_NO_NETWORK;
+     #endif
+     #ifdef ENETUNREACH
+-        case ENETUNREACH: return DRWAV_NO_NETWORK;
++    if (e == ENETUNREACH) return DRWAV_NO_NETWORK;
+     #endif
+     #ifdef ENETRESET
+-        case ENETRESET: return DRWAV_NO_NETWORK;
++    if (e == ENETRESET) return DRWAV_NO_NETWORK;
+     #endif
+     #ifdef ECONNABORTED
+-        case ECONNABORTED: return DRWAV_NO_NETWORK;
++    if (e == ECONNABORTED) return DRWAV_NO_NETWORK;
+     #endif
+     #ifdef ECONNRESET
+-        case ECONNRESET: return DRWAV_CONNECTION_RESET;
++    if (e == ECONNRESET) return DRWAV_CONNECTION_RESET;
+     #endif
+     #ifdef ENOBUFS
+-        case ENOBUFS: return DRWAV_NO_SPACE;
++    if (e == ENOBUFS) return DRWAV_NO_SPACE;
+     #endif
+     #ifdef EISCONN
+-        case EISCONN: return DRWAV_ALREADY_CONNECTED;
++    if (e == EISCONN) return DRWAV_ALREADY_CONNECTED;
+     #endif
+     #ifdef ENOTCONN
+-        case ENOTCONN: return DRWAV_NOT_CONNECTED;
++    if (e == ENOTCONN) return DRWAV_NOT_CONNECTED;
+     #endif
+     #ifdef ESHUTDOWN
+-        case ESHUTDOWN: return DRWAV_ERROR;
++    if (e == ESHUTDOWN) return DRWAV_ERROR;
+     #endif
+     #ifdef ETOOMANYREFS
+-        case ETOOMANYREFS: return DRWAV_ERROR;
++    if (e == ETOOMANYREFS) return DRWAV_ERROR;
+     #endif
+     #ifdef ETIMEDOUT
+-        case ETIMEDOUT: return DRWAV_TIMEOUT;
++    if (e == ETIMEDOUT) return DRWAV_TIMEOUT;
+     #endif
+     #ifdef ECONNREFUSED
+-        case ECONNREFUSED: return DRWAV_CONNECTION_REFUSED;
++    if (e == ECONNREFUSED) return DRWAV_CONNECTION_REFUSED;
+     #endif
+     #ifdef EHOSTDOWN
+-        case EHOSTDOWN: return DRWAV_NO_HOST;
++    if (e == EHOSTDOWN) return DRWAV_NO_HOST;
+     #endif
+     #ifdef EHOSTUNREACH
+-        case EHOSTUNREACH: return DRWAV_NO_HOST;
++    if (e == EHOSTUNREACH) return DRWAV_NO_HOST;
+     #endif
+     #ifdef EALREADY
+-        case EALREADY: return DRWAV_IN_PROGRESS;
++    if (e == EALREADY) return DRWAV_IN_PROGRESS;
+     #endif
+     #ifdef EINPROGRESS
+-        case EINPROGRESS: return DRWAV_IN_PROGRESS;
++    if (e == EINPROGRESS) return DRWAV_IN_PROGRESS;
+     #endif
+     #ifdef ESTALE
+-        case ESTALE: return DRWAV_INVALID_FILE;
++    if (e == ESTALE) return DRWAV_INVALID_FILE;
+     #endif
+     #ifdef EUCLEAN
+-        case EUCLEAN: return DRWAV_ERROR;
++    if (e == EUCLEAN) return DRWAV_ERROR;
+     #endif
+     #ifdef ENOTNAM
+-        case ENOTNAM: return DRWAV_ERROR;
++    if (e == ENOTNAM) return DRWAV_ERROR;
+     #endif
+     #ifdef ENAVAIL
+-        case ENAVAIL: return DRWAV_ERROR;
++    if (e == ENAVAIL) return DRWAV_ERROR;
+     #endif
+     #ifdef EISNAM
+-        case EISNAM: return DRWAV_ERROR;
++    if (e == EISNAM) return DRWAV_ERROR;
+     #endif
+     #ifdef EREMOTEIO
+-        case EREMOTEIO: return DRWAV_IO_ERROR;
++    if (e == EREMOTEIO) return DRWAV_IO_ERROR;
+     #endif
+     #ifdef EDQUOT
+-        case EDQUOT: return DRWAV_NO_SPACE;
++    if (e == EDQUOT) return DRWAV_NO_SPACE;
+     #endif
+     #ifdef ENOMEDIUM
+-        case ENOMEDIUM: return DRWAV_DOES_NOT_EXIST;
++    if (e == ENOMEDIUM) return DRWAV_DOES_NOT_EXIST;
+     #endif
+     #ifdef EMEDIUMTYPE
+-        case EMEDIUMTYPE: return DRWAV_ERROR;
++    if (e == EMEDIUMTYPE) return DRWAV_ERROR;
+     #endif
+     #ifdef ECANCELED
+-        case ECANCELED: return DRWAV_CANCELLED;
++    if (e == ECANCELED) return DRWAV_CANCELLED;
+     #endif
+     #ifdef ENOKEY
+-        case ENOKEY: return DRWAV_ERROR;
++    if (e == ENOKEY) return DRWAV_ERROR;
+     #endif
+     #ifdef EKEYEXPIRED
+-        case EKEYEXPIRED: return DRWAV_ERROR;
++    if (e == EKEYEXPIRED) return DRWAV_ERROR;
+     #endif
+     #ifdef EKEYREVOKED
+-        case EKEYREVOKED: return DRWAV_ERROR;
++    if (e == EKEYREVOKED) return DRWAV_ERROR;
+     #endif
+     #ifdef EKEYREJECTED
+-        case EKEYREJECTED: return DRWAV_ERROR;
++    if (e == EKEYREJECTED) return DRWAV_ERROR;
+     #endif
+     #ifdef EOWNERDEAD
+-        case EOWNERDEAD: return DRWAV_ERROR;
++    if (e == EOWNERDEAD) return DRWAV_ERROR;
+     #endif
+     #ifdef ENOTRECOVERABLE
+-        case ENOTRECOVERABLE: return DRWAV_ERROR;
++    if (e == ENOTRECOVERABLE) return DRWAV_ERROR;
+     #endif
+     #ifdef ERFKILL
+-        case ERFKILL: return DRWAV_ERROR;
++    if (e == ERFKILL) return DRWAV_ERROR;
+     #endif
+     #ifdef EHWPOISON
+-        case EHWPOISON: return DRWAV_ERROR;
++    if (e == EHWPOISON) return DRWAV_ERROR;
+     #endif
+-        default: return DRWAV_ERROR;
+-    }
++    return DRWAV_ERROR;
+ }
+ 
+ static drwav_result drwav_fopen(FILE** ppFile, const char* pFilePath, const char* pOpenMode)
