@@ -1,0 +1,307 @@
+--- examples/server/server.cpp	2025-10-31 16:34:53
++++ ../non_submodule_llamafile/whisper.cpp/server.cpp	2025-10-31 16:53:51
+@@ -1,9 +1,14 @@
++// -*- mode:c++;indent-tabs-mode:nil;c-basic-offset:4;tab-width:8;coding:utf-8 -*-
++// vi: set et ft=cpp ts=4 sts=4 sw=4 fenc=utf-8 :vi
++#include "llamafile/debug.h"
+ #include "common.h"
++#include "slurp.h"
+ 
+ #include "whisper.h"
+ #include "httplib.h"
+-#include "json.hpp"
++#include "llama.cpp/json.h"
+ 
++#include <cosmo.h>
+ #include <cmath>
+ #include <fstream>
+ #include <cstdio>
+@@ -12,6 +17,7 @@
+ #include <vector>
+ #include <cstring>
+ #include <sstream>
++#include <chrono>
+ 
+ #if defined(_MSC_VER)
+ #pragma warning(disable: 4244 4267) // possible loss of data
+@@ -39,8 +45,6 @@
+     int32_t port          = 8080;
+     int32_t read_timeout  = 600;
+     int32_t write_timeout = 600;
+-
+-    bool ffmpeg_converter = false;
+ };
+ 
+ struct whisper_params {
+@@ -74,7 +78,6 @@
+     bool print_realtime  = false;
+     bool print_progress  = false;
+     bool no_timestamps   = false;
+-    bool use_gpu         = true;
+     bool flash_attn      = false;
+ 
+     std::string language        = "en";
+@@ -134,7 +137,8 @@
+     fprintf(stderr, "  --public PATH,                 [%-7s] Path to the public folder\n", sparams.public_path.c_str());
+     fprintf(stderr, "  --request-path PATH,           [%-7s] Request path for all requests\n", sparams.request_path.c_str());
+     fprintf(stderr, "  --inference-path PATH,         [%-7s] Inference path for all requests\n", sparams.inference_path.c_str());
+-    fprintf(stderr, "  --convert,                     [%-7s] Convert audio to WAV, requires ffmpeg on the server", sparams.ffmpeg_converter ? "true" : "false");
++    fprintf(stderr, "  --recompile                    [%-7s] Force GPU support to be recompiled at runtime if possible.\n", FLAG_recompile ? "true" : "false");
++    fprintf(stderr, "  --nocompile                    [%-7s] Never compile GPU support at runtime.", FLAG_nocompile ? "true" : "false");
+     fprintf(stderr, "\n");
+ }
+ 
+@@ -142,6 +146,40 @@
+     for (int i = 1; i < argc; i++) {
+         std::string arg = argv[i];
+ 
++        if (arg == "--log-disable") {
++            FLAG_log_disable = true;
++        } else if (arg == "--cli") {
++        } else if (arg == "--server") {
++        } else if (arg == "--fast") {
++            FLAG_fast = true;
++        } else if (arg == "--precise") {
++            FLAG_precise = true;
++        } else if (arg == "--trace") {
++            FLAG_trace = true;
++        } else if (arg == "--trap") {
++            FLAG_trap = true;
++            FLAG_unsecure = true; // for better backtraces
++            llamafile_trapping_enabled(+1);
++        } else if (arg == "--unsecure") {
++            FLAG_unsecure = true;
++        } else if (arg == "--nocompile") {
++            FLAG_nocompile = true;
++        } else if (arg == "--recompile") {
++            FLAG_recompile = true;
++        } else if (arg == "--tinyblas") {
++            FLAG_tinyblas = true;  // undocumented
++        } else if (arg == "--gpu") {
++            if (++i >= argc) {
++                fprintf(stderr, "error: missing --gpu flag value\n");
++                exit(1);
++            }
++            FLAG_gpu = llamafile_gpu_parse(argv[i]);
++            if (FLAG_gpu == LLAMAFILE_GPU_ERROR) {
++                fprintf(stderr, "error: invalid --gpu flag value: %s\n", argv[i]);
++                exit(1);
++            }
++        } else
++
+         if (arg == "-h" || arg == "--help") {
+             whisper_print_usage(argc, argv, params, sparams);
+             exit(0);
+@@ -177,22 +215,40 @@
+         else if (arg == "-m"    || arg == "--model")           { params.model           = argv[++i]; }
+         else if (arg == "-oved" || arg == "--ov-e-device")     { params.openvino_encode_device = argv[++i]; }
+         else if (arg == "-dtw"  || arg == "--dtw")             { params.dtw             = argv[++i]; }
+-        else if (arg == "-ng"   || arg == "--no-gpu")          { params.use_gpu         = false; }
++        else if (arg == "-ng"   || arg == "--no-gpu")          { FLAG_gpu = LLAMAFILE_GPU_DISABLE; }
+         else if (arg == "-fa"   || arg == "--flash-attn")      { params.flash_attn      = true; }
+         // server params
+         else if (                  arg == "--port")            { sparams.port        = std::stoi(argv[++i]); }
+         else if (                  arg == "--host")            { sparams.hostname    = argv[++i]; }
+         else if (                  arg == "--public")          { sparams.public_path = argv[++i]; }
+         else if (                  arg == "--request-path")    { sparams.request_path = argv[++i]; }
+-        else if (                  arg == "--inference-path")  { sparams.inference_path = argv[++i]; }
+-        else if (                  arg == "--convert")         { sparams.ffmpeg_converter     = true; }
++        else if (                  arg == "--recompile")       { FLAG_recompile = true; }
++        else if (                  arg == "--nocompile")       { FLAG_nocompile = true; }
++        else if (                  arg == "--tinyblas")        { FLAG_tinyblas = true; }
++        else if (                  arg == "--unsecure")        { FLAG_unsecure = true; }
++
++        else if (arg == "--gpu") {
++            if (++i >= argc) {
++                fprintf(stderr, "error: missing --gpu flag value\n");
++                exit(1);
++            }
++            FLAG_gpu = llamafile_gpu_parse(argv[i]);
++            if (FLAG_gpu == LLAMAFILE_GPU_ERROR) {
++                fprintf(stderr, "error: invalid --gpu flag value: %s\n", argv[i]);
++                exit(1);
++            }
++            return true;
++        }
++
+         else {
+             fprintf(stderr, "error: unknown argument: %s\n", arg.c_str());
+-            whisper_print_usage(argc, argv, params, sparams);
++            // whisper_print_usage(argc, argv, params, sparams); // [jart]
+             exit(0);
+         }
+     }
+ 
++    FLAGS_READY = true;
++
+     return true;
+ }
+ 
+@@ -203,45 +259,6 @@
+     int progress_prev;
+ };
+ 
+-void check_ffmpeg_availibility() {
+-    int result = system("ffmpeg -version");
+-
+-    if (result == 0) {
+-        std::cout << "ffmpeg is available." << std::endl;
+-    } else {
+-        // ffmpeg is not available
+-        std::cout << "ffmpeg is not found. Please ensure that ffmpeg is installed ";
+-        std::cout << "and that its executable is included in your system's PATH. ";
+-        exit(0);
+-    }
+-}
+-
+-bool convert_to_wav(const std::string & temp_filename, std::string & error_resp) {
+-    std::ostringstream cmd_stream;
+-    std::string converted_filename_temp = temp_filename + "_temp.wav";
+-    cmd_stream << "ffmpeg -i \"" << temp_filename << "\" -ar 16000 -ac 1 -c:a pcm_s16le \"" << converted_filename_temp << "\" 2>&1";
+-    std::string cmd = cmd_stream.str();
+-
+-    int status = std::system(cmd.c_str());
+-    if (status != 0) {
+-        error_resp = "{\"error\":\"FFmpeg conversion failed.\"}";
+-        return false;
+-    }
+-
+-    // Remove the original file
+-    if (remove(temp_filename.c_str()) != 0) {
+-        error_resp = "{\"error\":\"Failed to remove the original file.\"}";
+-        return false;
+-    }
+-
+-    // Rename the temporary file to match the original filename
+-    if (rename(converted_filename_temp.c_str(), temp_filename.c_str()) != 0) {
+-        error_resp = "{\"error\":\"Failed to rename the temporary file.\"}";
+-        return false;
+-    }
+-    return true;
+-}
+-
+ std::string estimate_diarization_speaker(std::vector<std::vector<float>> pcmf32s, int64_t t0, int64_t t1, bool id_only = false) {
+     std::string speaker = "";
+     const int64_t n_samples = pcmf32s[0].size();
+@@ -476,7 +493,7 @@
+ 
+ }  // namespace
+ 
+-int main(int argc, char ** argv) {
++int whisper_server_main(int argc, char ** argv) {
+     whisper_params params;
+     server_params sparams;
+ 
+@@ -499,13 +516,9 @@
+         exit(0);
+     }
+ 
+-    if (sparams.ffmpeg_converter) {
+-        check_ffmpeg_availibility();
+-    }
+     // whisper init
+     struct whisper_context_params cparams = whisper_context_default_params();
+ 
+-    cparams.use_gpu    = params.use_gpu;
+     cparams.flash_attn = params.flash_attn;
+ 
+     if (!params.dtw.empty()) {
+@@ -674,43 +687,24 @@
+         std::vector<float> pcmf32;               // mono-channel F32 PCM
+         std::vector<std::vector<float>> pcmf32s; // stereo-channel F32 PCM
+ 
+-        if (sparams.ffmpeg_converter) {
+-            // if file is not wav, convert to wav
+-            // write to temporary file
+-            const std::string temp_filename = "whisper_server_temp_file.wav";
+-            std::ofstream temp_file{temp_filename, std::ios::binary};
+-            temp_file << audio_file.content;
+-            temp_file.close();
++        // write incoming buffer to temporary file
++        std::string temp_filename = __get_tmpdir();
++        temp_filename += "/whisperfile.";
++        temp_filename += std::to_string(_rand64());
+ 
+-            std::string error_resp = "{\"error\":\"Failed to execute ffmpeg command.\"}";
+-            const bool is_converted = convert_to_wav(temp_filename, error_resp);
+-            if (!is_converted) {
+-                res.set_content(error_resp, "application/json");
+-                return;
+-            }
++        std::ofstream temp_file{temp_filename, std::ios::binary};
++        temp_file << audio_file.content;
++        temp_file.close();
+ 
+-            // read wav content into pcmf32
+-            if (!::read_wav(temp_filename, pcmf32, pcmf32s, params.diarize))
+-            {
+-                fprintf(stderr, "error: failed to read WAV file '%s'\n", temp_filename.c_str());
+-                const std::string error_resp = "{\"error\":\"failed to read WAV file\"}";
+-                res.set_content(error_resp, "application/json");
+-                std::remove(temp_filename.c_str());
+-                return;
+-            }
+-            // remove temp file
+-            std::remove(temp_filename.c_str());
+-        } else {
+-            if (!::read_wav(audio_file.content, pcmf32, pcmf32s, params.diarize))
+-            {
+-                fprintf(stderr, "error: failed to read WAV file\n");
+-                const std::string error_resp = "{\"error\":\"failed to read WAV file\"}";
+-                res.set_content(error_resp, "application/json");
+-                return;
+-            }
++        bool ok = slurp_audio_file(temp_filename.c_str(), pcmf32, pcmf32s, params.diarize);
++        unlink(temp_filename.c_str());
++        if (!ok) {
++            fprintf(stderr, "error: failed to read audio file\n");
++            const std::string error_resp = "{\"error\":\"failed to read audio file\"}";
++            res.set_content(error_resp, "application/json");
++            return;
+         }
+ 
+-
+         printf("Successfully loaded %s\n", filename.c_str());
+ 
+         // print system information
+@@ -745,6 +739,7 @@
+         }
+ 
+         // run the inference
++        float t_total;
+         {
+             printf("Running whisper.cpp inference on %s\n", filename.c_str());
+             whisper_full_params wparams = whisper_full_default_params(WHISPER_SAMPLING_GREEDY);
+@@ -823,12 +818,15 @@
+                 wparams.abort_callback_user_data = &is_aborted;
+             }
+ 
++            // time the processing
++            auto t_start = std::chrono::high_resolution_clock::now();
+             if (whisper_full_parallel(ctx, wparams, pcmf32.data(), pcmf32.size(), params.n_processors) != 0) {
+                 fprintf(stderr, "%s: failed to process audio\n", argv[0]);
+                 const std::string error_resp = "{\"error\":\"failed to process audio\"}";
+                 res.set_content(error_resp, "application/json");
+                 return;
+             }
++            t_total = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::high_resolution_clock::now() - t_start).count();
+         }
+ 
+         // return results to user
+@@ -888,6 +886,7 @@
+                 {"language", whisper_lang_str_full(whisper_full_lang_id(ctx))},
+                 {"duration", float(pcmf32.size())/WHISPER_SAMPLE_RATE},
+                 {"text", results},
++                {"transcribe_time", t_total},
+                 {"segments", json::array()}
+             };
+             const int n_segments = whisper_full_n_segments(ctx);
+@@ -946,7 +945,7 @@
+                             "application/json");
+         }
+ 
+-        // reset params to their defaults
++        // reset params to thier defaults
+         params = default_params;
+     });
+     svr.Post(sparams.request_path + "/load", [&](const Request &req, Response &res){

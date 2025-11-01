@@ -1,0 +1,10 @@
+--- examples/server/httplib.h	2025-10-31 22:21:46
++++ ../whisper.cpp.patches/httplib.h	2025-10-31 16:05:04
+@@ -233,6 +233,7 @@
+ #include <unordered_map>
+ #include <unordered_set>
+ #include <utility>
++#include <exception>
+ 
+ #ifdef CPPHTTPLIB_OPENSSL_SUPPORT
+ #ifdef _WIN32
