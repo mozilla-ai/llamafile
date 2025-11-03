@@ -107,5 +107,7 @@ setup: # Initialize and configure all dependencies (submodules, patches, etc.)
 	@echo "Setup complete!"
 
 
+ifneq ($(MAKECMDGOALS),setup)
 include build/deps.mk
 include build/tags.mk
+endif
