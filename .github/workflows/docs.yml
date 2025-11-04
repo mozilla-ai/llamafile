@@ -1,0 +1,48 @@
+name: Documentation
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - mkdocs.yml
+      - 'docs/**'
+      - '.github/workflows/docs.yml'
+  pull_request:
+    paths:
+      - mkdocs.yml
+      - 'docs/**'
+      - '.github/workflows/docs.yml'
+  workflow_dispatch:
+
+jobs:
+  docs:
+    permissions:
+      contents: write
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Configure git
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email 'github-actions[bot]@users.noreply.github.com'
+
+      - name: Install dependencies
+        run: |
+          pip install mkdocs-material
+
+      - name: Build docs
+        if: github.event_name == 'pull_request'
+        run: mkdocs build -s
+
+      - name: Publish docs
+        if: ${{ github.event_name == 'push' || github.event_name == 'workflow_dispatch' }}
+        run: mkdocs gh-deploy --force
