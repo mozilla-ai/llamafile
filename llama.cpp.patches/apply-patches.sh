@@ -10,10 +10,10 @@ LLAMAFILE_FILES_DIR="$SCRIPT_DIR/llamafile-files"
 
 cd "$LLAMA_DIR"
 
-# Check if patches are already applied
-if [ -f "BUILD.mk" ]; then
-    echo "Patches appear to be already applied. Skipping..."
-    exit 0
+# Check if status is dirty, if so, exit
+if [ -n "$(git status --porcelain)" ]; then
+    echo "Git status is dirty. Please commit or stash your changes before applying patches."
+    exit 1
 fi
 
 echo "Applying patches to llama.cpp submodule..."
@@ -81,7 +81,7 @@ echo "Applying modifications to upstream files..."
 for patch_file in "$PATCHES_DIR"/*.patch; do
     if [ -f "$patch_file" ]; then
         echo "Applying $(basename "$patch_file")..."
-        patch --reverse -p0 < "$patch_file"
+        patch --reverse -p0 < "$patch_file" # Since I generated the patch by diffing the llamfile repo against the upstream llama.cpp repo, we need to reverse the patch (because the llamafile additions show up as deletions in the patch)
     fi
 done
 
@@ -89,4 +89,4 @@ echo ""
 echo "Patches applied successfully!"
 echo "Note: These changes are not committed to the submodule."
 echo "To reset the submodule to its clean state, run:"
-echo "  cd llama.cpp && git reset --hard && git clean -fd"
+echo "  cd llama.cpp && git reset --hard && git clean -fdx"
