@@ -81,7 +81,7 @@ echo "Applying modifications to upstream files..."
 for patch_file in "$PATCHES_DIR"/*.patch; do
     if [ -f "$patch_file" ]; then
         echo "Applying $(basename "$patch_file")..."
-        patch --reverse -p0 < "$patch_file" # Since I generated the patch by diffing the llamfile repo against the upstream llama.cpp repo, we need to reverse the patch (because the llamafile additions show up as deletions in the patch)
+        patch -p0 < "$patch_file"
     fi
 done
 

@@ -4,6 +4,7 @@ set -euo pipefail
 mv common/base64.hpp base64.h
 mv common/common.cpp common.cpp
 mv common/common.h common.h
+mv common/console.cpp console.cpp
 mv common/console.h console.h
 mv common/grammar-parser.cpp grammar-parser.cpp
 mv common/grammar-parser.h grammar-parser.h
@@ -48,7 +49,11 @@ mv examples/server/chat.sh server/chat.sh
 mv examples/server/deps.sh server/deps.sh
 mv examples/server/httplib.h server/httplib.h
 mv examples/server/public/completion.js server/public/completion.js
+mv examples/server/public/index.js server/public/index.js
+mv examples/server/public/json-schema-to-grammar.mjs server/public/json-schema-to-grammar.mjs
 mv examples/server/themes/buttons-top/index.html server/public/index.html
+mv examples/server/server.cpp server/server.cpp
+mv examples/server/utils.hpp server/utils.h
 
 mv examples/llama.android/README.md server/public/history-template.txt
 mv examples/llama.android/llama/consumer-rules.pro server/public/prompt-template.txt
@@ -61,6 +66,7 @@ mv ggml/src/ggml-backend-impl.h ggml-backend-impl.h
 mv ggml/src/ggml-backend.c ggml-backend.c
 mv ggml/include/ggml-backend.h ggml-backend.h
 mv ggml/src/ggml-common.h ggml-common.h
+mv ggml/src/ggml-cuda.cu ggml-cuda.cu
 mv ggml/include/ggml-cuda.h ggml-cuda.h
 mv ggml/src/ggml-impl.h ggml-impl.h
 mv ggml/include/ggml-metal.h ggml-metal.h
