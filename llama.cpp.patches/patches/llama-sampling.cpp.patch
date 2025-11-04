@@ -1,0 +1,10 @@
+--- llama.cpp/llama-sampling.cpp
++++ llama.cpp/llama-sampling.cpp
+@@ -1,3 +1,5 @@
++// -*- mode:c++;indent-tabs-mode:nil;c-basic-offset:4;tab-width:8;coding:utf-8 -*-
++// vi: set et ft=cpp ts=4 sts=4 sw=4 fenc=utf-8 :vi
+ #include "llama-sampling.h"
+
+ #include <algorithm>
+diff --git llama.cpp/llama-sampling.h llama.cpp/llama-sampling.h
+index f7f8e3e..108ea14 100644

@@ -1,0 +1,2743 @@
+--- llama.cpp/ggml.c
++++ llama.cpp/ggml.c
+@@ -1,22 +1,59 @@
+-#define _CRT_SECURE_NO_DEPRECATE // Disables ridiculous "unsafe" warnings on Windows
+-#define _USE_MATH_DEFINES // For M_PI on MSVC
++// -*- mode:c;indent-tabs-mode:nil;c-basic-offset:4;coding:utf-8 -*-
++// vi: set et ft=c ts=4 sts=4 sw=4 fenc=utf-8 :vi
++
++#define GGML_USE_LLAMAFILE 1
++
++__notice(ggml_notice, "\
++llama.cpp (MIT License)\n\
++Copyright (c) 2023 Georgi Gerganov\n\
++Copyright (c) 2023 Iwan Kawrakow\n\
++Copyright (c) 2023 Jeffrey Quesnelle and Bowen Peng.\n\
++Copyright (c) 2023 Yuji Hirose\n\
++Copyright (c) 2022 Niels Lohmann <https://nlohmann.me>\n\
++Copyright (c) 2022 Bjoern Hoehrmann <bjoern@hoehrmann.de>\n\
++Copyright (c) 2017 Sean Barrett\n\
++\n\
++Permission is hereby granted, free of charge, to any person obtaining a copy\n\
++of this software and associated documentation files (the \"Software\"), to deal\n\
++in the Software without restriction, including without limitation the rights\n\
++to use, copy, modify, merge, publish, distribute, sublicense, and/or sell\n\
++copies of the Software, and to permit persons to whom the Software is\n\
++furnished to do so, subject to the following conditions:\n\
++\n\
++The above copyright notice and this permission notice shall be included in all\n\
++copies or substantial portions of the Software.\n\
++\n\
++THE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\n\
++IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\n\
++FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE\n\
++AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\n\
++LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,\n\
++OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE\n\
++SOFTWARE.");
+
+ #include "ggml-impl.h"
+ #include "ggml-quants.h"
+-#include "ggml.h"
++#include "ggml-metal.h"
++#include "ggml-cuda.h"
++#include "ggml-vector.h"
+ #include "ggml-aarch64.h"
++#include "llamafile/llamafile.h"
++#include "llamafile/log.h"
++#include "llamafile/debug.h"
++#include "llamafile/sgemm.h"
++#include "llamafile/thread.h"
++#include "llamafile/crash.h"
++#include "llamafile/trace.h"
++#include "llamafile/pool.h"
+
+-#if defined(_MSC_VER) || defined(__MINGW32__)
+-#include <malloc.h> // using malloc.h with MSC/MINGW
+-#elif !defined(__FreeBSD__) && !defined(__NetBSD__) && !defined(__OpenBSD__)
+ #include <alloca.h>
+-#endif
+-
+ #include <assert.h>
+ #include <errno.h>
+ #include <time.h>
+ #include <math.h>
+ #include <stdlib.h>
++#include <stdalign.h>
++#include <stdatomic.h>
+ #include <string.h>
+ #include <stdint.h>
+ #include <inttypes.h>
+@@ -25,223 +62,28 @@
+ #include <limits.h>
+ #include <stdarg.h>
+ #include <signal.h>
+-#if defined(__gnu_linux__)
+-#include <syscall.h>
+-#endif
+-
+-#ifdef GGML_USE_OPENMP
+-#include <omp.h>
+-#endif
+-
+-#ifdef GGML_USE_METAL
+ #include <unistd.h>
+-#endif
+-
+-#if defined(__ARM_FEATURE_SVE)
+-int ggml_sve_cnt_b = 0;
+-#endif
+-#if defined(__ARM_FEATURE_SVE) || defined(__ARM_FEATURE_MATMUL_INT8)
+-#undef GGML_USE_LLAMAFILE
+-#endif
+-
+-#ifdef GGML_USE_LLAMAFILE
+-#include <llamafile/sgemm.h>
+-#endif
+-
+-#if defined(_MSC_VER)
+-// disable "possible loss of data" to avoid hundreds of casts
+-// we should just be careful :)
+-#pragma warning(disable: 4244 4267)
+-
+-// disable POSIX deprecation warnings
+-// these functions are never going away, anyway
+-#pragma warning(disable: 4996)
+-
+-// unreachable code because of multiple instances of code after GGML_ABORT
+-#pragma warning(disable: 4702)
+-#endif
+-
+-#if defined(_WIN32)
+-
+-#define WIN32_LEAN_AND_MEAN
+-#ifndef NOMINMAX
+-    #define NOMINMAX
+-#endif
+-#include <windows.h>
+-
+-typedef volatile LONG atomic_int;
+-typedef atomic_int atomic_bool;
+-typedef atomic_int atomic_flag;
+-
+-#define ATOMIC_FLAG_INIT 0
+-
+-static void atomic_store(atomic_int * ptr, LONG val) {
+-    InterlockedExchange(ptr, val);
+-}
+-static LONG atomic_load(atomic_int * ptr) {
+-    return InterlockedCompareExchange(ptr, 0, 0);
+-}
+-static LONG atomic_fetch_add(atomic_int * ptr, LONG inc) {
+-    return InterlockedExchangeAdd(ptr, inc);
+-}
+-static LONG atomic_fetch_sub(atomic_int * ptr, LONG dec) {
+-    return atomic_fetch_add(ptr, -(dec));
+-}
+-static atomic_bool atomic_flag_test_and_set(atomic_flag * ptr) {
+-    return InterlockedExchange(ptr, 1);
+-}
+-static void atomic_flag_clear(atomic_flag * ptr) {
+-    InterlockedExchange(ptr, 0);
+-}
+-
+-typedef HANDLE pthread_t;
+-
+-typedef DWORD thread_ret_t;
+-static int pthread_create(pthread_t * out, void * unused, thread_ret_t(*func)(void *), void * arg) {
+-    (void) unused;
+-    HANDLE handle = CreateThread(NULL, 0, (LPTHREAD_START_ROUTINE) func, arg, 0, NULL);
+-    if (handle == NULL)
+-    {
+-        return EAGAIN;
+-    }
+-
+-    *out = handle;
+-    return 0;
+-}
+-
+-static int pthread_join(pthread_t thread, void * unused) {
+-    (void) unused;
+-    int ret = (int) WaitForSingleObject(thread, INFINITE);
+-    CloseHandle(thread);
+-    return ret;
+-}
+-
+-static int sched_yield (void) {
+-    Sleep (0);
+-    return 0;
+-}
+-#else
+ #include <pthread.h>
+-#include <stdatomic.h>
+-
+-typedef void * thread_ret_t;
+-
+-#include <sys/types.h>
++#include <cosmo.h>
+ #include <sys/stat.h>
+-#include <unistd.h>
+-
+-#endif
+-
+-typedef pthread_t ggml_thread_t;
+-
+-#ifdef GGML_USE_CPU_HBM
+-#include <hbwmalloc.h>
+-#endif
+-
+-#if defined(__APPLE__)
+-#include <TargetConditionals.h>
+-#endif
+-
+-#if (defined(__linux__) || defined(__APPLE__) || defined(__FreeBSD__) || defined(__NetBSD__) || defined(__OpenBSD__)) && \
+-    (!defined(TARGET_OS_TV) && !defined(TARGET_OS_WATCH))
+-
+-#include <sys/wait.h>
+-
+-#if defined(__ANDROID__)
+-#include <unwind.h>
+-#include <dlfcn.h>
+-#include <stdio.h>
+-
+-struct backtrace_state {
+-    void ** current;
+-    void ** end;
+-};
+-
+-static _Unwind_Reason_Code unwind_callback(struct _Unwind_Context* context, void* arg) {
+-    struct backtrace_state * state = (struct backtrace_state *)arg;
+-    uintptr_t pc = _Unwind_GetIP(context);
+-    if (pc) {
+-        if (state->current == state->end) {
+-            return _URC_END_OF_STACK;
+-        } else {
+-            *state->current++ = (void*)pc;
+-        }
+-    }
+-    return _URC_NO_REASON;
+-}
+-
+-static void ggml_print_backtrace_symbols(void) {
+-    const int max = 100;
+-    void* buffer[max];
+-
+-    struct backtrace_state state = {buffer, buffer + max};
+-    _Unwind_Backtrace(unwind_callback, &state);
+-
+-    int count = state.current - buffer;
+-
+-    for (int idx = 0; idx < count; ++idx) {
+-        const void * addr = buffer[idx];
+-        const char * symbol = "";
++#include <sys/auxv.h>
++#include <alloca.h>
+
+-        Dl_info info;
+-        if (dladdr(addr, &info) && info.dli_sname) {
+-            symbol = info.dli_sname;
+-        }
++typedef void * thread_ret_t;
++typedef llamafile_task_t ggml_thread_t;
+
+-        fprintf(stderr, "%d: %p %s\n", idx, addr, symbol);
+-    }
+-}
+-#elif defined(__linux__) && defined(__GLIBC__)
+-#include <execinfo.h>
+-static void ggml_print_backtrace_symbols(void) {
+-    void * trace[100];
+-    int nptrs = backtrace(trace, sizeof(trace)/sizeof(trace[0]));
+-    backtrace_symbols_fd(trace, nptrs, STDERR_FILENO);
+-}
+-#else
+ static void ggml_print_backtrace_symbols(void) {
+     // platform not supported
+ }
+-#endif
+
+-static void ggml_print_backtrace(void) {
+-    char attach[32];
+-    snprintf(attach, sizeof(attach), "attach %d", getpid());
+-    int pid = fork();
+-    if (pid == 0) {
+-        // try gdb
+-        execlp("gdb", "gdb", "--batch",
+-            "-ex", "set style enabled on",
+-            "-ex", attach,
+-            "-ex", "bt -frame-info source-and-location",
+-            "-ex", "detach",
+-            "-ex", "quit",
+-            (char *) NULL);
+-        // try lldb
+-        execlp("lldb", "lldb", "--batch",
+-            "-o", "bt",
+-            "-o", "quit",
+-            "-p", attach,
+-            (char *) NULL);
+-        exit(EXIT_FAILURE);
+-    } else {
+-        int wstatus;
+-        waitpid(pid, &wstatus, 0);
+-        if (WIFEXITED(wstatus)) {
+-            if (WEXITSTATUS(wstatus) == EXIT_FAILURE) {
+-                // gdb failed, fallback to backtrace_symbols
+-                ggml_print_backtrace_symbols();
+-            }
+-        }
+-    }
+-}
+-#else
+ static void ggml_print_backtrace(void) {
+     // platform not supported
+ }
+-#endif
+
+-void ggml_abort(const char * file, int line, const char * fmt, ...) {
++void ggml_abort(const char * file, int line, const char * fmt, ...) { // [jart] no ggml_call
++    // [jart] abort() shouldn't be a cancelation point
++    pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, 0);
++
+     fflush(stdout);
+
+     fprintf(stderr, "%s:%d: ", file, line);
+@@ -258,7 +100,6 @@ void ggml_abort(const char * file, int line, const char * fmt, ...) {
+ }
+
+ #define GGML_DEBUG 0
+-#define GGML_GELU_FP16
+ #define GGML_GELU_QUICK_FP16
+
+ #define GGML_SOFT_MAX_UNROLL 4
+@@ -293,39 +134,20 @@ void ggml_abort(const char * file, int line, const char * fmt, ...) {
+ // end of logging block
+ //
+
+-#ifdef GGML_USE_ACCELERATE
+-// uncomment to use vDSP for soft max computation
+-// note: not sure if it is actually faster
+-//#define GGML_SOFT_MAX_ACCELERATE
+-#endif
+-
+-#if defined(_MSC_VER) || defined(__MINGW32__)
+-#define GGML_ALIGNED_MALLOC(size) _aligned_malloc(size, GGML_MEM_ALIGN)
+-#define GGML_ALIGNED_FREE(ptr)    _aligned_free(ptr)
+-#else
+ inline static void * ggml_aligned_malloc(size_t size) {
+     if (size == 0) {
+         GGML_PRINT("WARNING: Behavior may be unexpected when allocating 0 bytes for ggml_aligned_malloc!\n");
+         return NULL;
+     }
+     void * aligned_memory = NULL;
+-#ifdef GGML_USE_CPU_HBM
+-    int result = hbw_posix_memalign(&aligned_memory, 16, size);
+-#elif GGML_USE_METAL
+     int result = posix_memalign(&aligned_memory, sysconf(_SC_PAGESIZE), size);
+-#else
+-    int result = posix_memalign(&aligned_memory, GGML_MEM_ALIGN, size);
+-#endif
+     if (result != 0) {
+         // Handle allocation failure
+         const char *error_desc = "unknown allocation error";
+-        switch (result) {
+-            case EINVAL:
+-                error_desc = "invalid alignment value";
+-                break;
+-            case ENOMEM:
+-                error_desc = "insufficient memory";
+-                break;
++        if (result == EINVAL) {
++            error_desc = "invalid alignment value";
++        } else if (result == ENOMEM) {
++            error_desc = "insufficient memory";
+         }
+         GGML_PRINT("%s: %s (attempted to allocate %6.2f MB)\n", __func__, error_desc, size/(1024.0*1024.0));
+         GGML_ABORT("fatal error");
+@@ -333,13 +155,9 @@ inline static void * ggml_aligned_malloc(size_t size) {
+     }
+     return aligned_memory;
+ }
++
+ #define GGML_ALIGNED_MALLOC(size) ggml_aligned_malloc(size)
+-#ifdef GGML_USE_CPU_HBM
+-#define GGML_ALIGNED_FREE(ptr)    if(NULL != ptr) hbw_free(ptr)
+-#else
+ #define GGML_ALIGNED_FREE(ptr)    free(ptr)
+-#endif
+-#endif
+
+ inline static void * ggml_malloc(size_t size) {
+     if (size == 0) {
+@@ -376,10 +194,6 @@ inline static void * ggml_calloc(size_t num, size_t size) {
+ #define UNUSED GGML_UNUSED
+ #define SWAP(x, y, T) do { T SWAP = x; (x) = y; (y) = SWAP; } while (0)
+
+-#if defined(GGML_USE_ACCELERATE)
+-#include <Accelerate/Accelerate.h>
+-#endif
+-
+ // floating point type used to accumulate sums
+ typedef double ggml_float;
+
+@@ -393,12 +207,6 @@ typedef double ggml_float;
+ // global data
+ //
+
+-// precomputed gelu table for f16 (128 KB)
+-static ggml_fp16_t ggml_table_gelu_f16[1 << 16];
+-
+-// precomputed quick gelu table for f16 (128 KB)
+-static ggml_fp16_t ggml_table_gelu_quick_f16[1 << 16];
+-
+ // precomputed f32 table for f16 (256 KB) (ggml-impl.h)
+ float ggml_table_f32_f16[1 << 16];
+
+@@ -433,82 +241,7 @@ ggml_bf16_t ggml_fp32_to_bf16(float x) {
+     return GGML_FP32_TO_BF16(x);
+ }
+
+-void ggml_fp16_to_fp32_row(const ggml_fp16_t * x, float * y, int64_t n) {
+-    for (int64_t i = 0; i < n; i++) {
+-        y[i] = GGML_FP16_TO_FP32(x[i]);
+-    }
+-}
+-
+-void ggml_fp32_to_fp16_row(const float * x, ggml_fp16_t * y, int64_t n) {
+-    int64_t i = 0;
+-#if defined(__F16C__)
+-    for (; i + 7 < n; i += 8) {
+-        __m256 x_vec = _mm256_loadu_ps(x + i);
+-        __m128i y_vec = _mm256_cvtps_ph(x_vec, _MM_FROUND_TO_NEAREST_INT);
+-        _mm_storeu_si128((__m128i *)(y + i), y_vec);
+-    }
+-    for(; i + 3 < n; i += 4) {
+-        __m128 x_vec = _mm_loadu_ps(x + i);
+-        __m128i y_vec = _mm_cvtps_ph(x_vec, _MM_FROUND_TO_NEAREST_INT);
+-        _mm_storel_epi64((__m128i *)(y + i), y_vec);
+-    }
+-#endif
+-    for (; i < n; i++) {
+-        y[i] = GGML_FP32_TO_FP16(x[i]);
+-    }
+-}
+-
+-void ggml_bf16_to_fp32_row(const ggml_bf16_t * x, float * y, int64_t n) {
+-    int64_t i = 0;
+-#if defined(__AVX512F__)
+-    for (; i + 16 <= n; i += 16) {
+-        _mm512_storeu_ps(y + i,
+-                         _mm512_castsi512_ps(
+-                             _mm512_slli_epi32(
+-                                 _mm512_cvtepu16_epi32(
+-                                     _mm256_loadu_si256(
+-                                         (const __m256i *)(x + i))),
+-                                 16)));
+-    }
+-#elif defined(__AVX2__)
+-    for (; i + 8 <= n; i += 8) {
+-        _mm256_storeu_ps(y + i,
+-                         _mm256_castsi256_ps(
+-                             _mm256_slli_epi32(
+-                                 _mm256_cvtepu16_epi32(
+-                                     _mm_loadu_si128(
+-                                         (const __m128i *)(x + i))),
+-                                 16)));
+-    }
+-#endif
+-    for (; i < n; i++) {
+-        y[i] = GGML_BF16_TO_FP32(x[i]);
+-    }
+-}
+-
+-void ggml_fp32_to_bf16_row_ref(const float * x, ggml_bf16_t * y, int64_t n) {
+-    for (int i = 0; i < n; i++) {
+-        y[i] = ggml_compute_fp32_to_bf16(x[i]);
+-    }
+-}
+-
+-void ggml_fp32_to_bf16_row(const float * x, ggml_bf16_t * y, int64_t n) {
+-  int i = 0;
+-#if defined(__AVX512BF16__)
+-  // subnormals are flushed to zero on this platform
+-  for (; i + 32 <= n; i += 32) {
+-        _mm512_storeu_si512(
+-            (__m512i *)(y + i),
+-            m512i(_mm512_cvtne2ps_pbh(_mm512_loadu_ps(x + i + 16),
+-                                _mm512_loadu_ps(x + i))));
+-  }
+-#endif
+-    for (; i < n; i++) {
+-        y[i] = GGML_FP32_TO_BF16(x[i]);
+-    }
+-}
+-
+-bool ggml_guid_matches(ggml_guid_t guid_a, ggml_guid_t guid_b) {
++GGML_CALL bool ggml_guid_matches(ggml_guid_t guid_a, ggml_guid_t guid_b) {
+     return memcmp(guid_a, guid_b, sizeof(ggml_guid)) == 0;
+ }
+
+@@ -516,30 +249,6 @@ bool ggml_guid_matches(ggml_guid_t guid_a, ggml_guid_t guid_b) {
+ // timing
+ //
+
+-#if defined(_MSC_VER) || defined(__MINGW32__)
+-static int64_t timer_freq, timer_start;
+-void ggml_time_init(void) {
+-    LARGE_INTEGER t;
+-    QueryPerformanceFrequency(&t);
+-    timer_freq = t.QuadPart;
+-
+-    // The multiplication by 1000 or 1000000 below can cause an overflow if timer_freq
+-    // and the uptime is high enough.
+-    // We subtract the program start time to reduce the likelihood of that happening.
+-    QueryPerformanceCounter(&t);
+-    timer_start = t.QuadPart;
+-}
+-int64_t ggml_time_ms(void) {
+-    LARGE_INTEGER t;
+-    QueryPerformanceCounter(&t);
+-    return ((t.QuadPart-timer_start) * 1000) / timer_freq;
+-}
+-int64_t ggml_time_us(void) {
+-    LARGE_INTEGER t;
+-    QueryPerformanceCounter(&t);
+-    return ((t.QuadPart-timer_start) * 1000000) / timer_freq;
+-}
+-#else
+ void ggml_time_init(void) {}
+ int64_t ggml_time_ms(void) {
+     struct timespec ts;
+@@ -552,7 +261,6 @@ int64_t ggml_time_us(void) {
+     clock_gettime(CLOCK_MONOTONIC, &ts);
+     return (int64_t)ts.tv_sec*1000000 + (int64_t)ts.tv_nsec/1000;
+ }
+-#endif
+
+ int64_t ggml_cycles(void) {
+     return clock();
+@@ -566,51 +274,8 @@ int64_t ggml_cycles_per_ms(void) {
+ // cross-platform UTF-8 file paths
+ //
+
+-#ifdef _WIN32
+-static wchar_t * ggml_mbstowcs(const char * mbs) {
+-    int wlen = MultiByteToWideChar(CP_UTF8, 0, mbs, -1, NULL, 0);
+-    if (!wlen) {
+-        errno = EINVAL;
+-        return NULL;
+-    }
+-
+-    wchar_t * wbuf = GGML_MALLOC(wlen * sizeof(wchar_t));
+-    wlen = MultiByteToWideChar(CP_UTF8, 0, mbs, -1, wbuf, wlen);
+-    if (!wlen) {
+-        GGML_FREE(wbuf);
+-        errno = EINVAL;
+-        return NULL;
+-    }
+-
+-    return wbuf;
+-}
+-#endif
+-
+ FILE * ggml_fopen(const char * fname, const char * mode) {
+-#ifdef _WIN32
+-    FILE * file = NULL;
+-
+-    // convert fname (UTF-8)
+-    wchar_t * wfname = ggml_mbstowcs(fname);
+-    if (wfname) {
+-        // convert mode (ANSI)
+-        wchar_t * wmode = GGML_MALLOC((strlen(mode) + 1) * sizeof(wchar_t));
+-        wchar_t * wmode_p = wmode;
+-        do {
+-            *wmode_p++ = (wchar_t)*mode;
+-        } while (*mode++);
+-
+-        // open file
+-        file = _wfopen(wfname, wmode);
+-
+-        GGML_FREE(wfname);
+-        GGML_FREE(wmode);
+-    }
+-
+-    return file;
+-#else
+     return fopen(fname, mode);
+-#endif
+ }
+
+ //
+@@ -629,10 +294,6 @@ FILE * ggml_fopen(const char * fname, const char * mode) {
+
+ static const size_t CACHE_LINE_SIZE_F32 = CACHE_LINE_SIZE/sizeof(float);
+
+-static void ggml_vec_dot_f32(int n, float * restrict s, size_t bs, const float * restrict x, size_t bx, const float * restrict y, size_t by, int nrc);
+-static void ggml_vec_dot_f16(int n, float * restrict s, size_t bs, ggml_fp16_t * restrict x, size_t bx, ggml_fp16_t * restrict y, size_t by, int nrc);
+-static void ggml_vec_dot_bf16(int n, float * restrict s, size_t bs, ggml_bf16_t * restrict x, size_t bx, ggml_bf16_t * restrict y, size_t by, int nrc);
+-
+ static const ggml_type_traits_t type_traits[GGML_TYPE_COUNT] = {
+     [GGML_TYPE_I8] = {
+         .type_name                = "i8",
+@@ -1855,893 +1516,48 @@ struct ggml_context {
+
+     int    n_objects;
+
+-    struct ggml_object * objects_begin;
+-    struct ggml_object * objects_end;
+-
+-    struct ggml_scratch scratch;
+-    struct ggml_scratch scratch_save;
+-};
+-
+-struct ggml_context_container {
+-    bool used;
+-
+-    struct ggml_context context;
+-};
+-
+-struct ggml_compute_state_shared {
+-    const struct ggml_cgraph * cgraph;
+-    const struct ggml_cplan * cplan;
+-
+-    int n_threads;
+-
+-    // synchronization primitives
+-    atomic_int n_barrier;
+-    atomic_int n_barrier_passed;
+-
+-    ggml_abort_callback abort_callback; // abort ggml_graph_compute when true
+-    void * abort_callback_data;
+-
+-    atomic_int current_chunk; // currently processing chunk during mul_mat, shared between all the threads
+-
+-    enum ggml_status ec;
+-};
+-
+-struct ggml_compute_state {
+-    ggml_thread_t thrd;
+-    int ith;
+-    struct ggml_compute_state_shared * shared;
+-};
+-
+-struct ggml_compute_params {
+-    // ith = thread index, nth = number of threads
+-    int ith, nth;
+-
+-    // work buffer for all threads
+-    size_t wsize;
+-    void * wdata;
+-
+-    struct ggml_compute_state_shared * shared;
+-};
+-
+-//
+-// fundamental operations
+-//
+-
+-inline static void ggml_vec_set_i8(const int n, int8_t * x, const int8_t v) { for (int i = 0; i < n; ++i) x[i] = v; }
+-
+-inline static void ggml_vec_set_i16(const int n, int16_t * x, const int16_t v) { for (int i = 0; i < n; ++i) x[i] = v; }
+-
+-inline static void ggml_vec_set_i32(const int n, int32_t * x, const int32_t v) { for (int i = 0; i < n; ++i) x[i] = v; }
+-
+-inline static void ggml_vec_set_f16(const int n, ggml_fp16_t * x, const int32_t v) { for (int i = 0; i < n; ++i) x[i] = v; }
+-
+-inline static void ggml_vec_set_bf16(const int n, ggml_bf16_t * x, const ggml_bf16_t v) { for (int i = 0; i < n; ++i) x[i] = v; }
+-
+-inline static void ggml_vec_add_f32 (const int n, float * z, const float * x, const float * y) { for (int i = 0; i < n; ++i) z[i]  = x[i] + y[i]; }
+-inline static void ggml_vec_add1_f32(const int n, float * z, const float * x, const float   v) { for (int i = 0; i < n; ++i) z[i]  = x[i] + v;    }
+-inline static void ggml_vec_acc_f32 (const int n, float * y, const float * x)                  { for (int i = 0; i < n; ++i) y[i] += x[i];        }
+-inline static void ggml_vec_acc1_f32(const int n, float * y, const float   v)                  { for (int i = 0; i < n; ++i) y[i] += v;           }
+-inline static void ggml_vec_sub_f32 (const int n, float * z, const float * x, const float * y) { for (int i = 0; i < n; ++i) z[i]  = x[i] - y[i]; }
+-inline static void ggml_vec_set_f32 (const int n, float * x, const float   v)                  { for (int i = 0; i < n; ++i) x[i]  = v;           }
+-inline static void ggml_vec_cpy_f32 (const int n, float * y, const float * x)                  { for (int i = 0; i < n; ++i) y[i]  = x[i];        }
+-inline static void ggml_vec_neg_f32 (const int n, float * y, const float * x)                  { for (int i = 0; i < n; ++i) y[i]  = -x[i];       }
+-inline static void ggml_vec_mul_f32 (const int n, float * z, const float * x, const float * y) { for (int i = 0; i < n; ++i) z[i]  = x[i]*y[i];   }
+-inline static void ggml_vec_div_f32 (const int n, float * z, const float * x, const float * y) { for (int i = 0; i < n; ++i) z[i]  = x[i]/y[i];   }
+-
+-static void ggml_vec_dot_f32(int n, float * restrict s, size_t bs, const float * restrict x, size_t bx, const float * restrict y, size_t by, int nrc) {
+-   assert(nrc == 1);
+-   UNUSED(nrc);
+-   UNUSED(bx);
+-   UNUSED(by);
+-   UNUSED(bs);
+-
+-#if defined(GGML_SIMD)
+-    float sumf = 0.0f;
+-    const int np = (n & ~(GGML_F32_STEP - 1));
+-
+-    GGML_F32_VEC sum[GGML_F32_ARR] = { GGML_F32_VEC_ZERO };
+-
+-    GGML_F32_VEC ax[GGML_F32_ARR];
+-    GGML_F32_VEC ay[GGML_F32_ARR];
+-
+-    for (int i = 0; i < np; i += GGML_F32_STEP) {
+-        for (int j = 0; j < GGML_F32_ARR; j++) {
+-            ax[j] = GGML_F32_VEC_LOAD(x + i + j*GGML_F32_EPR);
+-            ay[j] = GGML_F32_VEC_LOAD(y + i + j*GGML_F32_EPR);
+-
+-            sum[j] = GGML_F32_VEC_FMA(sum[j], ax[j], ay[j]);
+-        }
+-    }
+-
+-    // reduce sum0..sum3 to sum0
+-    GGML_F32_VEC_REDUCE(sumf, sum);
+-
+-    // leftovers
+-    for (int i = np; i < n; ++i) {
+-        sumf += x[i]*y[i];
+-    }
+-#else
+-    // scalar
+-    ggml_float sumf = 0.0;
+-    for (int i = 0; i < n; ++i) {
+-        sumf += (ggml_float)(x[i]*y[i]);
+-    }
+-#endif
+-
+-    *s = sumf;
+-}
+-
+-static void ggml_vec_dot_bf16(int n, float * restrict s, size_t bs, ggml_bf16_t * restrict x, size_t bx, ggml_bf16_t * restrict y, size_t by, int nrc) {
+-    assert(nrc == 1);
+-    UNUSED(nrc);
+-    UNUSED(bx);
+-    UNUSED(by);
+-    UNUSED(bs);
+-    int i = 0;
+-    ggml_float sumf = 0;
+-
+-#if defined(__AVX512BF16__)
+-    __m512 c1 = _mm512_setzero_ps();
+-    __m512 c2 = _mm512_setzero_ps();
+-    for (; i + 64 <= n; i += 64) {
+-        c1 = _mm512_dpbf16_ps(c1, m512bh(_mm512_loadu_si512((x + i))),
+-                             m512bh(_mm512_loadu_si512((y + i))));
+-        c2 = _mm512_dpbf16_ps(c2, m512bh(_mm512_loadu_si512((x + i + 32))),
+-                             m512bh(_mm512_loadu_si512((y + i + 32))));
+-    }
+-    sumf += (ggml_float)_mm512_reduce_add_ps(c1);
+-    sumf += (ggml_float)_mm512_reduce_add_ps(c2);
+-
+-#elif defined(__AVX512F__)
+-#define LOAD(p) _mm512_castsi512_ps(_mm512_slli_epi32(_mm512_cvtepu16_epi32(_mm256_loadu_si256((const __m256i *)(p))), 16))
+-    __m512 c1 = _mm512_setzero_ps();
+-    __m512 c2 = _mm512_setzero_ps();
+-    for (; i + 32 <= n; i += 32) {
+-        c1 = _mm512_add_ps(_mm512_mul_ps(LOAD(x + i), LOAD(y + i)), c1);
+-        c2 = _mm512_add_ps(_mm512_mul_ps(LOAD(x + i + 16), LOAD(y + i + 16)), c2);
+-    }
+-    sumf += (ggml_float)_mm512_reduce_add_ps(c1);
+-    sumf += (ggml_float)_mm512_reduce_add_ps(c2);
+-
+-#undef LOAD
+-#elif defined(__AVX2__)
+-#define LOAD(p) _mm256_castsi256_ps(_mm256_slli_epi32(_mm256_cvtepu16_epi32(_mm_loadu_si128((const __m128i *)(p))), 16))
+-    __m256 c1 = _mm256_setzero_ps();
+-    __m256 c2 = _mm256_setzero_ps();
+-    __m256 c3 = _mm256_setzero_ps();
+-    __m256 c4 = _mm256_setzero_ps();
+-    for (; i + 32 <= n; i += 32) {
+-        c1 = _mm256_add_ps(_mm256_mul_ps(LOAD(x + i), LOAD(y + i)), c1);
+-        c2 = _mm256_add_ps(_mm256_mul_ps(LOAD(x + i + 8), LOAD(y + i + 8)), c2);
+-        c3 = _mm256_add_ps(_mm256_mul_ps(LOAD(x + i + 16), LOAD(y + i + 16)), c3);
+-        c4 = _mm256_add_ps(_mm256_mul_ps(LOAD(x + i + 24), LOAD(y + i + 24)), c4);
+-    }
+-    __m128 g;
+-    c1 = _mm256_add_ps(_mm256_add_ps(c1, c3),
+-                       _mm256_add_ps(c2, c4));
+-    g = _mm_add_ps(_mm256_extractf128_ps(c1, 1),
+-                   _mm256_castps256_ps128(c1));
+-    g = _mm_add_ps(g, _mm_movehl_ps(g, g));
+-    g = _mm_add_ss(g, _mm_movehdup_ps(g));
+-    sumf += (ggml_float)_mm_cvtss_f32(g);
+-
+-#undef LOAD
+-#endif
+-
+-    for (; i < n; ++i) {
+-        sumf += (ggml_float)(GGML_BF16_TO_FP32(x[i]) *
+-                             GGML_BF16_TO_FP32(y[i]));
+-    }
+-    *s = sumf;
+-}
+-
+-static void ggml_vec_dot_f16(int n, float * restrict s, size_t bs, ggml_fp16_t * restrict x, size_t bx, ggml_fp16_t * restrict y, size_t by, int nrc) {
+-    assert(nrc == 1);
+-    UNUSED(nrc);
+-    UNUSED(bx);
+-    UNUSED(by);
+-    UNUSED(bs);
+-
+-    ggml_float sumf = 0.0;
+-
+-#if defined(GGML_SIMD)
+-    const int np = (n & ~(GGML_F16_STEP - 1));
+-
+-    GGML_F16_VEC sum[GGML_F16_ARR] = { GGML_F16_VEC_ZERO };
+-
+-    GGML_F16_VEC ax[GGML_F16_ARR];
+-    GGML_F16_VEC ay[GGML_F16_ARR];
+-
+-    for (int i = 0; i < np; i += GGML_F16_STEP) {
+-        for (int j = 0; j < GGML_F16_ARR; j++) {
+-            ax[j] = GGML_F16_VEC_LOAD(x + i + j*GGML_F16_EPR, j);
+-            ay[j] = GGML_F16_VEC_LOAD(y + i + j*GGML_F16_EPR, j);
+-
+-            sum[j] = GGML_F16_VEC_FMA(sum[j], ax[j], ay[j]);
+-        }
+-    }
+-
+-    // reduce sum0..sum3 to sum0
+-    GGML_F16_VEC_REDUCE(sumf, sum);
+-
+-    // leftovers
+-    for (int i = np; i < n; ++i) {
+-        sumf += (ggml_float)(GGML_FP16_TO_FP32(x[i])*GGML_FP16_TO_FP32(y[i]));
+-    }
+-#else
+-    for (int i = 0; i < n; ++i) {
+-        sumf += (ggml_float)(GGML_FP16_TO_FP32(x[i])*GGML_FP16_TO_FP32(y[i]));
+-    }
+-#endif
+-
+-    *s = sumf;
+-}
+-
+-// compute GGML_VEC_DOT_UNROLL dot products at once
+-// xs - x row stride in bytes
+-inline static void ggml_vec_dot_f16_unroll(const int n, const int xs, float * restrict s, void * restrict xv, ggml_fp16_t * restrict y) {
+-    ggml_float sumf[GGML_VEC_DOT_UNROLL] = { 0.0 };
+-
+-    ggml_fp16_t * restrict x[GGML_VEC_DOT_UNROLL];
+-
+-    for (int i = 0; i < GGML_VEC_DOT_UNROLL; ++i) {
+-        x[i] = (ggml_fp16_t *) ((char *) xv + i*xs);
+-    }
+-
+-#if defined(GGML_SIMD)
+-    const int np = (n & ~(GGML_F16_STEP - 1));
+-
+-    GGML_F16_VEC sum[GGML_VEC_DOT_UNROLL][GGML_F16_ARR] = { { GGML_F16_VEC_ZERO } };
+-
+-    GGML_F16_VEC ax[GGML_F16_ARR];
+-    GGML_F16_VEC ay[GGML_F16_ARR];
+-
+-    for (int i = 0; i < np; i += GGML_F16_STEP) {
+-        for (int j = 0; j < GGML_F16_ARR; j++) {
+-            ay[j] = GGML_F16_VEC_LOAD(y + i + j*GGML_F16_EPR, j);
+-
+-            for (int k = 0; k < GGML_VEC_DOT_UNROLL; ++k) {
+-                ax[j] = GGML_F16_VEC_LOAD(x[k] + i + j*GGML_F16_EPR, j);
+-
+-                sum[k][j] = GGML_F16_VEC_FMA(sum[k][j], ax[j], ay[j]);
+-            }
+-        }
+-    }
+-
+-    // reduce sum0..sum3 to sum0
+-    for (int k = 0; k < GGML_VEC_DOT_UNROLL; ++k) {
+-        GGML_F16_VEC_REDUCE(sumf[k], sum[k]);
+-    }
+-
+-    // leftovers
+-    for (int i = np; i < n; ++i) {
+-        for (int j = 0; j < GGML_VEC_DOT_UNROLL; ++j) {
+-            sumf[j] += (ggml_float)(GGML_FP16_TO_FP32(x[j][i])*GGML_FP16_TO_FP32(y[i]));
+-        }
+-    }
+-#else
+-    for (int i = 0; i < n; ++i) {
+-        for (int j = 0; j < GGML_VEC_DOT_UNROLL; ++j) {
+-            sumf[j] += (ggml_float)(GGML_FP16_TO_FP32(x[j][i])*GGML_FP16_TO_FP32(y[i]));
+-        }
+-    }
+-#endif
+-
+-    for (int i = 0; i < GGML_VEC_DOT_UNROLL; ++i) {
+-        s[i] = sumf[i];
+-    }
+-}
+-
+-inline static void ggml_vec_mad_f32(const int n, float * restrict y, const float * restrict x, const float v) {
+-#if defined(GGML_SIMD)
+-    const int np = (n & ~(GGML_F32_STEP - 1));
+-
+-    GGML_F32_VEC vx = GGML_F32_VEC_SET1(v);
+-
+-    GGML_F32_VEC ax[GGML_F32_ARR];
+-    GGML_F32_VEC ay[GGML_F32_ARR];
+-
+-    for (int i = 0; i < np; i += GGML_F32_STEP) {
+-        for (int j = 0; j < GGML_F32_ARR; j++) {
+-            ax[j] = GGML_F32_VEC_LOAD(x + i + j*GGML_F32_EPR);
+-            ay[j] = GGML_F32_VEC_LOAD(y + i + j*GGML_F32_EPR);
+-            ay[j] = GGML_F32_VEC_FMA(ay[j], ax[j], vx);
+-
+-            GGML_F32_VEC_STORE(y + i + j*GGML_F32_EPR, ay[j]);
+-        }
+-    }
+-
+-    // leftovers
+-    for (int i = np; i < n; ++i) {
+-        y[i] += x[i]*v;
+-    }
+-#else
+-    // scalar
+-    for (int i = 0; i < n; ++i) {
+-        y[i] += x[i]*v;
+-    }
+-#endif
+-}
+-
+-inline static void ggml_vec_mad_f16(const int n, ggml_fp16_t * restrict y, const ggml_fp16_t * restrict x, const float v) {
+-#if defined(GGML_SIMD)
+-    const int np = (n & ~(GGML_F16_STEP - 1));
+-
+-    GGML_F16_VEC vx = GGML_F16_VEC_SET1(v);
+-
+-    GGML_F16_VEC ax[GGML_F16_ARR];
+-    GGML_F16_VEC ay[GGML_F16_ARR];
+-
+-    for (int i = 0; i < np; i += GGML_F16_STEP) {
+-        for (int j = 0; j < GGML_F16_ARR; j++) {
+-            ax[j] = GGML_F16_VEC_LOAD(x + i + j*GGML_F16_EPR, j);
+-            ay[j] = GGML_F16_VEC_LOAD(y + i + j*GGML_F16_EPR, j);
+-            ay[j] = GGML_F16_VEC_FMA(ay[j], ax[j], vx);
+-
+-            GGML_F16_VEC_STORE(y + i + j*GGML_F16_EPR, ay, j);
+-        }
+-    }
+-
+-    // leftovers
+-    for (int i = np; i < n; ++i) {
+-        y[i] = GGML_FP32_TO_FP16(GGML_FP16_TO_FP32(y[i]) + GGML_FP16_TO_FP32(x[i])*v);
+-    }
+-#else
+-    // scalar
+-    for (int i = 0; i < n; ++i) {
+-        y[i] = GGML_FP32_TO_FP16(GGML_FP16_TO_FP32(y[i]) + GGML_FP16_TO_FP32(x[i])*v);
+-    }
+-#endif
+-}
+-
+-// xs and vs are byte strides of x and v
+-inline static void ggml_vec_mad_f32_unroll(const int n, const int xs, const int vs, float * restrict y, const float * restrict xv, const float * restrict vv) {
+-
+-    const float * restrict x[GGML_VEC_MAD_UNROLL];
+-    const float * restrict v[GGML_VEC_MAD_UNROLL];
+-
+-    for (int i = 0; i < GGML_VEC_MAD_UNROLL; ++i) {
+-        x[i] = (const float *) ((const char *) xv + i*xs);
+-        v[i] = (const float *) ((const char *) vv + i*vs);
+-    }
+-
+-#if defined(GGML_SIMD)
+-    const int np = (n & ~(GGML_F32_STEP - 1));
+-
+-    GGML_F32_VEC vx[GGML_VEC_MAD_UNROLL];
+-
+-    for (int k = 0; k < GGML_VEC_MAD_UNROLL; ++k) {
+-        vx[k] = GGML_F32_VEC_SET1(v[k][0]);
+-    }
+-
+-    GGML_F32_VEC ax[GGML_VEC_MAD_UNROLL][GGML_F32_ARR];
+-    GGML_F32_VEC ay[GGML_F32_ARR];
+-
+-    for (int i = 0; i < np; i += GGML_F32_STEP) {
+-        for (int j = 0; j < GGML_F32_ARR; j++) {
+-            ay[j] = GGML_F32_VEC_LOAD(y + i + j*GGML_F32_EPR);
+-
+-            for (int k = 0; k < GGML_VEC_MAD_UNROLL; ++k) {
+-                ax[k][j] = GGML_F32_VEC_LOAD(x[k] + i + j*GGML_F32_EPR);
+-                ay[j] = GGML_F32_VEC_FMA(ay[j], ax[k][j], vx[k]);
+-            }
+-
+-            GGML_F32_VEC_STORE(y + i + j*GGML_F32_EPR, ay[j]);
+-        }
+-    }
+-
+-    // leftovers
+-    for (int k = 0; k < GGML_VEC_MAD_UNROLL; ++k) {
+-        for (int i = np; i < n; ++i) {
+-            y[i] += x[k][i]*v[k][0];
+-        }
+-    }
+-#else
+-    // scalar
+-    for (int k = 0; k < GGML_VEC_MAD_UNROLL; ++k) {
+-        for (int i = 0; i < n; ++i) {
+-            y[i] += x[k][i]*v[k][0];
+-        }
+-    }
+-#endif
+-}
+-
+-//inline static void ggml_vec_scale_f32(const int n, float * y, const float   v) { for (int i = 0; i < n; ++i) y[i] *= v;          }
+-inline static void ggml_vec_scale_f32(const int n, float * y, const float   v) {
+-#if defined(GGML_USE_ACCELERATE)
+-    vDSP_vsmul(y, 1, &v, y, 1, n);
+-#elif defined(GGML_SIMD)
+-    const int np = (n & ~(GGML_F32_STEP - 1));
+-
+-    GGML_F32_VEC vx = GGML_F32_VEC_SET1(v);
+-
+-    GGML_F32_VEC ay[GGML_F32_ARR];
+-
+-    for (int i = 0; i < np; i += GGML_F32_STEP) {
+-        for (int j = 0; j < GGML_F32_ARR; j++) {
+-            ay[j] = GGML_F32_VEC_LOAD(y + i + j*GGML_F32_EPR);
+-            ay[j] = GGML_F32_VEC_MUL(ay[j], vx);
+-
+-            GGML_F32_VEC_STORE(y + i + j*GGML_F32_EPR, ay[j]);
+-        }
+-    }
+-
+-    // leftovers
+-    for (int i = np; i < n; ++i) {
+-        y[i] *= v;
+-    }
+-#else
+-    // scalar
+-    for (int i = 0; i < n; ++i) {
+-        y[i] *= v;
+-    }
+-#endif
+-}
+-
+-inline static void ggml_vec_scale_f16(const int n, ggml_fp16_t * y, const float v) {
+-#if defined(GGML_SIMD)
+-    const int np = (n & ~(GGML_F16_STEP - 1));
+-
+-    GGML_F16_VEC vx = GGML_F16_VEC_SET1(v);
+-
+-    GGML_F16_VEC ay[GGML_F16_ARR];
+-
+-    for (int i = 0; i < np; i += GGML_F16_STEP) {
+-        for (int j = 0; j < GGML_F16_ARR; j++) {
+-            ay[j] = GGML_F16_VEC_LOAD(y + i + j*GGML_F16_EPR, j);
+-            ay[j] = GGML_F16_VEC_MUL(ay[j], vx);
+-
+-            GGML_F16_VEC_STORE(y + i + j*GGML_F16_EPR, ay, j);
+-        }
+-    }
+-
+-    // leftovers
+-    for (int i = np; i < n; ++i) {
+-        y[i] = GGML_FP32_TO_FP16(GGML_FP16_TO_FP32(y[i])*v);
+-    }
+-#else
+-    // scalar
+-    for (int i = 0; i < n; ++i) {
+-        y[i] = GGML_FP32_TO_FP16(GGML_FP16_TO_FP32(y[i])*v);
+-    }
+-#endif
+-}
+-
+-inline static void ggml_vec_norm_f32 (const int n, float * s, const float * x) { ggml_vec_dot_f32(n, s, 0, x, 0, x, 0, 1); *s = sqrtf(*s);   }
+-inline static void ggml_vec_sqr_f32  (const int n, float * y, const float * x) { for (int i = 0; i < n; ++i) y[i] = x[i]*x[i];   }
+-inline static void ggml_vec_sqrt_f32 (const int n, float * y, const float * x) { for (int i = 0; i < n; ++i) y[i] = sqrtf(x[i]); }
+-inline static void ggml_vec_log_f32  (const int n, float * y, const float * x) { for (int i = 0; i < n; ++i) y[i] = logf(x[i]);   }
+-inline static void ggml_vec_abs_f32  (const int n, float * y, const float * x) { for (int i = 0; i < n; ++i) y[i] = fabsf(x[i]); }
+-inline static void ggml_vec_sgn_f32  (const int n, float * y, const float * x) { for (int i = 0; i < n; ++i) y[i] = (x[i] > 0.f) ? 1.f : ((x[i] < 0.f) ? -1.f : 0.f); }
+-inline static void ggml_vec_step_f32 (const int n, float * y, const float * x) { for (int i = 0; i < n; ++i) y[i] = (x[i] > 0.f) ? 1.f : 0.f; }
+-inline static void ggml_vec_tanh_f32 (const int n, float * y, const float * x) { for (int i = 0; i < n; ++i) y[i] = tanhf(x[i]);  }
+-inline static void ggml_vec_elu_f32  (const int n, float * y, const float * x) { for (int i = 0; i < n; ++i) y[i] = (x[i] > 0.f) ? x[i] : expm1f(x[i]); }
+-inline static void ggml_vec_relu_f32 (const int n, float * y, const float * x) { for (int i = 0; i < n; ++i) y[i] = (x[i] > 0.f) ? x[i] : 0.f; }
+-inline static void ggml_vec_leaky_relu_f32 (const int n, float * y, const float * x, const float ns) { for (int i = 0; i < n; ++i) y[i] = ((x[i] > 0.f) ? x[i] : 0.f) + ns * ((x[i] < 0.0f) ? x[i] : 0.f); }
+-inline static void ggml_vec_sigmoid_f32 (const int n, float * y, const float * x) { for (int i = 0; i < n; ++i) y[i] = 1.f / (1.f + expf(-x[i])); }
+-// TODO: optimize performance
+-inline static void ggml_vec_hardswish_f32 (const int n, float * y, const float * x) { for (int i = 0; i < n; ++i) y[i] = x[i] * fminf(1.0f, fmaxf(0.0f, (x[i] + 3.0f) / 6.0f)); }
+-inline static void ggml_vec_hardsigmoid_f32 (const int n, float * y, const float * x) { for (int i = 0; i < n; ++i) y[i] = fminf(1.0f, fmaxf(0.0f, (x[i] + 3.0f) / 6.0f)); }
+-
+-static const float GELU_COEF_A     = 0.044715f;
+-static const float GELU_QUICK_COEF = -1.702f;
+-static const float SQRT_2_OVER_PI  = 0.79788456080286535587989211986876f;
+-
+-inline static float ggml_gelu_f32(float x) {
+-    return 0.5f*x*(1.0f + tanhf(SQRT_2_OVER_PI*x*(1.0f + GELU_COEF_A*x*x)));
+-}
+-
+-inline static void ggml_vec_gelu_f16(const int n, ggml_fp16_t * y, const ggml_fp16_t * x) {
+-    const uint16_t * i16 = (const uint16_t *) x;
+-    for (int i = 0; i < n; ++i) {
+-        y[i] = ggml_table_gelu_f16[i16[i]];
+-    }
+-}
+-
+-#ifdef GGML_GELU_FP16
+-inline static void ggml_vec_gelu_f32(const int n, float * y, const float * x) {
+-    uint16_t t;
+-    for (int i = 0; i < n; ++i) {
+-        if (x[i] <= -10.0f) {
+-            y[i] = 0.0f;
+-        } else if (x[i] >= 10.0f) {
+-            y[i] = x[i];
+-        } else {
+-            ggml_fp16_t fp16 = GGML_FP32_TO_FP16(x[i]);
+-            memcpy(&t, &fp16, sizeof(uint16_t));
+-            y[i] = GGML_FP16_TO_FP32(ggml_table_gelu_f16[t]);
+-        }
+-    }
+-}
+-#else
+-inline static void ggml_vec_gelu_f32(const int n, float * y, const float * x) {
+-    for (int i = 0; i < n; ++i) {
+-        y[i] = ggml_gelu_f32(x[i]);
+-    }
+-}
+-#endif
+-
+-inline static float ggml_gelu_quick_f32(float x) {
+-    return x*(1.0f/(1.0f+expf(GELU_QUICK_COEF*x)));
+-}
+-
+-//inline static void ggml_vec_gelu_quick_f16(const int n, ggml_fp16_t * y, const ggml_fp16_t * x) {
+-//    const uint16_t * i16 = (const uint16_t *) x;
+-//    for (int i = 0; i < n; ++i) {
+-//        y[i] = ggml_table_gelu_quick_f16[i16[i]];
+-//    }
+-//}
+-
+-#ifdef GGML_GELU_QUICK_FP16
+-inline static void ggml_vec_gelu_quick_f32(const int n, float * y, const float * x) {
+-    uint16_t t;
+-    for (int i = 0; i < n; ++i) {
+-        ggml_fp16_t fp16 = GGML_FP32_TO_FP16(x[i]);
+-        memcpy(&t, &fp16, sizeof(uint16_t));
+-        y[i] = GGML_FP16_TO_FP32(ggml_table_gelu_quick_f16[t]);
+-    }
+-}
+-#else
+-inline static void ggml_vec_gelu_quick_f32(const int n, float * y, const float * x) {
+-    for (int i = 0; i < n; ++i) {
+-        y[i] = ggml_gelu_quick_f32(x[i]);
+-    }
+-}
+-#endif
+-
+-// Sigmoid Linear Unit (SiLU) function
+-inline static float ggml_silu_f32(float x) {
+-    return x/(1.0f + expf(-x));
+-}
+-
+-#if __FINITE_MATH_ONLY__
+-#error "some routines in ggml.c require non-finite math arithmetics -- pass -fno-finite-math-only to the compiler to fix"
+-#error "ref: https://github.com/ggerganov/llama.cpp/pull/7154#issuecomment-2143844461"
+-#endif
+-
+-#if defined(__ARM_NEON) && defined(__aarch64__)
+-
+-// adapted from arm limited optimized routine
+-// the maximum error is 1.45358 plus 0.5 ulps
+-// numbers above 88.38 will flush to infinity
+-// numbers beneath -103.97 will flush to zero
+-inline static float32x4_t ggml_v_expf(float32x4_t x) {
+-    const float32x4_t r = vdupq_n_f32(0x1.8p23f);
+-    const float32x4_t z = vfmaq_f32(r, x, vdupq_n_f32(0x1.715476p+0f));
+-    const float32x4_t n = vsubq_f32(z, r);
+-    const float32x4_t b = vfmsq_f32(vfmsq_f32(x, n, vdupq_n_f32(0x1.62e4p-1f)), n,
+-                                    vdupq_n_f32(0x1.7f7d1cp-20f));
+-    const uint32x4_t e = vshlq_n_u32(vreinterpretq_u32_f32(z), 23);
+-    const float32x4_t k = vreinterpretq_f32_u32(vaddq_u32(e, vreinterpretq_u32_f32(vdupq_n_f32(1))));
+-    const uint32x4_t c = vcagtq_f32(n, vdupq_n_f32(126));
+-    const float32x4_t u = vmulq_f32(b, b);
+-    const float32x4_t j = vfmaq_f32(
+-        vmulq_f32(vdupq_n_f32(0x1.ffffecp-1f), b),
+-        vfmaq_f32(vfmaq_f32(vdupq_n_f32(0x1.fffdb6p-2f), vdupq_n_f32(0x1.555e66p-3f), b),
+-                  vfmaq_f32(vdupq_n_f32(0x1.573e2ep-5f), vdupq_n_f32(0x1.0e4020p-7f), b), u), u);
+-    if (!vpaddd_u64(vreinterpretq_u64_u32(c)))
+-        return vfmaq_f32(k, j, k);
+-    const uint32x4_t d = vandq_u32(vclezq_f32(n), vdupq_n_u32(0x82000000));
+-    const float32x4_t s1 = vreinterpretq_f32_u32(vaddq_u32(d, vdupq_n_u32(0x7f000000)));
+-    const float32x4_t s2 = vreinterpretq_f32_u32(vsubq_u32(e, d));
+-    return vbslq_f32(vcagtq_f32(n, vdupq_n_f32(192)), vmulq_f32(s1, s1),
+-                     vbslq_f32(c, vmulq_f32(vfmaq_f32(s2, s2, j), s1), vfmaq_f32(k, k, j)));
+-}
+-
+-// computes silu x/(1+exp(-x)) in single precision vector
+-inline static float32x4_t ggml_v_silu(float32x4_t x) {
+-    const float32x4_t one = vdupq_n_f32(1.0f);
+-    const float32x4_t zero = vdupq_n_f32(0.0f);
+-    const float32x4_t neg_x = vsubq_f32(zero, x);
+-    const float32x4_t exp_neg_x = ggml_v_expf(neg_x);
+-    const float32x4_t one_plus_exp_neg_x = vaddq_f32(one, exp_neg_x);
+-    return vdivq_f32(x, one_plus_exp_neg_x);
+-}
+-
+-#elif defined(__AVX512F__) && defined(__AVX512DQ__)
+-
+-// adapted from arm limited optimized routine
+-// the maximum error is 1.45358 plus 0.5 ulps
+-// numbers above 88.38 will flush to infinity
+-// numbers beneath -103.97 will flush to zero
+-inline static __m512 ggml_v_expf(__m512 x) {
+-  const __m512 r = _mm512_set1_ps(0x1.8p23f);
+-  const __m512 z = _mm512_fmadd_ps(x, _mm512_set1_ps(0x1.715476p+0f), r);
+-  const __m512 n = _mm512_sub_ps(z, r);
+-  const __m512 b =
+-      _mm512_fnmadd_ps(n, _mm512_set1_ps(0x1.7f7d1cp-20f),
+-                       _mm512_fnmadd_ps(n, _mm512_set1_ps(0x1.62e4p-1f), x));
+-  const __mmask16 d =
+-      _mm512_cmp_ps_mask(_mm512_abs_ps(n), _mm512_set1_ps(192), _CMP_GT_OQ);
+-  const __m512 u = _mm512_mul_ps(b, b);
+-  const __m512 j = _mm512_fmadd_ps(
+-      _mm512_fmadd_ps(_mm512_fmadd_ps(_mm512_set1_ps(0x1.0e4020p-7f), b,
+-                                      _mm512_set1_ps(0x1.573e2ep-5f)),
+-                      u,
+-                      _mm512_fmadd_ps(_mm512_set1_ps(0x1.555e66p-3f), b,
+-                                      _mm512_set1_ps(0x1.fffdb6p-2f))),
+-      u,
+-      _mm512_fmadd_ps(_mm512_set1_ps(0x1.ffffecp-1f), b, _mm512_set1_ps(1.0F)));
+-  const __m512 res = _mm512_scalef_ps(j, n);
+-  if (_mm512_kortestz(d, d))
+-    return res;
+-  const __m512 zero = _mm512_setzero_ps();
+-  const __m512 alt = _mm512_mask_blend_ps(
+-      _mm512_cmp_ps_mask(n, zero, _CMP_LE_OQ), _mm512_set1_ps(INFINITY), zero);
+-  return _mm512_mask_blend_ps(d, res, alt);
+-}
+-
+-// computes silu x/(1+exp(-x)) in single precision vector
+-inline static __m512 ggml_v_silu(__m512 x) {
+-    const __m512 one = _mm512_set1_ps(1);
+-    const __m512 zero = _mm512_setzero_ps();
+-    const __m512 neg_x = _mm512_sub_ps(zero, x);
+-    const __m512 exp_neg_x = ggml_v_expf(neg_x);
+-    const __m512 one_plus_exp_neg_x = _mm512_add_ps(one, exp_neg_x);
+-    return _mm512_div_ps(x, one_plus_exp_neg_x);
+-}
+-
+-#elif defined(__AVX2__) && defined(__FMA__)
+-
+-// adapted from arm limited optimized routine
+-// the maximum error is 1.45358 plus 0.5 ulps
+-// numbers above 88.38 will flush to infinity
+-// numbers beneath -103.97 will flush to zero
+-inline static __m256 ggml_v_expf(__m256 x) {
+-  const __m256 r = _mm256_set1_ps(0x1.8p23f);
+-  const __m256 z = _mm256_fmadd_ps(x, _mm256_set1_ps(0x1.715476p+0f), r);
+-  const __m256 n = _mm256_sub_ps(z, r);
+-  const __m256 b = _mm256_fnmadd_ps(n, _mm256_set1_ps(0x1.7f7d1cp-20f),
+-                                    _mm256_fnmadd_ps(n, _mm256_set1_ps(0x1.62e4p-1f), x));
+-  const __m256i e = _mm256_slli_epi32(_mm256_castps_si256(z), 23);
+-  const __m256 k = _mm256_castsi256_ps(
+-      _mm256_add_epi32(e, _mm256_castps_si256(_mm256_set1_ps(1))));
+-  const __m256i c = _mm256_castps_si256(
+-      _mm256_cmp_ps(_mm256_andnot_ps(_mm256_set1_ps(-0.f), n),
+-                    _mm256_set1_ps(126), _CMP_GT_OQ));
+-  const __m256 u = _mm256_mul_ps(b, b);
+-  const __m256 j = _mm256_fmadd_ps(_mm256_fmadd_ps(_mm256_fmadd_ps(_mm256_set1_ps(0x1.0e4020p-7f), b,
+-                                                                   _mm256_set1_ps(0x1.573e2ep-5f)), u,
+-                                                   _mm256_fmadd_ps(_mm256_set1_ps(0x1.555e66p-3f), b,
+-                                                                   _mm256_set1_ps(0x1.fffdb6p-2f))),
+-                                   u, _mm256_mul_ps(_mm256_set1_ps(0x1.ffffecp-1f), b));
+-  if (!_mm256_movemask_ps(_mm256_castsi256_ps(c)))
+-    return _mm256_fmadd_ps(j, k, k);
+-  const __m256i g = _mm256_and_si256(
+-      _mm256_castps_si256(_mm256_cmp_ps(n, _mm256_setzero_ps(), _CMP_LE_OQ)),
+-      _mm256_set1_epi32(0x82000000u));
+-  const __m256 s1 =
+-      _mm256_castsi256_ps(_mm256_add_epi32(g, _mm256_set1_epi32(0x7f000000u)));
+-  const __m256 s2 = _mm256_castsi256_ps(_mm256_sub_epi32(e, g));
+-  const __m256i d = _mm256_castps_si256(
+-      _mm256_cmp_ps(_mm256_andnot_ps(_mm256_set1_ps(-0.f), n),
+-                    _mm256_set1_ps(192), _CMP_GT_OQ));
+-  return _mm256_or_ps(
+-      _mm256_and_ps(_mm256_castsi256_ps(d), _mm256_mul_ps(s1, s1)),
+-      _mm256_andnot_ps(
+-          _mm256_castsi256_ps(d),
+-          _mm256_or_ps(
+-              _mm256_and_ps(_mm256_castsi256_ps(c),
+-                            _mm256_mul_ps(_mm256_fmadd_ps(s2, j, s2), s1)),
+-              _mm256_andnot_ps(_mm256_castsi256_ps(c), _mm256_fmadd_ps(k, j, k)))));
+-}
+-
+-// computes silu x/(1+exp(-x)) in single precision vector
+-inline static __m256 ggml_v_silu(__m256 x) {
+-    const __m256 one = _mm256_set1_ps(1);
+-    const __m256 zero = _mm256_setzero_ps();
+-    const __m256 neg_x = _mm256_sub_ps(zero, x);
+-    const __m256 exp_neg_x = ggml_v_expf(neg_x);
+-    const __m256 one_plus_exp_neg_x = _mm256_add_ps(one, exp_neg_x);
+-    return _mm256_div_ps(x, one_plus_exp_neg_x);
+-}
+-
+-#elif defined(__SSE2__) // __AVX2__ / __ARM_NEON
+-
+-#if defined(__FMA__)
+-#define MADD128(x, y, z) _mm_fmadd_ps(x, y, z)
+-#define NMADD128(x, y, z) _mm_fnmadd_ps(x, y, z)
+-#else
+-#define MADD128(x, y, z) _mm_add_ps(_mm_mul_ps(x, y), z)
+-#define NMADD128(x, y, z) _mm_sub_ps(z, _mm_mul_ps(x, y))
+-#endif
+-
+-// adapted from arm limited optimized routine
+-// the maximum error is 1.45358 plus 0.5 ulps
+-// numbers above 88.38 will flush to infinity
+-// numbers beneath -103.97 will flush to zero
+-inline static __m128 ggml_v_expf(__m128 x) {
+-    const __m128 r = _mm_set1_ps(0x1.8p23f);
+-    const __m128 z = MADD128(x, _mm_set1_ps(0x1.715476p+0f), r);
+-    const __m128 n = _mm_sub_ps(z, r);
+-    const __m128 b =
+-        NMADD128(n, _mm_set1_ps(0x1.7f7d1cp-20f), NMADD128(n, _mm_set1_ps(0x1.62e4p-1f), x));
+-    const __m128i e = _mm_slli_epi32(_mm_castps_si128(z), 23);
+-    const __m128 k = _mm_castsi128_ps(_mm_add_epi32(e, _mm_castps_si128(_mm_set1_ps(1))));
+-    const __m128i c =
+-        _mm_castps_si128(_mm_cmpgt_ps(_mm_andnot_ps(_mm_set1_ps(-0.f), n), _mm_set1_ps(126)));
+-    const __m128 u = _mm_mul_ps(b, b);
+-    const __m128 j =
+-        MADD128(MADD128(MADD128(_mm_set1_ps(0x1.0e4020p-7f), b, _mm_set1_ps(0x1.573e2ep-5f)), u,
+-                        MADD128(_mm_set1_ps(0x1.555e66p-3f), b, _mm_set1_ps(0x1.fffdb6p-2f))),
+-                u, _mm_mul_ps(_mm_set1_ps(0x1.ffffecp-1f), b));
+-    if (!_mm_movemask_epi8(c))
+-        return MADD128(j, k, k);
+-    const __m128i g = _mm_and_si128(_mm_castps_si128(_mm_cmple_ps(n, _mm_setzero_ps())),
+-                                    _mm_set1_epi32(0x82000000u));
+-    const __m128 s1 = _mm_castsi128_ps(_mm_add_epi32(g, _mm_set1_epi32(0x7f000000u)));
+-    const __m128 s2 = _mm_castsi128_ps(_mm_sub_epi32(e, g));
+-    const __m128i d =
+-        _mm_castps_si128(_mm_cmpgt_ps(_mm_andnot_ps(_mm_set1_ps(-0.f), n), _mm_set1_ps(192)));
+-    return _mm_or_ps(
+-        _mm_and_ps(_mm_castsi128_ps(d), _mm_mul_ps(s1, s1)),
+-        _mm_andnot_ps(_mm_castsi128_ps(d),
+-                      _mm_or_ps(_mm_and_ps(_mm_castsi128_ps(c), _mm_mul_ps(MADD128(s2, j, s2), s1)),
+-                                _mm_andnot_ps(_mm_castsi128_ps(c), MADD128(k, j, k)))));
+-}
+-
+-// computes silu x/(1+exp(-x)) in single precision vector
+-inline static __m128 ggml_v_silu(__m128 x) {
+-    const __m128 one = _mm_set1_ps(1);
+-    const __m128 zero = _mm_setzero_ps();
+-    const __m128 neg_x = _mm_sub_ps(zero, x);
+-    const __m128 exp_neg_x = ggml_v_expf(neg_x);
+-    const __m128 one_plus_exp_neg_x = _mm_add_ps(one, exp_neg_x);
+-    return _mm_div_ps(x, one_plus_exp_neg_x);
+-}
+-
+-#endif // __ARM_NEON / __AVX2__ / __SSE2__
+-
+-static void ggml_vec_silu_f32(const int n, float * y, const float * x) {
+-    int i = 0;
+-#if defined(__AVX512F__) && defined(__AVX512DQ__)
+-    for (; i + 15 < n; i += 16) {
+-        _mm512_storeu_ps(y + i, ggml_v_silu(_mm512_loadu_ps(x + i)));
+-    }
+-#elif defined(__AVX2__) && defined(__FMA__)
+-    for (; i + 7 < n; i += 8) {
+-        _mm256_storeu_ps(y + i, ggml_v_silu(_mm256_loadu_ps(x + i)));
+-    }
+-#elif defined(__SSE2__)
+-    for (; i + 3 < n; i += 4) {
+-        _mm_storeu_ps(y + i, ggml_v_silu(_mm_loadu_ps(x + i)));
+-    }
+-#elif defined(__ARM_NEON) && defined(__aarch64__)
+-    for (; i + 3 < n; i += 4) {
+-        vst1q_f32(y + i, ggml_v_silu(vld1q_f32(x + i)));
+-    }
+-#endif
+-    for (; i < n; ++i) {
+-        y[i] = ggml_silu_f32(x[i]);
+-    }
+-}
+-
+-static ggml_float ggml_vec_soft_max_f32(const int n, float * y, const float * x, float max) {
+-    int i = 0;
+-    ggml_float sum = 0;
+-#if defined(__AVX512F__) && defined(__AVX512DQ__)
+-    for (; i + 15 < n; i += 16) {
+-        __m512 val = ggml_v_expf(_mm512_sub_ps(_mm512_loadu_ps(x + i),
+-                                               _mm512_set1_ps(max)));
+-        _mm512_storeu_ps(y + i, val);
+-        sum += (ggml_float)_mm512_reduce_add_ps(val);
+-    }
+-#elif defined(__AVX2__) && defined(__FMA__)
+-    for (; i + 7 < n; i += 8) {
+-        __m256 val = ggml_v_expf(_mm256_sub_ps(_mm256_loadu_ps(x + i),
+-                                               _mm256_set1_ps(max)));
+-        _mm256_storeu_ps(y + i, val);
+-        __m128 val2 = _mm_add_ps(_mm256_extractf128_ps(val, 1),
+-                                 _mm256_castps256_ps128(val));
+-        val2 = _mm_add_ps(val2, _mm_movehl_ps(val2, val2));
+-        val2 = _mm_add_ss(val2, _mm_movehdup_ps(val2));
+-        sum += (ggml_float)_mm_cvtss_f32(val2);
+-    }
+-#elif defined(__SSE2__)
+-    for (; i + 3 < n; i += 4) {
+-        __m128 val = ggml_v_expf(_mm_sub_ps(_mm_loadu_ps(x + i),
+-                                            _mm_set1_ps(max)));
+-        _mm_storeu_ps(y + i, val);
+-#if defined(__AVX__) || defined(__AVX2__) || defined(__AVX512F__)
+-        val = _mm_add_ps(val, _mm_movehl_ps(val, val));
+-        val = _mm_add_ss(val, _mm_movehdup_ps(val));
+-#else
+-        __m128 tmp = _mm_shuffle_ps(val, val, _MM_SHUFFLE(2, 3, 0, 1));
+-        val = _mm_add_ps(val, tmp);
+-        tmp = _mm_movehl_ps(tmp, val);
+-        val = _mm_add_ss(val, tmp);
+-#endif
+-        sum += (ggml_float)_mm_cvtss_f32(val);
+-    }
+-#elif defined(__ARM_NEON) && defined(__aarch64__)
+-    for (; i + 3 < n; i += 4) {
+-        float32x4_t val = ggml_v_expf(vsubq_f32(vld1q_f32(x + i),
+-                                                vdupq_n_f32(max)));
+-        vst1q_f32(y + i, val);
+-        sum += (ggml_float)vaddvq_f32(val);
+-    }
+-#endif
+-    for (; i < n; ++i) {
+-        float val = expf(x[i] - max);
+-        sum += (ggml_float)val;
+-        y[i] = val;
+-    }
+-    return sum;
+-}
++    struct ggml_object * objects_begin;
++    struct ggml_object * objects_end;
+
+-inline static float ggml_silu_backward_f32(float x, float dy) {
+-    const float s = 1.0f/(1.0f + expf(-x));
+-    return dy*s*(1.0f + x*(1.0f - s));
+-}
++    struct ggml_scratch scratch;
++    struct ggml_scratch scratch_save;
++};
+
+-inline static void ggml_vec_silu_backward_f32(const int n, float * dx, const float * x, const float * dy) {
+-    for (int i = 0; i < n; ++i) {
+-        dx[i] = ggml_silu_backward_f32(x[i], dy[i]);
+-    }
+-}
++struct ggml_context_container {
++    bool used;
+
+-inline static void ggml_vec_sum_f32(const int n, float * s, const float * x) {
+-#ifndef GGML_USE_ACCELERATE
+-    ggml_float sum = 0.0;
+-    for (int i = 0; i < n; ++i) {
+-        sum += (ggml_float)x[i];
+-    }
+-    *s = sum;
+-#else
+-    vDSP_sve(x, 1, s, n);
+-#endif
+-}
++    struct ggml_context context;
++};
+
+-inline static void ggml_vec_sum_f32_ggf(const int n, ggml_float * s, const float * x) {
+-    ggml_float sum = 0.0;
+-    for (int i = 0; i < n; ++i) {
+-        sum += (ggml_float)x[i];
+-    }
+-    *s = sum;
+-}
++struct ggml_phaser {
++    alignas(64) atomic_uint i;
++};
+
+-inline static void ggml_vec_sum_f16_ggf(const int n, float * s, const ggml_fp16_t * x) {
+-    float sum = 0.0f;
+-    for (int i = 0; i < n; ++i) {
+-        sum += GGML_FP16_TO_FP32(x[i]);
+-    }
+-    *s = sum;
+-}
++struct ggml_compute_state_shared {
++    const struct ggml_cgraph * cgraph;
++    const struct ggml_cplan * cplan;
+
+-inline static void ggml_vec_sum_bf16_ggf(const int n, float * s, const ggml_bf16_t * x) {
+-    float sum = 0.0f;
+-    for (int i = 0; i < n; ++i) {
+-        sum += GGML_BF16_TO_FP32(x[i]);
+-    }
+-    *s = sum;
+-}
++    int n_threads;
+
+-inline static void ggml_vec_max_f32(const int n, float * s, const float * x) {
+-#ifndef GGML_USE_ACCELERATE
+-    float max = -INFINITY;
+-    for (int i = 0; i < n; ++i) {
+-        max = MAX(max, x[i]);
+-    }
+-    *s = max;
+-#else
+-    vDSP_maxv(x, 1, s, n);
+-#endif
+-}
++    // synchronization primitives
++    atomic_int n_barrier;
++    struct ggml_phaser *n_barrier_passed;
+
+-inline static void ggml_vec_norm_inv_f32(const int n, float * s, const float * x) {
+-    ggml_vec_norm_f32(n, s, x);
+-    *s = 1.f/(*s);
+-}
++    ggml_abort_callback abort_callback; // abort ggml_graph_compute when true
++    void * abort_callback_data;
+
+-inline static void ggml_vec_argmax_f32(const int n, int * s, const float * x) {
+-    float max = -INFINITY;
+-    int idx = 0;
+-    for (int i = 0; i < n; ++i) {
+-        max = MAX(max, x[i]);
+-        if (max == x[i]) { idx = i; }
+-    }
+-    *s = idx;
+-}
++    atomic_int current_chunk; // currently processing chunk during mul_mat, shared between all the threads
++
++    enum ggml_status ec;
++};
++
++struct ggml_compute_state {
++    _Atomic(ggml_thread_t) thrd;
++    int ith;
++    struct ggml_compute_state_shared * shared;
++    enum ggml_status ec;
++    bool is_main_thread; // [jart]
++};
+
+ //
+ // data types
+@@ -2966,11 +1782,7 @@ struct ggml_numa_nodes {
+     uint32_t n_nodes;
+     uint32_t total_cpus; // hardware threads on system
+     uint32_t current_node; // node on which main process is execting
+-#if defined(__gnu_linux__)
+     cpu_set_t cpuset; // cpuset from numactl
+-#else
+-    uint32_t cpuset; // no NUMA support outside of Linux at this time. Use a portable datatype
+-#endif
+ };
+
+ //
+@@ -2978,7 +1790,8 @@ struct ggml_numa_nodes {
+ //
+
+ struct ggml_state {
+-    struct ggml_context_container contexts[GGML_MAX_CONTEXTS];
++    // [jart] just use malloc
++    // struct ggml_context_container contexts[GGML_MAX_CONTEXTS];
+     struct ggml_numa_nodes numa;
+ };
+
+@@ -2990,51 +1803,29 @@ static atomic_flag g_state_critical = ATOMIC_FLAG_INIT;
+ inline static void ggml_critical_section_start(void) {
+     while (atomic_flag_test_and_set(&g_state_critical)) {
+         // spin
+-        sched_yield();
++        pthread_yield_np();
+     }
+ }
+
+-#ifdef GGML_USE_OPENMP
+-static void ggml_barrier(struct ggml_compute_state_shared * shared) {
+-    if (shared->n_threads == 1) {
+-        return;
+-    }
+-
+-    #pragma omp barrier
+-}
+-#else
+-static void ggml_barrier(struct ggml_compute_state_shared * shared) {
+-    if (shared->n_threads == 1) {
++void ggml_barrier(const struct ggml_compute_params * params) {
++    if (params->shared->n_threads == 1)
+         return;
+-    }
+-
+-    atomic_int * n_barrier = &shared->n_barrier;
+-    atomic_int * n_barrier_passed = &shared->n_barrier_passed;
+-
+-    int n_threads = shared->n_threads;
+-    int passed_old = atomic_load(n_barrier_passed);
+-
+-    if (atomic_fetch_add(n_barrier, 1) == n_threads - 1) {
+-        // last thread
+-        atomic_store(n_barrier, 0);
+-        atomic_fetch_add(n_barrier_passed, 1);
++    int n = params->shared->n_threads;
++    atomic_int * count = &params->shared->n_barrier;
++    atomic_uint * phase = &params->shared->n_barrier_passed[params->ith].i;
++    unsigned i = atomic_load_explicit(phase, memory_order_relaxed);
++    if (atomic_fetch_add_explicit(count, 1, memory_order_acq_rel) == n - 1) {
++        atomic_store_explicit(count, 0, memory_order_relaxed);
++        for (int j = 0; j < n; ++j)
++            atomic_store_explicit(&params->shared->n_barrier_passed[j].i,
++                                  i + 1, memory_order_relaxed);
++        atomic_thread_fence(memory_order_release);
+     } else {
+-        // wait for other threads
+-        const int n_spin_before_sleep = 100000;
+-        while (true) {
+-            for (int i = 0; i < n_spin_before_sleep; i++) {
+-                if (atomic_load(n_barrier_passed) != passed_old) {
+-                    return;
+-                }
+-            #if defined(__SSE3__)
+-                _mm_pause();
+-            #endif
+-            }
+-            sched_yield();
+-        }
++        while (atomic_load_explicit(phase, memory_order_relaxed) == i)
++            pthread_pause_np();
++        atomic_thread_fence(memory_order_acquire);
+     }
+ }
+-#endif
+
+ // TODO: make this somehow automatically executed
+ //       some sort of "sentry" mechanism
+@@ -3042,7 +1833,6 @@ inline static void ggml_critical_section_end(void) {
+     atomic_flag_clear(&g_state_critical);
+ }
+
+-#if defined(__gnu_linux__)
+ static cpu_set_t ggml_get_numa_affinity(void) {
+     cpu_set_t cpuset;
+     pthread_t thread;
+@@ -3051,11 +1841,6 @@ static cpu_set_t ggml_get_numa_affinity(void) {
+     pthread_getaffinity_np(thread, sizeof(cpu_set_t), &cpuset);
+     return cpuset;
+ }
+-#else
+-static uint32_t ggml_get_numa_affinity(void) {
+-    return 0; // no NUMA support
+-}
+-#endif
+
+ void ggml_numa_init(enum ggml_numa_strategy numa_flag) {
+     if (g_state.numa.n_nodes > 0) {
+@@ -3064,7 +1849,9 @@ void ggml_numa_init(enum ggml_numa_strategy numa_flag) {
+         return;
+     }
+
+-#if defined(__gnu_linux__)
++    if (!IsLinux())
++        return;
++
+     struct stat st;
+     char path[256];
+     int rv;
+@@ -3095,7 +1882,7 @@ void ggml_numa_init(enum ggml_numa_strategy numa_flag) {
+     GGML_PRINT_DEBUG("found %u numa nodes, %u CPUs\n", g_state.numa.n_nodes, g_state.numa.total_cpus);
+
+     // figure out which node we're on
+-    uint current_cpu;
++    unsigned current_cpu;
+     int getcpu_ret = 0;
+ #if __GLIBC__ > 2 || (__GLIBC__ == 2 && __GLIBC_MINOR__ > 28) || defined(__COSMOPOLITAN__)
+     getcpu_ret = getcpu(&current_cpu, &g_state.numa.current_node);
+@@ -3130,7 +1917,7 @@ void ggml_numa_init(enum ggml_numa_strategy numa_flag) {
+     }
+
+     if (ggml_is_numa()) {
+-        FILE *fptr = fopen("/proc/sys/kernel/numa_balancing", "r");
++        FILE *fptr = fopen("/proc/sys/kernel/numa_balancing", "re");
+         if (fptr != NULL) {
+             char buf[42];
+             if (fgets(buf, sizeof(buf), fptr) && strncmp(buf, "0\n", sizeof(buf)) != 0) {
+@@ -3139,10 +1926,6 @@ void ggml_numa_init(enum ggml_numa_strategy numa_flag) {
+             fclose(fptr);
+         }
+     }
+-#else
+-    UNUSED(numa_flag);
+-    // TODO
+-#endif
+ }
+
+ bool ggml_is_numa(void) {
+@@ -3409,7 +2192,7 @@ GGML_CALL bool ggml_is_empty(const struct ggml_tensor * tensor) {
+     return false;
+ }
+
+-bool ggml_are_same_shape(const struct ggml_tensor * t0, const struct ggml_tensor * t1) {
++GGML_CALL bool ggml_are_same_shape(const struct ggml_tensor * t0, const struct ggml_tensor * t1) {
+     static_assert(GGML_MAX_DIMS == 4, "GGML_MAX_DIMS is not 4 - update this function");
+
+     return
+@@ -3466,114 +2249,85 @@ static inline int ggml_up(int n, int m) {
+
+ ////////////////////////////////////////////////////////////////////////////////
+
+-struct ggml_context * ggml_init(struct ggml_init_params params) {
+-    // make this function thread safe
+-    ggml_critical_section_start();
++static void ggml_init_once(void) {
++    llamafile_trapping_enabled(-1);
+
+     static bool is_first_call = true;
+
+-    if (is_first_call) {
+-        // initialize time system (required on Windows)
+-        ggml_time_init();
+-
+-        // initialize GELU, Quick GELU, SILU and EXP F32 tables
+-        {
+-            const uint64_t t_start = ggml_time_us(); UNUSED(t_start);
+-
+-            for (int i = 0; i < (1 << 16); ++i) {
+-                union {
+-                    uint16_t u16;
+-                    ggml_fp16_t fp16;
+-                } u = {i};
+-                float f = ggml_table_f32_f16[i] = GGML_COMPUTE_FP16_TO_FP32(u.fp16);
+-                ggml_table_gelu_f16[i] = GGML_FP32_TO_FP16(ggml_gelu_f32(f));
+-                ggml_table_gelu_quick_f16[i] = GGML_FP32_TO_FP16(ggml_gelu_quick_f32(f));
+-            }
++    // initialize time system (required on Windows)
++    ggml_time_init();
+
+-            const uint64_t t_end = ggml_time_us(); UNUSED(t_end);
++    // initialize GELU, Quick GELU, SILU and EXP F32 tables
++    {
++        const uint64_t t_start = ggml_time_us(); UNUSED(t_start);
+
+-            GGML_PRINT_DEBUG("%s: GELU, Quick GELU, SILU and EXP tables initialized in %f ms\n", __func__, (t_end - t_start)/1000.0f);
++        for (int i = 0; i < (1 << 16); ++i) {
++            union {
++                uint16_t u16;
++                ggml_fp16_t fp16;
++            } u = {i};
++            float f = ggml_table_f32_f16[i] = GGML_COMPUTE_FP16_TO_FP32(u.fp16);
+         }
+
+-        // initialize g_state
+-        {
+-            const uint64_t t_start = ggml_time_us(); UNUSED(t_start);
+-
+-            g_state = (struct ggml_state) {
+-                /*.contexts =*/ { { 0 } },
+-                /*.numa =*/ {
+-                    .n_nodes = 0,
+-                    .total_cpus = 0,
+-                },
+-            };
+-
+-            for (int i = 0; i < GGML_MAX_CONTEXTS; ++i) {
+-                g_state.contexts[i].used = false;
+-            }
+-
+-            const uint64_t t_end = ggml_time_us(); UNUSED(t_end);
+-
+-            GGML_PRINT_DEBUG("%s: g_state initialized in %f ms\n", __func__, (t_end - t_start)/1000.0f);
+-        }
++        const uint64_t t_end = ggml_time_us(); UNUSED(t_end);
+
+-        is_first_call = false;
++        GGML_PRINT_DEBUG("%s: GELU, Quick GELU, SILU and EXP tables initialized in %f ms\n", __func__, (t_end - t_start)/1000.0f);
+     }
+
+-    // find non-used context in g_state
+-    struct ggml_context * ctx = NULL;
++    // initialize g_state
++    {
++        const uint64_t t_start = ggml_time_us(); UNUSED(t_start);
+
+-    for (int i = 0; i < GGML_MAX_CONTEXTS; i++) {
+-        if (!g_state.contexts[i].used) {
+-            g_state.contexts[i].used = true;
+-            ctx = &g_state.contexts[i].context;
++        g_state = (struct ggml_state) {
++            /*.numa =*/ {
++                .n_nodes = 0,
++                .total_cpus = 0,
++            },
++        };
+
+-            GGML_PRINT_DEBUG("%s: found unused context %d\n", __func__, i);
+-            break;
+-        }
++        const uint64_t t_end = ggml_time_us(); UNUSED(t_end);
++
++        GGML_PRINT_DEBUG("%s: g_state initialized in %f ms\n", __func__, (t_end - t_start)/1000.0f);
+     }
+
+-    if (ctx == NULL) {
+-        GGML_PRINT_DEBUG("%s: no unused context found\n", __func__);
++    llamafile_trapping_enabled(+1);
++}
++
++struct ggml_context * ggml_init(struct ggml_init_params params) {
+
+-        ggml_critical_section_end();
++    static pthread_once_t once = PTHREAD_ONCE_INIT;
++    pthread_once(&once, ggml_init_once);
+
++    struct ggml_context * ctx;
++    if (!(ctx = calloc(1, sizeof(struct ggml_context)))) {
++        GGML_PRINT("%s: failed to allocate ggml_context\n", __func__);
+         return NULL;
+     }
+
+-    // allow to call ggml_init with 0 size
+-    if (params.mem_size == 0) {
+-        params.mem_size = GGML_MEM_ALIGN;
++    if (params.mem_buffer) {
++        ctx->mem_size = params.mem_size;
++        ctx->mem_buffer = params.mem_buffer;
++    } else {
++        if (params.mem_size) {
++            ctx->mem_size = GGML_PAD(params.mem_size, GGML_MEM_ALIGN);
++        } else {
++            ctx->mem_size = GGML_MEM_ALIGN;
++        }
++        ctx->mem_buffer_owned = true;
++        ctx->mem_buffer = GGML_ALIGNED_MALLOC(ctx->mem_size);
++        if (!ctx->mem_buffer) {
++            GGML_PRINT("%s: failed to allocate %zu bytes for ggml_context->mem_buffer\n",
++                       __func__, ctx->mem_size);
++            free(ctx);
++            return NULL;
++        }
+     }
+
+-    const size_t mem_size = params.mem_buffer ? params.mem_size : GGML_PAD(params.mem_size, GGML_MEM_ALIGN);
+-
+-    *ctx = (struct ggml_context) {
+-        /*.mem_size           =*/ mem_size,
+-        /*.mem_buffer         =*/ params.mem_buffer ? params.mem_buffer : GGML_ALIGNED_MALLOC(mem_size),
+-        /*.mem_buffer_owned   =*/ params.mem_buffer ? false : true,
+-        /*.no_alloc           =*/ params.no_alloc,
+-        /*.no_alloc_save      =*/ params.no_alloc,
+-        /*.n_objects          =*/ 0,
+-        /*.objects_begin      =*/ NULL,
+-        /*.objects_end        =*/ NULL,
+-        /*.scratch            =*/ { 0, 0, NULL, },
+-        /*.scratch_save       =*/ { 0, 0, NULL, },
+-    };
+-
+-    GGML_ASSERT(ctx->mem_buffer != NULL);
+-
+-    GGML_ASSERT_ALIGNED(ctx->mem_buffer);
+-
+-#if defined(__ARM_FEATURE_SVE)
+-    if (!ggml_sve_cnt_b) {
+-        ggml_sve_cnt_b = PR_SVE_VL_LEN_MASK & prctl(PR_SVE_GET_VL);
+-    }
+-#endif
++    ctx->no_alloc = params.no_alloc;
++    ctx->no_alloc_save = params.no_alloc;
+
+     GGML_PRINT_DEBUG("%s: context initialized\n", __func__);
+
+-    ggml_critical_section_end();
+-
+     return ctx;
+ }
+
+@@ -3581,33 +2335,13 @@ void ggml_free(struct ggml_context * ctx) {
+     if (ctx == NULL) {
+         return;
+     }
+-
+-    // make this function thread safe
+-    ggml_critical_section_start();
+-
+-    bool found = false;
+-
+-    for (int i = 0; i < GGML_MAX_CONTEXTS; i++) {
+-        if (&g_state.contexts[i].context == ctx) {
+-            g_state.contexts[i].used = false;
+-
+-            GGML_PRINT_DEBUG("%s: context %d has been freed. memory used = %zu\n",
+-                    __func__, i, ggml_used_mem(ctx));
+-
+-            if (ctx->mem_buffer_owned) {
+-                GGML_ALIGNED_FREE(ctx->mem_buffer);
+-            }
+-
+-            found = true;
+-            break;
+-        }
+-    }
+-
+-    if (!found) {
+-        GGML_PRINT_DEBUG("%s: context not found\n", __func__);
++    // [jart] just use malloc
++    GGML_PRINT_DEBUG("%s: context %d has been freed. memory used = %zu\n",
++                     __func__, i, ggml_used_mem(ctx));
++    if (ctx->mem_buffer_owned) {
++        GGML_ALIGNED_FREE(ctx->mem_buffer);
+     }
+-
+-    ggml_critical_section_end();
++    free(ctx);
+ }
+
+ size_t ggml_used_mem(const struct ggml_context * ctx) {
+@@ -5275,6 +4009,7 @@ static struct ggml_tensor * ggml_norm_impl(
+         struct ggml_context * ctx,
+         struct ggml_tensor  * a,
+         float eps,
++        bool sub_mean,
+         bool inplace) {
+     bool is_node = false;
+
+@@ -5285,7 +4020,9 @@ static struct ggml_tensor * ggml_norm_impl(
+
+     struct ggml_tensor * result = inplace ? ggml_view_tensor(ctx, a) : ggml_dup_tensor(ctx, a);
+
+-    ggml_set_op_params(result, &eps, sizeof(eps));
++    float params[2] = {eps, 0};
++    memcpy((char*)&params[1], &sub_mean, sizeof(sub_mean));
++    ggml_set_op_params(result, &params, sizeof(params));
+
+     result->op   = GGML_OP_NORM;
+     result->grad = is_node ? ggml_dup_tensor(ctx, result) : NULL;
+@@ -5294,18 +4031,34 @@ static struct ggml_tensor * ggml_norm_impl(
+     return result;
+ }
+
++struct ggml_tensor * ggml_norm_ext(
++        struct ggml_context * ctx,
++        struct ggml_tensor  * a,
++        float eps,
++        bool sub_mean) {
++    return ggml_norm_impl(ctx, a, eps, sub_mean, false);
++}
++
++struct ggml_tensor * ggml_norm_ext_inplace(
++        struct ggml_context * ctx,
++        struct ggml_tensor  * a,
++        float eps,
++        bool sub_mean) {
++    return ggml_norm_impl(ctx, a, eps, sub_mean, true);
++}
++
+ struct ggml_tensor * ggml_norm(
+         struct ggml_context * ctx,
+         struct ggml_tensor  * a,
+         float eps) {
+-    return ggml_norm_impl(ctx, a, eps, false);
++    return ggml_norm_impl(ctx, a, eps, true, false);
+ }
+
+ struct ggml_tensor * ggml_norm_inplace(
+         struct ggml_context * ctx,
+         struct ggml_tensor  * a,
+         float eps) {
+-    return ggml_norm_impl(ctx, a, eps, true);
++    return ggml_norm_impl(ctx, a, eps, true, true);
+ }
+
+ // ggml_rms_norm
+@@ -9999,7 +8752,7 @@ static void ggml_compute_forward_acc_f32(
+                 ((char *) src0->data),
+                 ggml_nbytes(dst));
+         }
+-        ggml_barrier(params->shared);
++        ggml_barrier(params);
+     }
+
+     const int ith = params->ith;
+@@ -12370,6 +11123,8 @@ UseGgmlGemm1:;
+                 }
+             }
+         }
++
++        ggml_barrier(params);
+     }
+
+     if (ith == 0) {
+@@ -12377,8 +11132,6 @@ UseGgmlGemm1:;
+         atomic_store(&params->shared->current_chunk, nth);
+     }
+
+-    ggml_barrier(params->shared);
+-
+ #if GGML_USE_LLAMAFILE
+     if (src1->type != vec_dot_type) {
+         const void* wdata = (src1->type == vec_dot_type) ? src1->data : params->wdata;
+@@ -12499,6 +11252,9 @@ static void ggml_compute_forward_mul_mat_id(
+     const struct ggml_tensor * src1 = dst->src[1];
+     const struct ggml_tensor * ids = dst->src[2];
+
++    if (llamafile_mixmul(params, src0, src1, ids, dst))
++        return;
++
+     GGML_TENSOR_BINARY_OP_LOCALS
+
+     const int ith = params->ith;
+@@ -12580,7 +11336,7 @@ static void ggml_compute_forward_mul_mat_id(
+         }
+     }
+
+-    ggml_barrier(params->shared);
++    ggml_barrier(params);
+
+     // compute each matrix multiplication in sequence
+     for (int cur_a = 0; cur_a < n_as; ++cur_a) {
+@@ -12598,33 +11354,19 @@ static void ggml_compute_forward_mul_mat_id(
+         const int64_t nr0 = ne01; // src0 rows
+         const int64_t nr1 = cne1; // src1 rows
+
+-        if (((ggml_n_dims(src0) - 1) == 2) && gemv) {
+-            int64_t src0_cur_start = (ith * ne01) / nth;
+-            int64_t src0_cur_end   = ((ith + 1) * ne01) / nth;
+-            src0_cur_start = (src0_cur_start % matmul_num_cols) ? src0_cur_start + matmul_num_cols - (src0_cur_start % matmul_num_cols): src0_cur_start;
+-            src0_cur_end   = (src0_cur_end % matmul_num_cols) ? src0_cur_end + matmul_num_cols - (src0_cur_end % matmul_num_cols): src0_cur_end;
+-            if (src0_cur_start >= src0_cur_end) return;
+-
+-            for (int ir1 = 0; ir1 < nr1; ir1++) {
+-                struct mmid_row_mapping row_mapping = MMID_MATRIX_ROW(cur_a, ir1);
+-                const int id       = row_mapping.i1; // selected expert index
+-
+-                const int64_t  i11 = id % ne11;
+-                const int64_t  i12 = row_mapping.i2; // row index in src1
+-
+-                const int64_t  i1 = id;  // selected expert index
+-                const int64_t  i2 = i12; // row
+-
+-                const char * src1_col = (const char *) wdata +
+-                    (src1_cont || src1->type != vec_dot_type
+-                    ? (i11        + i12 * ne11) * row_size
+-                    : (i11 * nb11 + i12 * nb12));
+-
+-                gemv(ne00, (float *)((char *) dst->data + (i1 * nb1 + i2 * nb2)) + src0_cur_start, ne01,
+-                     (const char *) src0_cur + src0_cur_start * nb01, src1_col, 1, src0_cur_end - src0_cur_start);
++        if ((vec_dot_type == GGML_TYPE_Q8_K || vec_dot_type == GGML_TYPE_Q8_0 ||
++             vec_dot_type == GGML_TYPE_Q8_1) && dst->type == GGML_TYPE_F32) {
++            if (ne13 == 1) {
++                if (!llamafile_mixmul_iqk(nr0, nr1, ne00, ne11, src0->type,
++                             (const char *)src0_cur,
++                             (const char *)wdata,
++                             (float *)dst->data, nb1, nb2,
++                             matrix_rows + cur_a*ne12,
++                             ith, nth)) goto IQK_MulMat_Not_Available;
++                continue;
+             }
+-            continue;
+         }
++IQK_MulMat_Not_Available:;
+
+         // distribute the thread work across the inner or outer loop based on which one is larger
+
+@@ -12700,6 +11442,7 @@ static void ggml_compute_forward_mul_mat_id(
+
+ // ggml_compute_forward_out_prod
+
++__target_clones("avx2") // [jart]
+ static void ggml_compute_forward_out_prod_f32(
+         const struct ggml_compute_params * params,
+               struct ggml_tensor * dst) {
+@@ -12734,7 +11477,7 @@ static void ggml_compute_forward_out_prod_f32(
+     if (ith == 0) {
+         ggml_vec_set_f32(ne0*ne1*ne2*ne3, dst->data, 0);
+     }
+-    ggml_barrier(params->shared);
++    ggml_barrier(params);
+
+     // dst[:,:,:,:] = 0
+     // for i2,i3:
+@@ -12852,7 +11595,7 @@ static void ggml_compute_forward_out_prod_q_f32(
+     if (ith == 0) {
+         ggml_vec_set_f32(ne0*ne1*ne2*ne3, dst->data, 0);
+     }
+-    ggml_barrier(params->shared);
++    ggml_barrier(params);
+
+     // parallelize by last three dimensions
+
+@@ -13011,6 +11754,7 @@ static void ggml_compute_forward_scale(
+
+ // ggml_compute_forward_set
+
++__target_clones("avx2") // [jart]
+ static void ggml_compute_forward_set_f32(
+         const struct ggml_compute_params * params,
+         struct ggml_tensor * dst) {
+@@ -13038,7 +11782,7 @@ static void ggml_compute_forward_set_f32(
+                 ((char *) src0->data),
+                 ggml_nbytes(dst));
+         }
+-        ggml_barrier(params->shared);
++        ggml_barrier(params);
+     }
+
+     const int ith = params->ith;
+@@ -13423,6 +12167,7 @@ static void ggml_compute_forward_get_rows(
+
+ // ggml_compute_forward_get_rows_back
+
++__target_clones("avx2") // [jart]
+ static void ggml_compute_forward_get_rows_back_f32_f16(
+         const struct ggml_compute_params * params,
+               struct ggml_tensor * dst) {
+@@ -13456,6 +12201,7 @@ static void ggml_compute_forward_get_rows_back_f32_f16(
+     }
+ }
+
++__target_clones("avx2") // [jart]
+ static void ggml_compute_forward_get_rows_back_f32(
+         const struct ggml_compute_params * params,
+               struct ggml_tensor * dst) {
+@@ -13591,6 +12337,7 @@ static void ggml_compute_forward_diag(
+
+ // ggml_compute_forward_diag_mask_inf
+
++__target_clones("avx2") // [jart]
+ static void ggml_compute_forward_diag_mask_f32(
+         const struct ggml_compute_params * params,
+         struct ggml_tensor * dst,
+@@ -13617,7 +12364,7 @@ static void ggml_compute_forward_diag_mask_f32(
+                 ((char *) src0->data),
+                 ggml_nbytes(dst));
+         }
+-        ggml_barrier(params->shared);
++        ggml_barrier(params);
+     }
+
+     // TODO: handle transposed/permuted matrices
+@@ -14296,6 +13043,7 @@ static void ggml_compute_forward_rope(
+
+     const struct ggml_tensor * src0 = dst->src[0];
+
++    // TODO[jart]: support bf16
+     switch (src0->type) {
+         case GGML_TYPE_F16:
+             {
+@@ -14320,6 +13068,7 @@ static void ggml_compute_forward_rope_back(
+
+     const struct ggml_tensor * src0 = dst->src[0];
+
++    // TODO[jart]: support bf16
+     switch (src0->type) {
+         case GGML_TYPE_F16:
+             {
+@@ -14393,7 +13142,7 @@ static void ggml_compute_forward_conv_transpose_1d_f16_f32(
+         // need to zero dst since we are accumulating into it
+         memset(dst->data, 0, ggml_nbytes(dst));
+     }
+-    ggml_barrier(params->shared);
++    ggml_barrier(params);
+
+     const int32_t s0 = ((const int32_t*)(dst->op_params))[0];
+
+@@ -14481,7 +13230,7 @@ static void ggml_compute_forward_conv_transpose_1d_f32(
+         // need to zero dst since we are accumulating into it
+         memset(dst->data, 0, ggml_nbytes(dst));
+     }
+-    ggml_barrier(params->shared);
++    ggml_barrier(params);
+
+     const int32_t s0 = ((const int32_t*)(dst->op_params))[0];
+
+@@ -14539,6 +13288,7 @@ static void ggml_compute_forward_conv_transpose_1d(
+ // src0: kernel [OC, IC, KH, KW]
+ // src1: image [N, IC, IH, IW]
+ // dst:  result [N, OH, OW, IC*KH*KW]
++__target_clones("arch=znver4,avx2") // [jart]
+ static void ggml_compute_forward_im2col_f32(
+         const struct ggml_compute_params * params,
+               struct ggml_tensor * dst) {
+@@ -14711,6 +13461,7 @@ static void ggml_compute_forward_im2col(
+
+ // ggml_compute_forward_conv_transpose_2d
+
++__target_clones("avx2") // [jart]
+ static void ggml_compute_forward_conv_transpose_2d(
+         const struct ggml_compute_params * params,
+               struct ggml_tensor * dst) {
+@@ -14768,7 +13519,7 @@ static void ggml_compute_forward_conv_transpose_2d(
+
+         memset(dst->data, 0, ggml_nbytes(dst));
+     }
+-    ggml_barrier(params->shared);
++    ggml_barrier(params);
+
+     const int32_t stride = ggml_get_op_params_i32(dst, 0);
+
+@@ -15502,7 +14253,7 @@ static void ggml_compute_forward_flash_attn_back_f32(
+     if (ith == 0) {
+         memset(dst->data, 0, nb0*ne0*ne1*ne2*ne3);
+     }
+-    ggml_barrier(params->shared);
++    ggml_barrier(params);
+
+     const int64_t elem_q = ggml_nelements(q);
+     const int64_t elem_k = ggml_nelements(k);
+@@ -15901,6 +14652,7 @@ static void ggml_compute_forward_ssm_conv(
+
+ // ggml_compute_forward_ssm_scan
+
++__target_clones("avx2") // [jart]
+ static void ggml_compute_forward_ssm_scan_f32(
+         const struct ggml_compute_params * params,
+         struct ggml_tensor * dst) {
+@@ -16274,7 +15026,7 @@ static void ggml_compute_forward_add_rel_pos_f32(
+         if (params->ith == 0) {
+             memcpy((char *) dst->data, (char *) src0->data, ggml_nbytes(dst));
+         }
+-        ggml_barrier(params->shared);
++        ggml_barrier(params);
+     }
+     // ref: https://github.com/facebookresearch/segment-anything/blob/main/segment_anything/modeling/image_encoder.py#L357-L359
+
+@@ -16559,7 +15311,7 @@ static void ggml_compute_forward_cross_entropy_loss_f32(
+     if (ith == 0) {
+         memset(sums, 0, sizeof(float) * (nth + nth * nc));
+     }
+-    ggml_barrier(params->shared);
++    ggml_barrier(params);
+
+     const double eps = 1e-9;
+
+@@ -16607,7 +15359,7 @@ static void ggml_compute_forward_cross_entropy_loss_f32(
+         }
+ #endif
+     }
+-    ggml_barrier(params->shared);
++    ggml_barrier(params);
+
+     if (ith == 0) {
+         float * dp = (float *) dst->data;
+@@ -16723,6 +15475,19 @@ static void ggml_compute_forward_cross_entropy_loss_back(
+
+ /////////////////////////////////
+
++static bool ggml_is_noop(enum ggml_op op) { // [jart]
++    switch (op) {
++        case GGML_OP_NONE:
++        case GGML_OP_PERMUTE:
++        case GGML_OP_RESHAPE:
++        case GGML_OP_TRANSPOSE:
++        case GGML_OP_VIEW:
++            return true;
++        default:
++            return false;
++    }
++}
++
+ static void ggml_compute_forward(struct ggml_compute_params * params, struct ggml_tensor * tensor) {
+     GGML_ASSERT(params);
+
+@@ -16730,6 +15495,12 @@ static void ggml_compute_forward(struct ggml_compute_params * params, struct ggm
+         return;
+     }
+
++    const char *desc = 0;
++    if (FLAG_trace) {
++        desc = ggml_op_desc(tensor);
++        llamafile_trace_begin(desc);
++    }
++
+     switch (tensor->op) {
+         case GGML_OP_DUP:
+             {
+@@ -17055,6 +15826,10 @@ static void ggml_compute_forward(struct ggml_compute_params * params, struct ggm
+                 GGML_ABORT("fatal error");
+             }
+     }
++
++    if (FLAG_trace) {
++        llamafile_trace_end(desc);
++    }
+ }
+
+ ////////////////////////////////////////////////////////////////////////////////
+@@ -18377,8 +17152,9 @@ typedef int ggml_lock_t;
+
+ #define GGML_LOCK_INITIALIZER 0
+
+-#define ggml_thread_create pthread_create
+-#define ggml_thread_join   pthread_join
++#define ggml_thread_create llamafile_task_create // [jart]
++#define ggml_thread_cancel llamafile_task_cancel
++#define ggml_thread_join   llamafile_task_join
+
+ #else
+
+@@ -18402,8 +17178,9 @@ typedef int ggml_lock_t;
+
+ #define GGML_LOCK_INITIALIZER 0
+
+-#define ggml_thread_create pthread_create
+-#define ggml_thread_join   pthread_join
++#define ggml_thread_create llamafile_task_create // [jart]
++#define ggml_thread_cancel llamafile_task_cancel
++#define ggml_thread_join   llamafile_task_join
+
+ #endif
+
+@@ -18742,6 +17519,7 @@ struct ggml_cplan ggml_graph_plan(const struct ggml_cgraph * cgraph, int n_threa
+                     cur = 0;
+                     const struct ggml_tensor * src0 = node->src[0];
+                     const struct ggml_tensor * src1 = node->src[1];
++                    const struct ggml_tensor * src2 = node->src[2];
+                     const enum ggml_type vec_dot_type = type_traits[src0->type].vec_dot_type;
+                     if (src1->type != vec_dot_type) {
+                         cur += ggml_row_size(vec_dot_type, ggml_nelements(src1));
+@@ -18750,6 +17528,8 @@ struct ggml_cplan ggml_graph_plan(const struct ggml_cgraph * cgraph, int n_threa
+                     cur += GGML_PAD(cur, sizeof(int64_t));       // align
+                     cur += n_as * sizeof(int64_t);               // matrix_row_counts
+                     cur += n_as * src1->ne[2] * sizeof(int64_t); // matrix_rows
++                    size_t cur2 = llamafile_mixmul_needs(src0, src1, src2); // [jart]
++                    cur = cur > cur2 ? cur : cur2;
+                 } break;
+             case GGML_OP_OUT_PROD:
+                 {
+@@ -18859,6 +17639,18 @@ static thread_ret_t ggml_graph_compute_thread(void * data) {
+
+     set_numa_thread_affinity(state->ith);
+
++#ifdef LLAMAFILE_DEBUG // [jart]
++    if (FLAG_trap && !state->is_main_thread) {
++        llamafile_trapping_enabled(+1);
++    }
++#endif
++
++    llamafile_trace_set_tid(state->ith);
++
++    int ct; // [jart] enable instant math cancelation
++    pthread_setcanceltype(PTHREAD_CANCEL_ASYNCHRONOUS, &ct);
++    pthread_testcancel();
++
+     struct ggml_compute_params params = {
+         /*.ith   =*/ state->ith,
+         /*.nth   =*/ state->shared->n_threads,
+@@ -18870,41 +17662,84 @@ static thread_ret_t ggml_graph_compute_thread(void * data) {
+     for (int node_n = 0; node_n < cgraph->n_nodes; node_n++) {
+         struct ggml_tensor * node = cgraph->nodes[node_n];
+
++        if (ggml_is_noop(node->op)) // [jart]
++            continue;
++
++#ifdef LLAMAFILE_DEBUG
++        llamafile_debug_op_index = node_n;
++#endif
++
+         ggml_compute_forward(&params, node);
+
+         if (state->ith == 0 && cplan->abort_callback && cplan->abort_callback(cplan->abort_callback_data)) {
+             state->shared->ec = GGML_STATUS_ABORTED;
+         }
+
+-        ggml_barrier(state->shared);
++        ggml_barrier(&params);
+
+         if (state->shared->ec != GGML_STATUS_SUCCESS) {
+             break;
+         }
+     }
+
++    pthread_setcanceltype(ct, 0); // [jart]
++
+     return 0;
+ }
+
++struct ggml_compute_cleanup {
++    int n_threads;
++    struct ggml_compute_state * workers;
++};
++
++static void ggml_compute_canceled(void *arg) {
++    struct ggml_compute_cleanup *cleanup = arg;
++    clear_numa_thread_affinity();
++    for (int j = 1; j < cleanup->n_threads; j++) {
++        ggml_thread_t t;
++        if ((t = atomic_exchange_explicit(&cleanup->workers[j].thrd, 0,
++                                          memory_order_relaxed))) {
++            ggml_thread_cancel(t);
++            const int rc = ggml_thread_join(t, NULL);
++            GGML_ASSERT(rc == 0);
++        }
++    }
++}
++
+ enum ggml_status ggml_graph_compute(struct ggml_cgraph * cgraph, struct ggml_cplan * cplan) {
+     GGML_ASSERT(cplan);
+     GGML_ASSERT(cplan->n_threads > 0);
+     GGML_ASSERT(cplan->work_size == 0 || cplan->work_data != NULL);
+
++    // if we've been canceled then must
++    // die before launching the threads
++    pthread_testcancel(); // [jart]
++
+     int n_threads = cplan->n_threads;
+
++    size_t pz = sizeof(struct ggml_phaser);
++    size_t az = alignof(struct ggml_phaser);
++    char *mem = alloca(az + pz * n_threads);
++    struct ggml_phaser *n_barrier_passed =
++            (struct ggml_phaser *)(((uintptr_t)mem + az) & -az);
++    memset(n_barrier_passed, 0, pz * n_threads);
++
+     struct ggml_compute_state_shared state_shared = {
+         /*.cgraph                  =*/ cgraph,
+         /*.cgraph_plan             =*/ cplan,
+         /*.n_threads               =*/ n_threads,
+         /*.n_barrier               =*/ 0,
+-        /*.n_barrier_passed        =*/ 0,
++        /*.n_barrier_passed        =*/ n_barrier_passed,
+         /*.abort_callback          =*/ NULL,
+         /*.abort_callback_data     =*/ NULL,
+         /*.current_chunk           =*/ 0,
+         /*.ec                      =*/ GGML_STATUS_SUCCESS,
+     };
+
++#ifdef LLAMAFILE_DEBUG
++    llamafile_debug_graph = cgraph;
++#endif
++
+ #ifdef GGML_USE_OPENMP
+     if (n_threads > 1) {
+         #pragma omp parallel num_threads(n_threads)
+@@ -18931,20 +17766,26 @@ enum ggml_status ggml_graph_compute(struct ggml_cgraph * cgraph, struct ggml_cpl
+         };
+         ggml_graph_compute_thread(&worker);
+     }
+-#else
++#endif
++
+     struct ggml_compute_state * workers = alloca(sizeof(struct ggml_compute_state)*n_threads);
++    struct ggml_compute_cleanup cleanup = {n_threads, workers};
++    pthread_cleanup_push(ggml_compute_canceled, &cleanup);
+
+     for (int j = 0; j < n_threads; ++j) {
+         workers[j] = (struct ggml_compute_state) {
+             .thrd   = 0,
+             .ith    = j,
+             .shared = &state_shared,
++            .is_main_thread = false, // [jart]
+         };
+     }
++    workers[0].is_main_thread = true; // [jart]
+
+     // create thread pool
+     for (int j = 1; j < n_threads; ++j) {
+-        const int rc = ggml_thread_create(&workers[j].thrd, NULL, ggml_graph_compute_thread, &workers[j]);
++        const int rc = ggml_thread_create((ggml_thread_t *)&workers[j].thrd,
++                                          ggml_graph_compute_thread, &workers[j]);
+         GGML_ASSERT(rc == 0);
+         UNUSED(rc);
+     }
+@@ -18953,18 +17794,29 @@ enum ggml_status ggml_graph_compute(struct ggml_cgraph * cgraph, struct ggml_cpl
+     ggml_graph_compute_thread(&workers[0]);
+
+     // join or kill thread pool
+-    if (n_threads > 1) {
+-        for (int j = 1; j < n_threads; j++) {
+-            const int rc = ggml_thread_join(workers[j].thrd, NULL);
++    int cs;
++    pthread_setcancelstate(PTHREAD_CANCEL_MASKED, &cs);
++    for (int j = 1; j < n_threads; j++) {
++        ggml_thread_t t;
++        if ((t = atomic_exchange_explicit(&workers[j].thrd, 0,
++                                          memory_order_relaxed))) {
++            const int rc = ggml_thread_join(t, NULL);
++            if (rc == ECANCELED) {
++                workers[j].thrd = t;
++                pthread_exit(PTHREAD_CANCELED);
++            }
+             GGML_ASSERT(rc == 0);
+-            UNUSED(rc);
++            if (workers[j].ec != GGML_STATUS_SUCCESS)
++                state_shared.ec = workers[j].ec;
+         }
+     }
+-#endif
++    pthread_setcancelstate(cs, 0);
+
+     // don't leave affinity set on the main thread
+     clear_numa_thread_affinity();
+
++    pthread_cleanup_pop(false);
++
+     return state_shared.ec;
+ }
+
+@@ -19540,7 +18392,7 @@ static void ggml_graph_dump_dot_leaf_edge(FILE * fp, struct ggml_tensor * node,
+ void ggml_graph_dump_dot(const struct ggml_cgraph * gb, const struct ggml_cgraph * gf, const char * filename) {
+     char color[16];
+
+-    FILE * fp = ggml_fopen(filename, "w");
++    FILE * fp = ggml_fopen(filename, "we");
+     GGML_ASSERT(fp);
+
+     fprintf(fp, "digraph G {\n");
+@@ -20688,7 +19540,7 @@ size_t ggml_quantize_chunk(
+             assert(false);
+     }
+
+-    GGML_ASSERT(result == nrows * row_size);
++    // GGML_ASSERT(result == nrows * row_size); // [jart] should return error
+
+     return result;
+ }
+@@ -20820,13 +19672,13 @@ static void gguf_tensor_info_sanitize(struct gguf_tensor_info * info) {
+     GGML_ASSERT(INT64_MAX/info->ne[3] > info->ne[0]*info->ne[1]*info->ne[2]);
+ }
+
+-static bool gguf_fread_el(FILE * file, void * dst, size_t size, size_t * offset) {
+-    const size_t n = fread(dst, 1, size, file);
++static bool gguf_fread_el(struct llamafile * file, void * dst, size_t size, size_t * offset) {
++    const size_t n = llamafile_read(file, dst, size);
+     *offset += n;
+     return n == size;
+ }
+
+-static bool gguf_fread_str(FILE * file, struct gguf_str * p, size_t * offset) {
++static bool gguf_fread_str(struct llamafile * file, struct gguf_str * p, size_t * offset) {
+     p->n    = 0;
+     p->data = NULL;
+
+@@ -20893,12 +19745,7 @@ struct gguf_context * gguf_init_empty(void) {
+     return ctx;
+ }
+
+-struct gguf_context * gguf_init_from_file(const char * fname, struct gguf_init_params params) {
+-    FILE * file = ggml_fopen(fname, "rb");
+-    if (!file) {
+-        fprintf(stderr, "%s: failed to open '%s': '%s'\n", __func__, fname, strerror(errno));
+-        return NULL;
+-    }
++struct gguf_context * gguf_init_from_file(struct llamafile * file, struct gguf_init_params params) {
+
+     // offset from start of file
+     size_t offset = 0;
+@@ -20912,7 +19759,6 @@ struct gguf_context * gguf_init_from_file(const char * fname, struct gguf_init_p
+         for (uint32_t i = 0; i < sizeof(magic); i++) {
+             if (magic[i] != GGUF_MAGIC[i]) {
+                 fprintf(stderr, "%s: invalid magic characters '%c%c%c%c'\n", __func__, magic[0], magic[1], magic[2], magic[3]);
+-                fclose(file);
+                 return NULL;
+             }
+         }
+@@ -20936,7 +19782,6 @@ struct gguf_context * gguf_init_from_file(const char * fname, struct gguf_init_p
+
+         if (ctx->header.version == 1) {
+             fprintf(stderr, "%s: GGUFv1 is no longer supported. please use a more up-to-date version\n", __func__);
+-            fclose(file);
+             gguf_free(ctx);
+             return NULL;
+         }
+@@ -20949,7 +19794,6 @@ struct gguf_context * gguf_init_from_file(const char * fname, struct gguf_init_p
+
+         if (!ok) {
+             fprintf(stderr, "%s: failed to read header\n", __func__);
+-            fclose(file);
+             gguf_free(ctx);
+             return NULL;
+         }
+@@ -21007,7 +19851,6 @@ struct gguf_context * gguf_init_from_file(const char * fname, struct gguf_init_p
+                                     // prevent from integer overflow in the malloc below
+                                     if (kv->value.arr.n >= SIZE_MAX/gguf_type_size(kv->value.arr.type)) {
+                                         fprintf(stderr, "%s: array size is too large (%" PRIu64 ")\n", __func__, kv->value.arr.n);
+-                                        fclose(file);
+                                         gguf_free(ctx);
+                                         return NULL;
+                                     }
+@@ -21021,7 +19864,6 @@ struct gguf_context * gguf_init_from_file(const char * fname, struct gguf_init_p
+                                     // prevent from integer overflow in the malloc below
+                                     if (kv->value.arr.n >= SIZE_MAX/sizeof(struct gguf_str)) {
+                                         fprintf(stderr, "%s: array size is too large (%" PRIu64 ")\n", __func__, kv->value.arr.n);
+-                                        fclose(file);
+                                         gguf_free(ctx);
+                                         return NULL;
+                                     }
+@@ -21048,7 +19890,6 @@ struct gguf_context * gguf_init_from_file(const char * fname, struct gguf_init_p
+
+         if (!ok) {
+             fprintf(stderr, "%s: failed to read key-value pairs\n", __func__);
+-            fclose(file);
+             gguf_free(ctx);
+             return NULL;
+         }
+@@ -21090,7 +19931,6 @@ struct gguf_context * gguf_init_from_file(const char * fname, struct gguf_init_p
+
+             if (!ok) {
+                 fprintf(stderr, "%s: failed to read tensor info\n", __func__);
+-                fclose(file);
+                 gguf_free(ctx);
+                 return NULL;
+             }
+@@ -21110,7 +19950,7 @@ struct gguf_context * gguf_init_from_file(const char * fname, struct gguf_init_p
+
+         if (offset_pad != 0) {
+             offset += ctx->alignment - offset_pad;
+-            fseek(file, offset, SEEK_SET);
++            llamafile_seek(file, offset, SEEK_SET);
+         }
+     }
+
+@@ -21132,7 +19972,6 @@ struct gguf_context * gguf_init_from_file(const char * fname, struct gguf_init_p
+             if (ggml_blck_size(info->type) == 0 || ne % ggml_blck_size(info->type) != 0) {
+                 fprintf(stderr, "%s: tensor '%s' of type %d (%s) number of elements (%" PRId64 ") is not a multiple of block size (%" PRId64 ")\n",
+                         __func__, info->name.data, (int) info->type, ggml_type_name(info->type), ne, ggml_blck_size(info->type));
+-                fclose(file);
+                 gguf_free(ctx);
+                 return NULL;
+             }
+@@ -21164,7 +20003,6 @@ struct gguf_context * gguf_init_from_file(const char * fname, struct gguf_init_p
+         *params.ctx = ggml_init(pdata);
+         if (*params.ctx == NULL) {
+             fprintf(stderr, "%s: failed to initialize context\n", __func__);
+-            fclose(file);
+             gguf_free(ctx);
+             return NULL;
+         }
+@@ -21183,7 +20021,6 @@ struct gguf_context * gguf_init_from_file(const char * fname, struct gguf_init_p
+
+             if (!ok) {
+                 fprintf(stderr, "%s: failed to read tensor data\n", __func__);
+-                fclose(file);
+                 ggml_free(ctx_data);
+                 gguf_free(ctx);
+                 return NULL;
+@@ -21222,7 +20059,6 @@ struct gguf_context * gguf_init_from_file(const char * fname, struct gguf_init_p
+
+         if (!ok) {
+             fprintf(stderr, "%s: failed to read the tensor data\n", __func__);
+-            fclose(file);
+             ggml_free(ctx_data);
+             gguf_free(ctx);
+             return NULL;
+@@ -21231,8 +20067,6 @@ struct gguf_context * gguf_init_from_file(const char * fname, struct gguf_init_p
+         ggml_set_no_alloc(ctx_data, params.no_alloc);
+     }
+
+-    fclose(file);
+-
+     return ctx;
+ }
+
+@@ -21864,7 +20698,7 @@ static void gguf_write_to_buf(const struct gguf_context * ctx, struct gguf_buf *
+ }
+
+ void gguf_write_to_file(const struct gguf_context * ctx, const char * fname, bool only_meta) {
+-    FILE * file = ggml_fopen(fname, "wb");
++    FILE * file = ggml_fopen(fname, "wbe");
+     if (!file) {
+         GGML_ABORT("failed to open file for writing");
+     }
+@@ -21902,67 +20736,35 @@ void gguf_get_meta_data(const struct gguf_context * ctx, void * data) {
+ ////////////////////////////////////////////////////////////////////////////////
+
+ int ggml_cpu_has_avx(void) {
+-#if defined(__AVX__)
+-    return 1;
+-#else
+-    return 0;
+-#endif
++    return X86_HAVE(AVX);
+ }
+
+ int ggml_cpu_has_avx_vnni(void) {
+-#if defined(__AVXVNNI__)
+-    return 1;
+-#else
+-    return 0;
+-#endif
++    return X86_HAVE(AVXVNNI);
+ }
+
+ int ggml_cpu_has_avx2(void) {
+-#if defined(__AVX2__)
+-    return 1;
+-#else
+-    return 0;
+-#endif
++    return X86_HAVE(AVX2);
+ }
+
+ int ggml_cpu_has_avx512(void) {
+-#if defined(__AVX512F__)
+-    return 1;
+-#else
+-    return 0;
+-#endif
++    return X86_HAVE(AVX512F);
+ }
+
+ int ggml_cpu_has_avx512_vbmi(void) {
+-#if defined(__AVX512VBMI__)
+-    return 1;
+-#else
+-    return 0;
+-#endif
++    return X86_HAVE(AVX512VBMI);
+ }
+
+ int ggml_cpu_has_avx512_vnni(void) {
+-#if defined(__AVX512VNNI__)
+-    return 1;
+-#else
+-    return 0;
+-#endif
++    return X86_HAVE(AVX512_VNNI);
+ }
+
+ int ggml_cpu_has_avx512_bf16(void) {
+-#if defined(__AVX512BF16__)
+-    return 1;
+-#else
+-    return 0;
+-#endif
++    return X86_HAVE(AVX512_BF16);
+ }
+
+ int ggml_cpu_has_fma(void) {
+-#if defined(__FMA__)
+-    return 1;
+-#else
+-    return 0;
+-#endif
++    return X86_HAVE(FMA);
+ }
+
+ int ggml_cpu_has_neon(void) {
+@@ -21990,19 +20792,11 @@ int ggml_cpu_has_arm_fma(void) {
+ }
+
+ int ggml_cpu_has_metal(void) {
+-#if defined(GGML_USE_METAL)
+-    return 1;
+-#else
+-    return 0;
+-#endif
++    return llamafile_has_metal();
+ }
+
+ int ggml_cpu_has_f16c(void) {
+-#if defined(__F16C__)
+-    return 1;
+-#else
+-    return 0;
+-#endif
++    return X86_HAVE(F16C);
+ }
+
+ int ggml_cpu_has_fp16_va(void) {
+@@ -22090,19 +20884,11 @@ int ggml_cpu_has_gpublas(void) {
+ }
+
+ int ggml_cpu_has_sse3(void) {
+-#if defined(__SSE3__)
+-    return 1;
+-#else
+-    return 0;
+-#endif
++    return X86_HAVE(SSE3);
+ }
+
+ int ggml_cpu_has_ssse3(void) {
+-#if defined(__SSSE3__)
+-    return 1;
+-#else
+-    return 0;
+-#endif
++    return X86_HAVE(SSSE3);
+ }
+
+ int ggml_cpu_has_vsx(void) {
+diff --git llama.cpp/ggml.h llama.cpp/ggml.h
+index 1d2a354..4d42d54 100644

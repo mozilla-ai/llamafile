@@ -1,0 +1,58 @@
+--- llama.cpp/log.h
++++ llama.cpp/log.h
+@@ -1,12 +1,16 @@
+ #pragma once
++#define LOG_NO_TIMESTAMPS
++#define LOG_NO_FILE_LINE_FUNCTION
+
+-#include <chrono>
++// #include <chrono> // [jart]
+ #include <cstring>
+ #include <sstream>
+-#include <iostream>
+-#include <thread>
++// #include <iostream> // [jart]
++#include <__thread/id.h> // [jart]
++#include <__thread/thread.h> // [jart]
+ #include <vector>
+ #include <algorithm>
++#include "llamafile/log.h"
+ #include <cinttypes>
+
+ // --------------------------------
+@@ -398,11 +402,11 @@ inline FILE *log_handler1_impl(bool change = false, LogTriState append = LogTriS
+
+     if (!logfile)
+     {
+-        //  Verify whether the file was opened, otherwise fallback to stderr
+-        logfile = stderr;
+-
+-        fprintf(stderr, "Failed to open logfile '%s' with error '%s'\n", filename.c_str(), std::strerror(errno));
+-        fflush(stderr);
++        // [jart] llama.cpp creates a log file in the current directory
++        //        by default, without the user asking for one. so if it
++        //        fails possibly due to being in a restricted folder on
++        //        windows we shouldnt raise an error fail because of it
++        logfile = fopen("/dev/null", "w");
+
+         // At this point we let the init flag be to true below, and let the target fallback to stderr
+         //  otherwise we would repeatedly fopen() which was already unsuccessful
+@@ -427,6 +431,7 @@ inline FILE *log_handler2_impl(bool change = false, LogTriState append = LogTriS
+ // INTERNAL, DO NOT USE
+ inline FILE *log_disable_impl()
+ {
++    FLAG_log_disable = true; // [jart]
+     return log_handler1_impl(true, LogTriStateSame, LogTriStateTrue);
+ }
+
+@@ -630,7 +635,7 @@ inline std::string LOG_TOKENS_TOSTR_PRETTY(const C & ctx, const T & tokens)
+     buf << "[ ";
+
+     bool first = true;
+-    for (const auto & token : tokens)
++    for (const auto &token : tokens)
+     {
+         if (!first) {
+             buf << ", ";
+diff --git llama.cpp/main/main.cpp llama.cpp/main/main.cpp
+index 4a342ad..5a4daab 100644

@@ -1,0 +1,13 @@
+--- llama.cpp/sampling.h
++++ llama.cpp/sampling.h
+@@ -4,7 +4,7 @@
+
+ #include "grammar-parser.h"
+
+-#include <random>
++#include <__random/mersenne_twister_engine.h> // [jart]
+ #include <string>
+ #include <unordered_map>
+ #include <vector>
+diff --git llama.cpp/server/chat.mjs llama.cpp/server/chat.mjs
+index a79c8a3..219ebb5 100644

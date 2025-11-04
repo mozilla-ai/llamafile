@@ -1,0 +1,198 @@
+--- llama.cpp/llava/clip.cpp
++++ llama.cpp/llava/clip.cpp
+@@ -1,27 +1,19 @@
++// -*- mode:c++;indent-tabs-mode:nil;c-basic-offset:4;tab-width:8;coding:utf-8 -*-
++// vi: set et ft=cpp ts=4 sts=4 sw=4 fenc=utf-8 :vi
+ // NOTE: This is modified from clip.cpp only for LLaVA,
+ // so there might be still unnecessary artifacts hanging around
+ // I'll gradually clean and extend it
+ // Note: Even when using identical normalized image inputs (see normalize_image_u8_to_f32()) we have a significant difference in resulting embeddings compared to pytorch
+ #include "clip.h"
+-#include "log.h"
+-#include "ggml.h"
+-#include "ggml-alloc.h"
+-#include "ggml-backend.h"
++#include "llama.cpp/log.h"
++#include "llama.cpp/ggml.h"
++#include "llama.cpp/ggml-alloc.h"
++#include "llama.cpp/ggml-backend.h"
++#include "llama.cpp/ggml-cuda.h"
++#include "llama.cpp/ggml-metal.h"
++#include "llama.cpp/string.h"
+
+-#ifdef GGML_USE_CUDA
+-#include "ggml-cuda.h"
+-#endif
+-
+-#ifdef GGML_USE_METAL
+-#include "ggml-metal.h"
+-#endif
+-
+-#ifdef GGML_USE_CANN
+-#include "ggml-cann.h"
+-#endif
+-
+-#define STB_IMAGE_IMPLEMENTATION
+-#include "stb_image.h"
++#include "third_party/stb/stb_image.h"
+
+ #include <cassert>
+ #include <cmath>
+@@ -161,7 +153,8 @@ static std::map<projector_type, std::string> PROJECTOR_TYPE_NAMES = {
+ static int get_key_idx(const gguf_context * ctx, const char * key) {
+     int i = gguf_find_key(ctx, key);
+     if (i == -1) {
+-        LOG_TEE("key %s not found in file\n", key);
++        // [jart] don't log to console errors that aren't errors
++        LOG("%s: note: key %s not found in file\n", __func__, key);
+         throw std::runtime_error(format("Missing required key: %s", key));
+     }
+
+@@ -210,17 +203,6 @@ static std::string gguf_data_to_str(enum gguf_type type, const void * data, int
+     }
+ }
+
+-static void replace_all(std::string & s, const std::string & search, const std::string & replace) {
+-    if (search.empty()) {
+-        return; // Avoid infinite loop if 'search' is an empty string
+-    }
+-    size_t pos = 0;
+-    while ((pos = s.find(search, pos)) != std::string::npos) {
+-        s.replace(pos, search.length(), replace);
+-        pos += replace.length();
+-    }
+-}
+-
+ static std::string gguf_kv_to_str(const struct gguf_context * ctx_gguf, int i) {
+     const enum gguf_type type = gguf_get_kv_type(ctx_gguf, i);
+
+@@ -238,8 +220,8 @@ static std::string gguf_kv_to_str(const struct gguf_context * ctx_gguf, int i) {
+                     if (arr_type == GGUF_TYPE_STRING) {
+                         std::string val = gguf_get_arr_str(ctx_gguf, i, j);
+                         // escape quotes
+-                        replace_all(val, "\\", "\\\\");
+-                        replace_all(val, "\"", "\\\"");
++                        val = replace_all(val, "\\", "\\\\");
++                        val = replace_all(val, "\"", "\\\"");
+                         ss << '"' << val << '"';
+                     } else if (arr_type == GGUF_TYPE_ARRAY) {
+                         ss << "???";
+@@ -553,7 +535,7 @@ struct clip_ctx {
+     ggml_backend_t backend       = NULL;
+     ggml_gallocr_t compute_alloc = NULL;
+
+-    struct clip_image_size * load_image_size;
++    struct clip_image_size * load_image_size = NULL;
+ };
+
+ static ggml_cgraph * clip_image_build_graph(clip_ctx * ctx, const clip_image_f32_batch * imgs, struct clip_image_size * load_image_size, bool is_inf = false) {
+@@ -1022,8 +1004,13 @@ struct clip_ctx * clip_model_load(const char * fname, const int verbosity = 1) {
+         /*.ctx      = */ &meta,
+     };
+
+-    struct gguf_context * ctx = gguf_init_from_file(fname, params);
+-    if (!ctx) {
++    struct llamafile * file; // [jart]
++    struct gguf_context * ctx;
++    file = llamafile_open_gguf(fname, "rbe"); // [jart]
++    if (file) ctx = gguf_init_from_file(file, params);
++    if (file) llamafile_close(file); // [jart]
++    if (!file || !ctx) {
++      OpenFailed:
+         throw std::runtime_error(format("%s: failed to load CLIP model from %s. Does this file exist?\n", __func__, fname));
+     }
+
+@@ -1045,7 +1032,7 @@ struct clip_ctx * clip_model_load(const char * fname, const int verbosity = 1) {
+         LOG_TEE("%s: n_tensors:    %d\n", __func__, n_tensors);
+         LOG_TEE("%s: n_kv:         %d\n", __func__, n_kv);
+         LOG_TEE("%s: ftype:        %s\n", __func__, ftype_str.c_str());
+-        LOG_TEE("\n");
++        // LOG_TEE("\n"); // [jart] do not want
+     }
+     const int n_tensors = gguf_get_n_tensors(ctx);
+
+@@ -1076,7 +1063,7 @@ struct clip_ctx * clip_model_load(const char * fname, const int verbosity = 1) {
+             if (value.size() > MAX_VALUE_LEN) {
+                 value = format("%s...", value.substr(0, MAX_VALUE_LEN - 3).c_str());
+             }
+-            replace_all(value, "\n", "\\n");
++            value = replace_all(value, "\n", "\\n");
+
+             LOG_TEE("%s: - kv %3d: %42s %-16s = %s\n", __func__, i, name, type_name.c_str(), value.c_str());
+         }
+@@ -1127,15 +1114,19 @@ struct clip_ctx * clip_model_load(const char * fname, const int verbosity = 1) {
+         }
+     }
+
+-#ifdef GGML_USE_CUDA
+-    new_clip->backend = ggml_backend_cuda_init(0);
+-    LOG_TEE("%s: CLIP using CUDA backend\n", __func__);
+-#endif
++// #ifdef GGML_USE_CUDA
++    if (!new_clip->backend) { // [jart]
++        if ((new_clip->backend = ggml_backend_cuda_init(0)))
++            LOG_TEE("%s: CLIP using CUDA backend\n", __func__);
++    }
++// #endif
+
+-#ifdef GGML_USE_METAL
+-    new_clip->backend = ggml_backend_metal_init();
+-    LOG_TEE("%s: CLIP using Metal backend\n", __func__);
+-#endif
++// #ifdef GGML_USE_METAL
++    if (!new_clip->backend) { // [jart]
++        if ((new_clip->backend = ggml_backend_metal_init()))
++            LOG_TEE("%s: CLIP using Metal backend\n", __func__);
++    }
++// #endif
+
+ #ifdef GGML_USE_CANN
+     new_clip->backend = ggml_backend_cann_init(0);
+@@ -1208,7 +1199,7 @@ struct clip_ctx * clip_model_load(const char * fname, const int verbosity = 1) {
+             return nullptr;
+         }
+
+-        auto fin = std::ifstream(fname, std::ios::binary);
++        struct llamafile * fin = llamafile_open_gguf(fname, "rbe"); // [jart]
+         if (!fin) {
+             LOG_TEE("cannot open model file for loading tensors\n");
+             clip_free(new_clip);
+@@ -1230,7 +1221,7 @@ struct clip_ctx * clip_model_load(const char * fname, const int verbosity = 1) {
+             const char * name = gguf_get_tensor_name(ctx, i);
+             struct ggml_tensor * cur = ggml_get_tensor(new_clip->ctx_data, name);
+             const size_t offset = gguf_get_data_offset(ctx) + gguf_get_tensor_offset(ctx, i);
+-            fin.seekg(offset, std::ios::beg);
++            llamafile_seek(fin, offset, SEEK_SET); // [jart]
+             if (!fin) {
+                 LOG_TEE("%s: failed to seek for tensor %s\n", __func__, name);
+                 clip_free(new_clip);
+@@ -1240,15 +1231,15 @@ struct clip_ctx * clip_model_load(const char * fname, const int verbosity = 1) {
+             int num_bytes = ggml_nbytes(cur);
+             if (ggml_backend_buffer_is_host(new_clip->params_buffer)) {
+                 // for the CPU and Metal backend, we can read directly into the tensor
+-                fin.read(reinterpret_cast<char *>(cur->data), num_bytes);
++                llamafile_read(fin, reinterpret_cast<void *>(cur->data), num_bytes); // [jart]
+             } else {
+                 // read into a temporary buffer first, then copy to device memory
+                 read_buf.resize(num_bytes);
+-                fin.read(reinterpret_cast<char *>(read_buf.data()), num_bytes);
++                llamafile_read(fin, reinterpret_cast<void *>(read_buf.data()), num_bytes); // [jart]
+                 ggml_backend_tensor_set(cur, read_buf.data(), 0, num_bytes);
+             }
+         }
+-        fin.close();
++        llamafile_close(fin); // [jart]
+     }
+
+     // vision model
+@@ -1318,7 +1309,7 @@ struct clip_ctx * clip_model_load(const char * fname, const int verbosity = 1) {
+             for (int i = 0; i < 32 && (hparams.image_grid_pinpoints[i] != 0); ++i) {
+                 LOG_TEE("%d ", hparams.image_grid_pinpoints[i]);
+             }
+-            LOG_TEE("\n");
++            // LOG_TEE("\n"); // [jart] do not want
+             LOG_TEE("v_mm_patch_merge_type: %s\n", hparams.mm_patch_merge_type);
+
+         }
+diff --git llama.cpp/llava/convert-image-encoder-to-gguf.py llama.cpp/llava/convert-image-encoder-to-gguf.py
+index 36f6b92..66784d1 100644

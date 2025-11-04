@@ -1,0 +1,30 @@
+--- llama.cpp/llava/llava.cpp
++++ llama.cpp/llava/llava.cpp
+@@ -1,8 +1,12 @@
++// -*- mode:c++;indent-tabs-mode:nil;c-basic-offset:4;tab-width:8;coding:utf-8 -*-
++// vi: set et ft=cpp ts=4 sts=4 sw=4 fenc=utf-8 :vi
++
+ #include "clip.h"
+-#include "common.h"
+-#include "llama.h"
++#include "llama.cpp/string.h"
++#include "llama.cpp/llama.h"
++#include "llama.cpp/log.h"
++#include "llama.cpp/common.h"
+ #include "llava.h"
+-#include "base64.hpp"
+
+ #include <cstdio>
+ #include <cstdlib>
+@@ -352,7 +356,8 @@ static bool encode_image_with_clip(clip_ctx * ctx_clip, int n_threads, const cli
+     const int64_t t_img_enc_end_us = ggml_time_us();
+     float t_img_enc_ms = (t_img_enc_end_us - t_img_enc_start_us) / 1000.0;
+
+-    LOG_TEE("\n%s: image encoded in %8.2f ms by CLIP (%8.2f ms per image patch)\n", __func__, t_img_enc_ms, t_img_enc_ms / *n_img_pos);
++    // [jart] get rid of sneak newline
++    LOG_TEE("%s: image encoded in %8.2f ms by CLIP (%8.2f ms per image patch)\n", __func__, t_img_enc_ms, t_img_enc_ms / *n_img_pos);
+
+     return true;
+ }
+diff --git llama.cpp/llava/llava.h llama.cpp/llava/llava.h
+index b6feb30..0e56e71 100644

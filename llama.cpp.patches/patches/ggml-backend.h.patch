@@ -1,0 +1,28 @@
+--- llama.cpp/ggml-backend.h
++++ llama.cpp/ggml-backend.h
+@@ -41,9 +41,9 @@ extern "C" {
+     GGML_API           size_t                         ggml_backend_buffer_get_max_size  (ggml_backend_buffer_t buffer);
+     GGML_API           size_t                         ggml_backend_buffer_get_alloc_size(ggml_backend_buffer_t buffer, struct ggml_tensor * tensor);
+     GGML_API           void                           ggml_backend_buffer_clear         (ggml_backend_buffer_t buffer, uint8_t value);
+-    GGML_API           bool                           ggml_backend_buffer_is_host       (ggml_backend_buffer_t buffer);
++    GGML_API GGML_CALL bool                           ggml_backend_buffer_is_host       (ggml_backend_buffer_t buffer);
+     GGML_API           void                           ggml_backend_buffer_set_usage     (ggml_backend_buffer_t buffer, enum ggml_backend_buffer_usage usage);
+-    GGML_API           enum ggml_backend_buffer_usage ggml_backend_buffer_get_usage     (ggml_backend_buffer_t buffer);
++    GGML_API GGML_CALL enum ggml_backend_buffer_usage ggml_backend_buffer_get_usage     (ggml_backend_buffer_t buffer);
+     GGML_API           ggml_backend_buffer_type_t     ggml_backend_buffer_get_type      (ggml_backend_buffer_t buffer);
+     GGML_API           void                           ggml_backend_buffer_reset         (ggml_backend_buffer_t buffer);
+
+@@ -232,6 +232,11 @@ extern "C" {
+     GGML_API void ggml_backend_tensor_alloc(ggml_backend_buffer_t buffer, struct ggml_tensor * tensor, void * addr);
+     GGML_API void ggml_backend_view_init(struct ggml_tensor * tensor);
+
++    //
++    // dynamic shared object api
++    //
++    struct ggml_backend_api;
++    const struct ggml_backend_api *ggml_backend_api(void);
+
+ #ifdef  __cplusplus
+ }
+diff --git llama.cpp/ggml-common.h llama.cpp/ggml-common.h
+index e400576..e1cdc9e 100644

@@ -1,0 +1,12 @@
+--- llama.cpp/server/chat.sh
++++ llama.cpp/server/chat.sh
+@@ -48,7 +48,6 @@ chat_completion() {
+         top_p: 0.9,
+         n_keep: $n_keep,
+         n_predict: 256,
+-        cache_prompt: true,
+         stop: ["\n### Human:"],
+         stream: true
+     }')"
+diff --git llama.cpp/server/deps.sh llama.cpp/server/deps.sh
+index d283789..81bda86 100755

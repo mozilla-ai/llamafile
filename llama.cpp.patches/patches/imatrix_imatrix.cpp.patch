@@ -1,0 +1,37 @@
+--- llama.cpp/imatrix/imatrix.cpp
++++ llama.cpp/imatrix/imatrix.cpp
+@@ -1,5 +1,9 @@
+-#include "common.h"
+-#include "llama.h"
++// -*- mode:c++;indent-tabs-mode:nil;c-basic-offset:4;coding:utf-8 -*-
++// vi: set et ft=cpp ts=4 sts=4 sw=4 fenc=utf-8 :vi
++
++#include "llama.cpp/common.h"
++#include "llamafile/llamafile.h"
++#include "llama.cpp/llama.h"
+
+ #include <cmath>
+ #include <cstdio>
+@@ -575,6 +579,20 @@ static bool compute_imatrix(llama_context * ctx, const gpt_params & params) {
+ int main(int argc, char ** argv) {
+     gpt_params params;
+
++    if (llamafile_has(argv, "--version")) {
++        puts("llamafile-imatrix v" LLAMAFILE_VERSION_STRING);
++        return 0;
++    }
++
++    if (llamafile_has(argv, "-h") ||
++        llamafile_has(argv, "-help") ||
++        llamafile_has(argv, "--help")) {
++        llamafile_help("/zip/llama.cpp/imatrix/imatrix.1.asc");
++        __builtin_unreachable();
++    }
++
++    llamafile_check_cpu();
++
+     params.n_ctx = 512;
+     params.logits_all = true;
+     params.verbosity = 1;
+diff --git llama.cpp/json-schema-to-grammar.h llama.cpp/json-schema-to-grammar.h
+index 41623b3..97fc9c9 100644

@@ -1,0 +1,32 @@
+--- llama.cpp/sampling.cpp
++++ llama.cpp/sampling.cpp
+@@ -1,6 +1,10 @@
++// -*- mode:c++;indent-tabs-mode:nil;c-basic-offset:4;tab-width:8;coding:utf-8 -*-
++// vi: set et ft=cpp ts=4 sts=4 sw=4 fenc=utf-8 :vi
++
+ #define LLAMA_API_INTERNAL
+ #include "sampling.h"
+ #include <random>
++#include <cosmo.h>
+
+ struct llama_sampling_context * llama_sampling_init(const struct llama_sampling_params & params) {
+     struct llama_sampling_context * result = new llama_sampling_context();
+@@ -14,14 +18,14 @@ struct llama_sampling_context * llama_sampling_init(const struct llama_sampling_
+
+         // will be empty (default) if there are parse errors
+         if (result->parsed_grammar.rules.empty()) {
+-            fprintf(stderr, "%s: failed to parse grammar\n", __func__);
++            kprintf("%s: failed to parse grammar\n", __func__); // [jart]
+             delete result;
+             return nullptr;
+         }
+
+         // Ensure that there is a "root" node.
+         if (result->parsed_grammar.symbol_ids.find("root") == result->parsed_grammar.symbol_ids.end()) {
+-            fprintf(stderr, "%s: grammar does not contain a 'root' symbol\n", __func__);
++            kprintf("%s: grammar does not contain a 'root' symbol\n", __func__); // [jart]
+             delete result;
+             return nullptr;
+         }
+diff --git llama.cpp/sampling.h llama.cpp/sampling.h
+index eeaa53b..293af72 100644

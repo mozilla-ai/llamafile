@@ -1,0 +1,12 @@
+--- llama.cpp/json-schema-to-grammar.h
++++ llama.cpp/json-schema-to-grammar.h
+@@ -3,6 +3,6 @@
+ #include "ggml.h"
+ // Change JSON_ASSERT from assert() to GGML_ASSERT:
+ #define JSON_ASSERT GGML_ASSERT
+-#include "json.hpp"
++#include "json.h"
+
+ std::string json_schema_to_grammar(const nlohmann::ordered_json& schema);
+diff --git llama.cpp/llama-bench/README.md llama.cpp/llama-bench/README.md
+index 9396a34..e381ea4 100644

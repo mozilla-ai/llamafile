@@ -1,0 +1,666 @@
+--- llama.cpp/common.cpp
++++ llama.cpp/common.cpp
+@@ -1,3 +1,5 @@
++// -*- mode:c++;indent-tabs-mode:nil;c-basic-offset:4;tab-width:8;coding:utf-8 -*-
++// vi: set et ft=cpp ts=4 sts=4 sw=4 fenc=utf-8 :vi
+ #if defined(_MSC_VER)
+ #define _SILENCE_CXX17_CODECVT_HEADER_DEPRECATION_WARNING
+ #endif
+@@ -5,10 +7,14 @@
+ #include "common.h"
+ // Change JSON_ASSERT from assert() to GGML_ASSERT:
+ #define JSON_ASSERT GGML_ASSERT
+-#include "json.hpp"
++#include "json.h"
+ #include "json-schema-to-grammar.h"
+ #include "llama.h"
++#include "llamafile/debug.h"
++#include "llamafile/macros.h"
++#include "string.h"
+
++#include <cosmo.h>
+ #include <algorithm>
+ #include <cinttypes>
+ #include <cmath>
+@@ -75,146 +81,16 @@
+ #define LLAMA_CURL_MAX_URL_LENGTH 2084 // Maximum URL Length in Chrome: 2083
+ #endif // LLAMA_USE_CURL
+
++// [jart] cuda must not self-init until after flags are parsed
++#define llama_supports_gpu_offload() 1
++
+ using json = nlohmann::ordered_json;
+
+ //
+ // CPU utils
+ //
+
+-int32_t cpu_get_num_physical_cores() {
+-#ifdef __linux__
+-    // enumerate the set of thread siblings, num entries is num cores
+-    std::unordered_set<std::string> siblings;
+-    for (uint32_t cpu=0; cpu < UINT32_MAX; ++cpu) {
+-        std::ifstream thread_siblings("/sys/devices/system/cpu/cpu"
+-            + std::to_string(cpu) + "/topology/thread_siblings");
+-        if (!thread_siblings.is_open()) {
+-            break; // no more cpus
+-        }
+-        std::string line;
+-        if (std::getline(thread_siblings, line)) {
+-            siblings.insert(line);
+-        }
+-    }
+-    if (!siblings.empty()) {
+-        return static_cast<int32_t>(siblings.size());
+-    }
+-#elif defined(__APPLE__) && defined(__MACH__)
+-    int32_t num_physical_cores;
+-    size_t len = sizeof(num_physical_cores);
+-    int result = sysctlbyname("hw.perflevel0.physicalcpu", &num_physical_cores, &len, NULL, 0);
+-    if (result == 0) {
+-        return num_physical_cores;
+-    }
+-    result = sysctlbyname("hw.physicalcpu", &num_physical_cores, &len, NULL, 0);
+-    if (result == 0) {
+-        return num_physical_cores;
+-    }
+-#elif defined(_WIN32) && (_WIN32_WINNT >= 0x0601) && !defined(__MINGW64__) // windows 7 and later
+-    // TODO: windows + arm64 + mingw64
+-    unsigned int n_threads_win = std::thread::hardware_concurrency();
+-    unsigned int default_threads = n_threads_win > 0 ? (n_threads_win <= 4 ? n_threads_win : n_threads_win / 2) : 4;
+-
+-    DWORD buffer_size = 0;
+-    if (!GetLogicalProcessorInformationEx(RelationProcessorCore, nullptr, &buffer_size)) {
+-        if (GetLastError() != ERROR_INSUFFICIENT_BUFFER) {
+-            return default_threads;
+-        }
+-    }
+-
+-    std::vector<char> buffer(buffer_size);
+-    if (!GetLogicalProcessorInformationEx(RelationProcessorCore, reinterpret_cast<PSYSTEM_LOGICAL_PROCESSOR_INFORMATION_EX>(buffer.data()), &buffer_size)) {
+-        return default_threads;
+-    }
+-
+-    int32_t num_physical_cores = 0;
+-    PSYSTEM_LOGICAL_PROCESSOR_INFORMATION_EX info = reinterpret_cast<PSYSTEM_LOGICAL_PROCESSOR_INFORMATION_EX>(buffer.data());
+-    while (buffer_size > 0) {
+-        if (info->Relationship == RelationProcessorCore) {
+-            num_physical_cores += info->Processor.GroupCount;
+-        }
+-        buffer_size -= info->Size;
+-        info = reinterpret_cast<PSYSTEM_LOGICAL_PROCESSOR_INFORMATION_EX>(reinterpret_cast<char*>(info) + info->Size);
+-    }
+-
+-    return num_physical_cores > 0 ? num_physical_cores : default_threads;
+-#endif
+-    unsigned int n_threads = std::thread::hardware_concurrency();
+-    return n_threads > 0 ? (n_threads <= 4 ? n_threads : n_threads / 2) : 4;
+-}
+-
+-#if defined(__x86_64__) && defined(__linux__) && !defined(__ANDROID__)
+-#include <pthread.h>
+-
+-static void cpuid(unsigned leaf, unsigned subleaf,
+-                  unsigned *eax, unsigned *ebx, unsigned *ecx, unsigned *edx) {
+-    __asm__("movq\t%%rbx,%%rsi\n\t"
+-            "cpuid\n\t"
+-            "xchgq\t%%rbx,%%rsi"
+-            : "=a"(*eax), "=S"(*ebx), "=c"(*ecx), "=d"(*edx)
+-            : "0"(leaf), "2"(subleaf));
+-}
+-
+-static int pin_cpu(int cpu) {
+-    cpu_set_t mask;
+-    CPU_ZERO(&mask);
+-    CPU_SET(cpu, &mask);
+-    return pthread_setaffinity_np(pthread_self(), sizeof(mask), &mask);
+-}
+-
+-static bool is_hybrid_cpu(void) {
+-    unsigned eax, ebx, ecx, edx;
+-    cpuid(7, 0, &eax, &ebx, &ecx, &edx);
+-    return !!(edx & (1u << 15));
+-}
+-
+-static bool is_running_on_efficiency_core(void) {
+-    unsigned eax, ebx, ecx, edx;
+-    cpuid(0x1a, 0, &eax, &ebx, &ecx, &edx);
+-    int intel_atom = 0x20;
+-    int core_type = (eax & 0xff000000u) >> 24;
+-    return core_type == intel_atom;
+-}
+-
+-static int cpu_count_math_cpus(int n_cpu) {
+-    int result = 0;
+-    for (int cpu = 0; cpu < n_cpu; ++cpu) {
+-        if (pin_cpu(cpu)) {
+-            return -1;
+-        }
+-        if (is_running_on_efficiency_core()) {
+-            continue; // efficiency cores harm lockstep threading
+-        }
+-        ++cpu; // hyperthreading isn't useful for linear algebra
+-        ++result;
+-    }
+-    return result;
+-}
+-
+-#endif // __x86_64__ && __linux__
+-
+-/**
+- * Returns number of CPUs on system that are useful for math.
+- */
+-int32_t cpu_get_num_math() {
+-#if defined(__x86_64__) && defined(__linux__) && !defined(__ANDROID__)
+-    int n_cpu = sysconf(_SC_NPROCESSORS_ONLN);
+-    if (n_cpu < 1) {
+-        return cpu_get_num_physical_cores();
+-    }
+-    if (is_hybrid_cpu()) {
+-        cpu_set_t affinity;
+-        if (!pthread_getaffinity_np(pthread_self(), sizeof(affinity), &affinity)) {
+-            int result = cpu_count_math_cpus(n_cpu);
+-            pthread_setaffinity_np(pthread_self(), sizeof(affinity), &affinity);
+-            if (result > 0) {
+-                return result;
+-            }
+-        }
+-    }
+-#endif
+-    return cpu_get_num_physical_cores();
+-}
++int32_t cpu_get_num_physical_cores();
+
+ //
+ // CLI argument parsing
+@@ -290,6 +166,11 @@ bool gpt_params_parse_ex(int argc, char ** argv, gpt_params & params) {
+         params.kv_overrides.back().key[0] = 0;
+     }
+
++    FLAGS_READY = true;
++    params.n_gpu_layers = llamafile_gpu_layers(params.n_gpu_layers);
++    FLAG_threads = params.n_threads; // [jart]
++    FLAG_threads_batch = params.n_threads_batch; // [jart]
++
+     return true;
+ }
+
+@@ -318,18 +199,95 @@ bool gpt_params_find_arg(int argc, char ** argv, const std::string & arg, gpt_pa
+
+     llama_sampling_params & sparams = params.sparams;
+
++    if (arg == "--cli") {
++        return true;
++    }
++    if (arg == "--chat") {
++        return true;
++    }
++    if (arg == "--server") {
++        return true;
++    }
++    if (arg == "--trace") {
++        FLAG_trace = true;
++        FLAG_unsecure = true;
++        return true;
++    }
++    if (arg == "--fast") {
++        FLAG_fast = true;
++        return true;
++    }
++    if (arg == "--v2") {
++        FLAG_v2 = true;
++        return true;
++    }
++    if (arg == "--iq") {
++        FLAG_iq = true;
++        return true;
++    }
++    if (arg == "--ascii") {
++        FLAG_ascii = true;
++        return true;
++    }
++    if (arg == "--nologo") {
++        FLAG_nologo = true;
++        return true;
++    }
++    if (arg == "--precise") {
++        FLAG_precise = true;
++        return true;
++    }
++    if (arg == "--trap") {
++        FLAG_trap = true;
++        FLAG_unsecure = true; // for better backtraces
++        llamafile_trapping_enabled(+1);
++        return true;
++    }
++    if (arg == "--unsecure") {
++        FLAG_unsecure = true;
++        return true;
++    }
++    if (arg == "--nocompile") {
++        FLAG_nocompile = true;
++        return true;
++    }
++    if (arg == "--recompile") {
++        FLAG_recompile = true;
++        return true;
++    }
++    if (arg == "--tinyblas") {
++        FLAG_tinyblas = true;  // undocumented
++        return true;
++    }
++    if (arg == "--gpu") {
++        if (++i >= argc) {
++            invalid_param = true;
++            return true;
++        }
++        FLAG_gpu = llamafile_gpu_parse(argv[i]);
++        if (FLAG_gpu == LLAMAFILE_GPU_ERROR) {
++            fprintf(stderr, "error: invalid --gpu flag value: %s\n", argv[i]);
++            exit(1);
++        }
++        if (FLAG_gpu >= 0 && params.n_gpu_layers == -1) {
++            params.n_gpu_layers = 999;
++        }
++        return true;
++    }
++
+     if (arg == "-s" || arg == "--seed") {
+         CHECK_ARG
+         // TODO: this is temporary, in the future the sampling state will be moved fully to llama_sampling_context.
+         params.seed = std::stoul(argv[i]);
+         sparams.seed = std::stoul(argv[i]);
++        FLAG_seed = sparams.seed; // [jart]
+         return true;
+     }
+     if (arg == "-t" || arg == "--threads") {
+         CHECK_ARG
+         params.n_threads = std::stoi(argv[i]);
+         if (params.n_threads <= 0) {
+-            params.n_threads = std::thread::hardware_concurrency();
++            params.n_threads = MIN(cpu_get_num_math(), 20); // [jart]
+         }
+         return true;
+     }
+@@ -337,7 +295,7 @@ bool gpt_params_find_arg(int argc, char ** argv, const std::string & arg, gpt_pa
+         CHECK_ARG
+         params.n_threads_batch = std::stoi(argv[i]);
+         if (params.n_threads_batch <= 0) {
+-            params.n_threads_batch = std::thread::hardware_concurrency();
++            params.n_threads_batch = cpu_get_num_math(); // [jart]
+         }
+         return true;
+     }
+@@ -345,7 +303,7 @@ bool gpt_params_find_arg(int argc, char ** argv, const std::string & arg, gpt_pa
+         CHECK_ARG
+         params.n_threads_draft = std::stoi(argv[i]);
+         if (params.n_threads_draft <= 0) {
+-            params.n_threads_draft = std::thread::hardware_concurrency();
++            params.n_threads_draft = cpu_get_num_math(); // [jart]
+         }
+         return true;
+     }
+@@ -353,13 +311,14 @@ bool gpt_params_find_arg(int argc, char ** argv, const std::string & arg, gpt_pa
+         CHECK_ARG
+         params.n_threads_batch_draft = std::stoi(argv[i]);
+         if (params.n_threads_batch_draft <= 0) {
+-            params.n_threads_batch_draft = std::thread::hardware_concurrency();
++            params.n_threads_batch_draft = cpu_get_num_math(); // [jart]
+         }
+         return true;
+     }
+-    if (arg == "-p" || arg == "--prompt") {
++    if (arg == "-p" || arg == "--prompt" || arg == "--system-prompt") {
+         CHECK_ARG
+         params.prompt = argv[i];
++        FLAG_prompt = argv[i]; // [jart]
+         return true;
+     }
+     if (arg == "-e" || arg == "--escape") {
+@@ -438,7 +397,7 @@ bool gpt_params_find_arg(int argc, char ** argv, const std::string & arg, gpt_pa
+     }
+     if (arg == "-c" || arg == "--ctx-size") {
+         CHECK_ARG
+-        params.n_ctx = std::stoi(argv[i]);
++        FLAG_ctx_size = params.n_ctx = std::stoi(argv[i]);
+         return true;
+     }
+     if (arg == "--grp-attn-n" || arg == "-gan") {
+@@ -537,6 +496,7 @@ bool gpt_params_find_arg(int argc, char ** argv, const std::string & arg, gpt_pa
+     if (arg == "--top-p") {
+         CHECK_ARG
+         sparams.top_p = std::stof(argv[i]);
++        FLAG_top_p = sparams.top_p; // [jart]
+         return true;
+     }
+     if (arg == "--min-p") {
+@@ -544,10 +504,12 @@ bool gpt_params_find_arg(int argc, char ** argv, const std::string & arg, gpt_pa
+         sparams.min_p = std::stof(argv[i]);
+         return true;
+     }
+-    if (arg == "--temp") {
++    if (arg == "--temp" || //
++        arg == "--temperature") { // [jart]
+         CHECK_ARG
+         sparams.temp = std::stof(argv[i]);
+         sparams.temp = std::max(sparams.temp, 0.0f);
++        FLAG_temperature = sparams.temp; // [jart]
+         return true;
+     }
+     if (arg == "--tfs") {
+@@ -574,11 +536,13 @@ bool gpt_params_find_arg(int argc, char ** argv, const std::string & arg, gpt_pa
+     if (arg == "--frequency-penalty") {
+         CHECK_ARG
+         sparams.penalty_freq = std::stof(argv[i]);
++        FLAG_frequency_penalty = sparams.penalty_freq; // [jart]
+         return true;
+     }
+     if (arg == "--presence-penalty") {
+         CHECK_ARG
+         sparams.penalty_present = std::stof(argv[i]);
++        FLAG_presence_penalty = sparams.penalty_present; // [jart]
+         return true;
+     }
+     if (arg == "--dynatemp-range") {
+@@ -673,6 +637,7 @@ bool gpt_params_find_arg(int argc, char ** argv, const std::string & arg, gpt_pa
+     if (arg == "-m" || arg == "--model") {
+         CHECK_ARG
+         params.model = argv[i];
++        FLAG_model = params.model.c_str(); // [jart]
+         return true;
+     }
+     if (arg == "-md" || arg == "--model-draft") {
+@@ -718,7 +683,7 @@ bool gpt_params_find_arg(int argc, char ** argv, const std::string & arg, gpt_pa
+     }
+     if (arg == "--lora-scaled") {
+         CHECK_ARG
+-        std::string lora_adapter = argv[i];
++        const char* lora_adapter = argv[i];
+         CHECK_ARG
+         params.lora_adapters.push_back({
+             lora_adapter,
+@@ -726,10 +691,6 @@ bool gpt_params_find_arg(int argc, char ** argv, const std::string & arg, gpt_pa
+         });
+         return true;
+     }
+-    if (arg == "--lora-init-without-apply") {
+-        params.lora_init_without_apply = true;
+-        return true;
+-    }
+     if (arg == "--control-vector") {
+         CHECK_ARG
+         params.control_vectors.push_back({ 1.0f, argv[i], });
+@@ -749,9 +710,10 @@ bool gpt_params_find_arg(int argc, char ** argv, const std::string & arg, gpt_pa
+         params.control_vector_layer_end = std::stoi(argv[i]);
+         return true;
+     }
+-    if (arg == "--mmproj") {
++    if (arg == "-mm" || arg == "--mmproj") { // [jart]
+         CHECK_ARG
+         params.mmproj = argv[i];
++        FLAG_mmproj = argv[i]; // [jart]
+         return true;
+     }
+     if (arg == "--image") {
+@@ -832,6 +794,7 @@ bool gpt_params_find_arg(int argc, char ** argv, const std::string & arg, gpt_pa
+     }
+     if (arg == "-fa" || arg == "--flash-attn") {
+         params.flash_attn = true;
++        FLAG_flash_attn = true; // [jart]
+         return true;
+     }
+     if (arg == "-co" || arg == "--color") {
+@@ -845,6 +808,8 @@ bool gpt_params_find_arg(int argc, char ** argv, const std::string & arg, gpt_pa
+     if (arg == "-ngl" || arg == "--gpu-layers" || arg == "--n-gpu-layers") {
+         CHECK_ARG
+         params.n_gpu_layers = std::stoi(argv[i]);
++        if (params.n_gpu_layers <= 0)
++            FLAG_gpu = LLAMAFILE_GPU_DISABLE;
+         if (!llama_supports_gpu_offload()) {
+             fprintf(stderr, "warning: not compiled with GPU offload support, --gpu-layers option will be ignored\n");
+             fprintf(stderr, "warning: see main README.md for information on enabling GPU BLAS support\n");
+@@ -863,9 +828,9 @@ bool gpt_params_find_arg(int argc, char ** argv, const std::string & arg, gpt_pa
+     if (arg == "--main-gpu" || arg == "-mg") {
+         CHECK_ARG
+         params.main_gpu = std::stoi(argv[i]);
+-#ifndef GGML_USE_CUDA_SYCL_VULKAN
+-        fprintf(stderr, "warning: llama.cpp was compiled without CUDA/SYCL/Vulkan. Setting the main GPU has no effect.\n");
+-#endif // GGML_USE_CUDA_SYCL_VULKAN
++// #ifndef GGML_USE_CUDA_SYCL_VULKAN // [jart]
++//         fprintf(stderr, "warning: llama.cpp was compiled without CUDA/SYCL/Vulkan. Setting the main GPU has no effect.\n");
++// #endif // GGML_USE_CUDA_SYCL_VULKAN
+         return true;
+     }
+     if (arg == "--split-mode" || arg == "-sm") {
+@@ -888,9 +853,10 @@ bool gpt_params_find_arg(int argc, char ** argv, const std::string & arg, gpt_pa
+             invalid_param = true;
+             return true;
+         }
+-#ifndef GGML_USE_CUDA_SYCL_VULKAN
+-        fprintf(stderr, "warning: llama.cpp was compiled without CUDA/SYCL/Vulkan. Setting the split mode has no effect.\n");
+-#endif // GGML_USE_CUDA_SYCL_VULKAN
++        FLAG_split_mode = params.split_mode; // [jart]
++// #ifndef GGML_USE_CUDA_SYCL_VULKAN // [jart]
++//         fprintf(stderr, "warning: llama.cpp was compiled without CUDA/SYCL/Vulkan. Setting the split mode has no effect.\n");
++// #endif // GGML_USE_CUDA_SYCL_VULKAN
+         return true;
+     }
+     if (arg == "--tensor-split" || arg == "-ts") {
+@@ -913,9 +879,9 @@ bool gpt_params_find_arg(int argc, char ** argv, const std::string & arg, gpt_pa
+                 params.tensor_split[i] = 0.0f;
+             }
+         }
+-#ifndef GGML_USE_CUDA_SYCL_VULKAN
+-        fprintf(stderr, "warning: llama.cpp was compiled without CUDA/SYCL/Vulkan. Setting a tensor split has no effect.\n");
+-#endif // GGML_USE_CUDA_SYCL_VULKAN
++// #ifndef GGML_USE_CUDA_SYCL_VULKAN // [jart]
++//         fprintf(stderr, "warning: llama.cpp was compiled without CUDA/SYCL/Vulkan. Setting a tensor split has no effect.\n");
++// #endif // GGML_USE_CUDA_SYCL_VULKAN
+         return true;
+     }
+     if (arg == "--rpc") {
+@@ -949,8 +915,15 @@ bool gpt_params_find_arg(int argc, char ** argv, const std::string & arg, gpt_pa
+         params.verbose_prompt = true;
+         return true;
+     }
+-    if (arg == "--no-display-prompt") {
++    if (arg == "--no-display-prompt" || //
++        arg == "--silent-prompt") { // [jart]
+         params.display_prompt = false;
++        FLAG_no_display_prompt = true; // [jart]
++        return true;
++    }
++    if (arg == "--display-prompt") { // [jart]
++        params.display_prompt = true;
++        FLAG_no_display_prompt = false;
+         return true;
+     }
+     if (arg == "-r" || arg == "--reverse-prompt") {
+@@ -1116,7 +1089,7 @@ bool gpt_params_find_arg(int argc, char ** argv, const std::string & arg, gpt_pa
+     }
+     if (arg == "-j" || arg == "--json-schema") {
+         CHECK_ARG
+-        sparams.grammar = json_schema_to_grammar(json::parse(argv[i]));
++        sparams.grammar = json_schema_string_to_grammar(argv[i]);
+         return true;
+     }
+     if (arg == "--override-kv") {
+@@ -1143,6 +1116,11 @@ bool gpt_params_find_arg(int argc, char ** argv, const std::string & arg, gpt_pa
+         params.public_path = argv[i];
+         return true;
+     }
++    if (arg == "--url-prefix") {
++        CHECK_ARG
++        params.url_prefix = argv[i];
++        return true;
++    }
+     if (arg == "--api-key") {
+         CHECK_ARG
+         params.api_keys.push_back(argv[i]);
+@@ -1241,6 +1219,7 @@ bool gpt_params_find_arg(int argc, char ** argv, const std::string & arg, gpt_pa
+             return true;
+         }
+         params.chat_template = argv[i];
++        FLAG_chat_template = argv[i]; // [jart]
+         return true;
+     }
+     if (arg == "--slot-prompt-similarity" || arg == "-sps") {
+@@ -1670,7 +1649,8 @@ void gpt_params_print_usage(int /*argc*/, char ** argv, const gpt_params & param
+     options.push_back({ "server",      "       --host HOST",            "ip address to listen (default: %s)", params.hostname.c_str() });
+     options.push_back({ "server",      "       --port PORT",            "port to listen (default: %d)", params.port });
+     options.push_back({ "server",      "       --path PATH",            "path to serve static files from (default: %s)", params.public_path.c_str() });
+-    options.push_back({ "server",      "       --embedding(s)",         "restrict to only support embedding use case; use only with dedicated embedding models (default: %s)", params.embedding ? "enabled" : "disabled" });
++    options.push_back({ "server",      "       --url-prefix PREFIX",    "Specify a URL prefix (subdirectory) under which the API will be served, e.g. /llamafile (default: %s)", params.url_prefix.c_str() });
++    options.push_back({ "server",      "       --embedding(s)",         "enable embedding endpoint (default: %s)", params.embedding ? "enabled" : "disabled" });
+     options.push_back({ "server",      "       --api-key KEY",          "API key to use for authentication (default: none)" });
+     options.push_back({ "server",      "       --api-key-file FNAME",   "path to file containing API keys (default: none)" });
+     options.push_back({ "server",      "       --ssl-key-file FNAME",   "path to file a PEM-encoded SSL private key" });
+@@ -1690,7 +1670,6 @@ void gpt_params_print_usage(int /*argc*/, char ** argv, const gpt_params & param
+                                                                         "https://github.com/ggerganov/llama.cpp/wiki/Templates-supported-by-llama_chat_apply_template" });
+     options.push_back({ "server",      "-sps,  --slot-prompt-similarity SIMILARITY",
+                                                                         "how much the prompt of a request must match the prompt of a slot in order to use that slot (default: %.2f, 0.0 = disabled)\n", params.slot_prompt_similarity });
+-    options.push_back({ "server",      "       --lora-init-without-apply",     "load LoRA adapters without applying them (apply later via POST /lora-adapters) (default: %s)", params.lora_init_without_apply ? "enabled" : "disabled"});
+
+ #ifndef LOG_DISABLE_LOGS
+     options.push_back({ "logging" });
+@@ -1753,13 +1732,7 @@ std::string gpt_params_get_system_info(const gpt_params & params) {
+     if (params.n_threads_batch != -1) {
+         os << " (n_threads_batch = " << params.n_threads_batch << ")";
+     }
+-#if defined(_WIN32) && (_WIN32_WINNT >= 0x0601) && !defined(__MINGW64__) // windows 7 and later
+-    // TODO: windows + arm64 + mingw64
+-    DWORD logicalProcessorCount = GetActiveProcessorCount(ALL_PROCESSOR_GROUPS);
+-    os << " / " << logicalProcessorCount << " | " << llama_print_system_info();
+-#else
+-    os << " / " << std::thread::hardware_concurrency() << " | " << llama_print_system_info();
+-#endif
++    os << " / " << cpu_get_num_math() << " | " << llama_print_system_info(); // [jart]
+
+     return os.str();
+ }
+@@ -1809,15 +1782,20 @@ std::string string_get_sortable_timestamp() {
+     return std::string(timestamp_no_ns) + "." + std::string(timestamp_ns);
+ }
+
+-void string_replace_all(std::string & s, const std::string & search, const std::string & replace) {
+-    if (search.empty()) {
+-        return; // Avoid infinite loop if 'search' is an empty string
+-    }
++std::string replace_all(const std::string& s, const std::string& search, const std::string& replace) {
++    if (search.empty())
++        return s;
++    std::string builder;
++    builder.reserve(s.length());
+     size_t pos = 0;
+-    while ((pos = s.find(search, pos)) != std::string::npos) {
+-        s.replace(pos, search.length(), replace);
+-        pos += replace.length();
+-    }
++    size_t last_pos = 0;
++    while ((pos = s.find(search, last_pos)) != std::string::npos) {
++        builder.append(s, last_pos, pos - last_pos);
++        builder.append(replace);
++        last_pos = pos + search.length();
++    }
++    builder.append(s, last_pos, std::string::npos);
++    return builder;
+ }
+
+ void string_process_escapes(std::string & input) {
+@@ -2062,17 +2040,17 @@ std::string fs_get_cache_directory() {
+     if (getenv("LLAMA_CACHE")) {
+         cache_directory = std::getenv("LLAMA_CACHE");
+     } else {
+-#ifdef __linux__
++        if (IsLinux()) { // [jart]
+         if (std::getenv("XDG_CACHE_HOME")) {
+             cache_directory = std::getenv("XDG_CACHE_HOME");
+         } else {
+             cache_directory = std::getenv("HOME") + std::string("/.cache/");
+         }
+-#elif defined(__APPLE__)
++        } else if (IsXnu()) {
+         cache_directory = std::getenv("HOME") + std::string("/Library/Caches/");
+-#elif defined(_WIN32)
++        } else if (IsWindows()) {
+         cache_directory = std::getenv("LOCALAPPDATA");
+-#endif // __linux__
++        }
+         cache_directory = ensure_trailing_slash(cache_directory);
+         cache_directory += "llama.cpp";
+     }
+@@ -2237,6 +2215,9 @@ static ggml_type kv_cache_type_from_str(const std::string & s) {
+     if (s == "f32") {
+         return GGML_TYPE_F32;
+     }
++    if (s == "bf16") {
++        return GGML_TYPE_BF16;
++    }
+     if (s == "f16") {
+         return GGML_TYPE_F16;
+     }
+@@ -2734,6 +2715,12 @@ std::string llama_detokenize(llama_context * ctx, const std::vector<llama_token>
+     return text;
+ }
+
++bool llama_should_add_bos_token(const llama_model * model) {
++    const int add_bos = llama_add_bos_token(model);
++
++    return add_bos != -1 ? bool(add_bos) : (llama_vocab_type(model) == LLAMA_VOCAB_TYPE_SPM);
++}
++
+ //
+ // Chat template utils
+ //
+@@ -2966,9 +2953,15 @@ static llama_control_vector_data llama_control_vector_load_one(const llama_contr
+         /* .no_alloc = */ false,
+         /* .ctx      = */ &ctx,
+     };
+-    struct gguf_context * ctx_gguf = gguf_init_from_file(load_info.fname.c_str(), meta_gguf_params);
++    struct llamafile * file = llamafile_open_gguf(load_info.fname.c_str(), "rb");
++    if (!file) {
++        perror(load_info.fname.c_str());
++        return result;
++    }
++    struct gguf_context * ctx_gguf = gguf_init_from_file(file, meta_gguf_params);
+     if (!ctx_gguf) {
+         fprintf(stderr, "%s: failed to load control vector file from %s\n", __func__, load_info.fname.c_str());
++        llamafile_close(file);
+         return result;
+     }
+
+@@ -3039,6 +3032,7 @@ static llama_control_vector_data llama_control_vector_load_one(const llama_contr
+
+     gguf_free(ctx_gguf);
+     ggml_free(ctx);
++    llamafile_close(file);
+
+     return result;
+ }
+@@ -3237,7 +3231,6 @@ void yaml_dump_non_result_info(FILE * stream, const gpt_params & params, const l
+             fprintf(stream, "  - %s: %f\n", la.path.c_str(), la.scale);
+         }
+     }
+-    fprintf(stream, "lora_init_without_apply: %s # default: false\n", params.lora_init_without_apply ? "true" : "false");
+     fprintf(stream, "main_gpu: %d # default: 0\n", params.main_gpu);
+     fprintf(stream, "min_keep: %d # default: 0 (disabled)\n", sparams.min_keep);
+     fprintf(stream, "mirostat: %d # default: 0 (disabled)\n", sparams.mirostat);
+@@ -3285,7 +3278,7 @@ void yaml_dump_non_result_info(FILE * stream, const gpt_params & params, const l
+     yaml_dump_vector_float(stream, "tensor_split", tensor_split_vector);
+
+     fprintf(stream, "tfs: %f # default: 1.0\n", sparams.tfs_z);
+-    fprintf(stream, "threads: %d # default: %u\n", params.n_threads, std::thread::hardware_concurrency());
++    fprintf(stream, "threads: %d # default: %u\n", params.n_threads, cpu_get_num_math()); // [jart]
+     fprintf(stream, "top_k: %d # default: 40\n", sparams.top_k);
+     fprintf(stream, "top_p: %f # default: 0.95\n", sparams.top_p);
+     fprintf(stream, "min_p: %f # default: 0.0\n", sparams.min_p);
+@@ -3293,3 +3286,7 @@ void yaml_dump_non_result_info(FILE * stream, const gpt_params & params, const l
+     fprintf(stream, "verbose_prompt: %s # default: false\n", params.verbose_prompt ? "true" : "false");
+     fprintf(stream, "display_prompt: %s # default: true\n", params.display_prompt ? "true" : "false");
+ }
++
++std::string json_schema_string_to_grammar(const std::string_view& schema) {
++    return json_schema_to_grammar(json::parse(schema));
++}
+diff --git llama.cpp/common.h llama.cpp/common.h
+index df23460..84b0e14 100644

@@ -1,0 +1,138 @@
+--- llama.cpp/ggml-backend.c
++++ llama.cpp/ggml-backend.c
+@@ -1,3 +1,6 @@
++// -*- mode:c;indent-tabs-mode:nil;c-basic-offset:4;coding:utf-8 -*-
++// vi: set et ft=c ts=4 sts=4 sw=4 fenc=utf-8 :vi
++
+ #include "ggml-backend-impl.h"
+ #include "ggml-alloc.h"
+ #include "ggml-impl.h"
+@@ -8,6 +11,9 @@
+ #include <stdio.h>
+ #include <stdlib.h>
+ #include <string.h>
++#include <cosmo.h>
++
++#include "llamafile/log.h"
+
+
+ #define MAX(a, b) ((a) > (b) ? (a) : (b))
+@@ -121,7 +127,7 @@ void ggml_backend_buffer_clear(ggml_backend_buffer_t buffer, uint8_t value) {
+     buffer->iface.clear(buffer, value);
+ }
+
+-bool ggml_backend_buffer_is_host(ggml_backend_buffer_t buffer) {
++GGML_CALL bool ggml_backend_buffer_is_host(ggml_backend_buffer_t buffer) {
+     return ggml_backend_buft_is_host(ggml_backend_buffer_get_type(buffer));
+ }
+
+@@ -134,7 +140,7 @@ void ggml_backend_buffer_set_usage(ggml_backend_buffer_t buffer, enum ggml_backe
+     }
+ }
+
+-enum ggml_backend_buffer_usage ggml_backend_buffer_get_usage(ggml_backend_buffer_t buffer) {
++GGML_CALL enum ggml_backend_buffer_usage ggml_backend_buffer_get_usage(ggml_backend_buffer_t buffer) {
+     return buffer->usage;
+ }
+
+@@ -419,21 +425,21 @@ GGML_CALL static void ggml_backend_registry_init(void) {
+     ggml_backend_register("CPU", ggml_backend_reg_cpu_init, ggml_backend_cpu_buffer_type(), NULL);
+
+     // add forward decls here to avoid including the backend headers
+-#ifdef GGML_USE_CUDA
++/* #ifdef GGML_USE_CUDA [jart] */
+     extern GGML_CALL void ggml_backend_cuda_reg_devices(void);
+     ggml_backend_cuda_reg_devices();
+-#endif
++/* #endif */
+
+ #ifdef GGML_USE_SYCL
+     extern void ggml_backend_sycl_reg_devices(void);
+     ggml_backend_sycl_reg_devices();
+ #endif
+
+-#ifdef GGML_USE_METAL
++/* #ifdef GGML_USE_METAL [jart] */
+     extern GGML_CALL ggml_backend_t ggml_backend_reg_metal_init(const char * params, void * user_data);
+     extern GGML_CALL ggml_backend_buffer_type_t ggml_backend_metal_buffer_type(void);
+     ggml_backend_register("Metal", ggml_backend_reg_metal_init, ggml_backend_metal_buffer_type(), NULL);
+-#endif
++/* #endif */
+
+ #ifdef GGML_USE_VULKAN
+     extern GGML_CALL int ggml_backend_vk_reg_devices(void);
+@@ -2240,3 +2246,72 @@ bool ggml_backend_compare_graph_backend(ggml_backend_t backend1, ggml_backend_t
+
+     return true;
+ }
++
++GGML_CALL static void system_exit(int rc) {
++    pthread_exit(0);
++}
++
++GGML_CALL static void system_free(void *p) {
++    free(p);
++}
++
++GGML_CALL static void *system_malloc(size_t n) {
++    return malloc(n);
++}
++
++GGML_CALL static char *system_getenv(const char *s) {
++    if (IsWindows())
++        return 0;
++    return getenv(s);
++}
++
++GGML_CALL static long system_write(int fd, const void *p, long n) {
++    if (IsWindows())
++        return 0;
++    return write(fd, p, n);
++}
++
++static const struct ggml_backend_api kGgmlBackendApi = {
++    &FLAG_log_disable,
++    system_exit,
++    system_free,
++    system_malloc,
++    system_getenv,
++    system_write,
++    ggml_backend_register,
++    ggml_backend_buffer_init,
++    ggml_backend_cpu_buffer_from_ptr,
++    ggml_backend_cpu_buffer_type,
++    ggml_backend_buft_get_alloc_size,
++    ggml_backend_buft_alloc_buffer,
++    ggml_backend_is_cpu,
++    ggml_backend_tensor_get,
++    ggml_backend_tensor_set,
++    ggml_is_quantized,
++    ggml_type_size,
++    ggml_blck_size,
++    ggml_is_transposed,
++    ggml_nbytes,
++    ggml_get_unary_op,
++    ggml_nelements,
++    ggml_nrows,
++    ggml_is_permuted,
++    ggml_is_contiguous,
++    ggml_op_name,
++    ggml_type_name,
++    ggml_element_size,
++    ggml_row_size,
++    ggml_rope_yarn_corr_dims,
++    ggml_op_desc,
++    ggml_backend_buffer_is_host,
++    ggml_guid_matches,
++    ggml_is_empty,
++    ggml_backend_buffer_get_usage,
++    ggml_are_same_shape,
++    ggml_is_contiguous_1,
++    ggml_is_contiguous_2,
++};
++
++const struct ggml_backend_api *ggml_backend_api(void) {
++    return &kGgmlBackendApi;
++}
+diff --git llama.cpp/ggml-backend.h llama.cpp/ggml-backend.h
+index 5f3f1e2..8edda54 100644

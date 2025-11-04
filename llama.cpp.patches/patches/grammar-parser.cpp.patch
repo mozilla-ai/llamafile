@@ -1,0 +1,14 @@
+--- llama.cpp/grammar-parser.cpp
++++ llama.cpp/grammar-parser.cpp
+@@ -369,9 +369,6 @@ namespace grammar_parser {
+             }
+             // Validate the state to ensure that all rules are defined
+             for (const auto & rule : state.rules) {
+-                if (rule.empty()) {
+-                    throw std::runtime_error("Undefined rule");
+-                }
+                 for (const auto & elem : rule) {
+                     if (elem.type == LLAMA_GRETYPE_RULE_REF) {
+                         // Ensure that the rule at that location exists
+diff --git llama.cpp/imatrix/imatrix.cpp llama.cpp/imatrix/imatrix.cpp
+index 83b85d7..201c517 100644

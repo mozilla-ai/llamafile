@@ -1,0 +1,141 @@
+--- llama.cpp/common.h
++++ llama.cpp/common.h
+@@ -1,10 +1,18 @@
++// -*- mode:c++;indent-tabs-mode:nil;c-basic-offset:4;tab-width:8;coding:utf-8 -*-
++// vi: set et ft=cpp ts=4 sts=4 sw=4 fenc=utf-8 :vi
++
+ // Various helper functions and utilities
+
+ #pragma once
+
++#include "llamafile/log.h"
++#include "llama.cpp/cores.h"
++#include "llamafile/macros.h"
+ #include "llama.h"
+
+ #include "sampling.h"
++#include "llamafile/version.h"
++#include "llamafile/llamafile.h"
+
+ #define LOG_NO_FILE_LINE_FUNCTION
+ #include "log.h"
+@@ -12,10 +20,11 @@
+ #include <cmath>
+ #include <string>
+ #include <vector>
+-#include <random>
+-#include <thread>
+-#include <unordered_map>
++#include <__random/random_device.h> // [jart]
++#include <__random/mersenne_twister_engine.h> // [jart]
++// #include <unordered_map> // [jart]
+ #include <tuple>
++#include <cosmo.h>
+
+ #ifdef _WIN32
+ #define DIRECTORY_SEPARATOR '\\'
+@@ -26,9 +35,8 @@
+ #define die(msg)          do { fputs("error: " msg "\n", stderr);                exit(1); } while (0)
+ #define die_fmt(fmt, ...) do { fprintf(stderr, "error: " fmt "\n", __VA_ARGS__); exit(1); } while (0)
+
+-#define print_build_info() do {                                                                     \
+-    fprintf(stderr, "%s: build = %d (%s)\n",      __func__, LLAMA_BUILD_NUMBER, LLAMA_COMMIT);      \
+-    fprintf(stderr, "%s: built with %s for %s\n", __func__, LLAMA_COMPILER, LLAMA_BUILD_TARGET);    \
++#define print_build_info() do {                                         \
++        tinylog(__func__, ": llamafile version " LLAMAFILE_VERSION_STRING "\n", NULL); \
+ } while(0)
+
+ #define DEFAULT_MODEL_PATH "models/7B/ggml-model-f16.gguf"
+@@ -55,7 +63,6 @@ struct llama_control_vector_load_info;
+ //
+
+ int32_t cpu_get_num_physical_cores();
+-int32_t cpu_get_num_math();
+
+ //
+ // CLI argument parsing
+@@ -70,12 +77,12 @@ enum dimre_method {
+ struct gpt_params {
+     uint32_t seed                 = LLAMA_DEFAULT_SEED; // RNG seed
+
+-    int32_t n_threads             = cpu_get_num_math();
++    int32_t n_threads             = MIN(cpu_get_num_math(), 20);
+     int32_t n_threads_draft       =    -1;
+-    int32_t n_threads_batch       =    -1; // number of threads to use for batch processing (-1 = use n_threads)
++    int32_t n_threads_batch       =    cpu_get_num_math(); // number of threads to use for batch processing (-1 = use n_threads)
+     int32_t n_threads_batch_draft =    -1;
+     int32_t n_predict             =    -1; // new tokens to predict
+-    int32_t n_ctx                 =     0; // context size
++    int32_t n_ctx                 =  8192; // context size [jart]
+     int32_t n_batch               =  2048; // logical batch size for prompt processing (must be >=32 to use BLAS)
+     int32_t n_ubatch              =   512; // physical batch size for prompt processing (must be >=32 to use BLAS)
+     int32_t n_keep                =     0; // number of tokens to keep from initial prompt
+@@ -187,6 +194,7 @@ struct gpt_params {
+     bool warmup            = true;  // warmup run
+     bool check_tensors     = false; // validate tensor data
+
++    // [jart] warning: rope only supports f32 and f16
+     std::string cache_type_k = "f16"; // KV cache data type for the K
+     std::string cache_type_v = "f16"; // KV cache data type for the V
+
+@@ -208,6 +216,7 @@ struct gpt_params {
+
+     std::string hostname      = "127.0.0.1";
+     std::string public_path   = "";
++    std::string url_prefix    = "";
+     std::string chat_template = "";
+     std::string system_prompt = "";
+     bool enable_chat_template = true;
+@@ -283,11 +292,6 @@ std::string gpt_params_get_system_info(const gpt_params & params);
+
+ std::vector<std::string> string_split(std::string input, char separator);
+
+-std::string string_strip(const std::string & str);
+-std::string string_get_sortable_timestamp();
+-
+-void string_replace_all(std::string & s, const std::string & search, const std::string & replace);
+-
+ template<class T>
+ static std::vector<T> string_split(const std::string & str, char delim) {
+     std::vector<T> values;
+@@ -303,17 +307,6 @@ static std::vector<T> string_split(const std::string & str, char delim) {
+ }
+
+ bool string_parse_kv_override(const char * data, std::vector<llama_model_kv_override> & overrides);
+-void string_process_escapes(std::string & input);
+-
+-//
+-// Filesystem utils
+-//
+-
+-bool fs_validate_filename(const std::string & filename);
+-bool fs_create_directory_with_parents(const std::string & path);
+-
+-std::string fs_get_cache_directory();
+-std::string fs_get_cache_file(const std::string & filename);
+
+ //
+ // Model utils
+@@ -380,6 +373,10 @@ std::string llama_detokenize(
+         const std::vector<llama_token> & tokens,
+                                   bool   special = true);
+
++// Uses the value from the model metadata if possible, otherwise
++// defaults to true when model type is SPM, otherwise false.
++bool llama_should_add_bos_token(const llama_model * model);
++
+ //
+ // Chat template utils
+ //
+@@ -470,3 +467,9 @@ void yaml_dump_string_multiline(FILE * stream, const char * prop_name, const cha
+ void yaml_dump_non_result_info(
+     FILE * stream, const gpt_params & params, const llama_context * lctx,
+     const std::string & timestamp, const std::vector<int> & prompt_tokens, const char * model_desc);
++
++//
++// JSON utils
++//
++
++std::string json_schema_string_to_grammar(const std::string_view& schema); // [jart]
+diff --git llama.cpp/console.cpp llama.cpp/console.cpp
+index f65cbc6..448bf87 100644

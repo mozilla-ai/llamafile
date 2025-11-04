@@ -1,0 +1,108 @@
+--- llama.cpp/ggml.h
++++ llama.cpp/ggml.h
+@@ -1,3 +1,5 @@
++// -*- mode:c;indent-tabs-mode:nil;c-basic-offset:4;coding:utf-8 -*-
++// vi: set et ft=c ts=4 sts=4 sw=4 fenc=utf-8 :vi
+ #pragma once
+
+ //
+@@ -214,10 +216,11 @@
+ #    define GGML_ATTRIBUTE_FORMAT(...) __attribute__((format(printf, __VA_ARGS__)))
+ #endif
+
+-#include <stdbool.h>
+-#include <stddef.h>
+-#include <stdint.h>
+ #include <stdio.h>
++#include <stdint.h>
++#include <stddef.h>
++#include <stdbool.h>
++#include "llamafile.h"
+
+ #define GGML_FILE_MAGIC   0x67676d6c // "ggml"
+ #define GGML_FILE_VERSION 1
+@@ -230,7 +233,7 @@
+ #define GGML_MAX_CONTEXTS       64
+ #define GGML_MAX_SRC            10
+ #ifndef GGML_MAX_NAME
+-#define GGML_MAX_NAME           64
++#define GGML_MAX_NAME           128 // [jart] for stable diffusion
+ #endif
+ #define GGML_MAX_OP_PARAMS      64
+ #define GGML_DEFAULT_N_THREADS  4
+@@ -326,7 +329,7 @@ extern "C" {
+ #endif
+
+     GGML_NORETURN GGML_ATTRIBUTE_FORMAT(3, 4)
+-    GGML_API void ggml_abort(const char * file, int line, const char * fmt, ...);
++    GGML_API void ggml_abort(const char * file, int line, const char * fmt, ...); // [jart] no ggml_call
+
+     enum ggml_status {
+         GGML_STATUS_ALLOC_FAILED = -2,
+@@ -690,6 +693,21 @@ extern "C" {
+         GGML_NUMA_STRATEGY_COUNT
+     };
+
++    struct ggml_compute_state_shared;
++
++    struct ggml_compute_params {
++        // ith = thread index, nth = number of threads
++        int ith, nth;
++
++        // work buffer for all threads
++        size_t wsize;
++        void * wdata;
++
++        struct ggml_compute_state_shared * shared;
++    };
++
++    void ggml_barrier(const struct ggml_compute_params * params);
++
+     //
+     // GUID
+     //
+@@ -698,7 +716,7 @@ extern "C" {
+     typedef uint8_t ggml_guid[16];
+     typedef ggml_guid * ggml_guid_t;
+
+-    GGML_API bool ggml_guid_matches(ggml_guid_t guid_a, ggml_guid_t guid_b);
++    GGML_API GGML_CALL bool ggml_guid_matches(ggml_guid_t guid_a, ggml_guid_t guid_b);
+
+     // misc
+
+@@ -758,8 +776,8 @@ extern "C" {
+     GGML_API GGML_CALL bool ggml_is_contiguous_1(const struct ggml_tensor * tensor); // contiguous for dims >= 1
+     GGML_API GGML_CALL bool ggml_is_contiguous_2(const struct ggml_tensor * tensor); // contiguous for dims >= 2
+
+-    GGML_API bool ggml_are_same_shape (const struct ggml_tensor * t0, const struct ggml_tensor * t1);
+-    GGML_API bool ggml_are_same_stride(const struct ggml_tensor * t0, const struct ggml_tensor * t1);
++    GGML_API GGML_CALL bool ggml_are_same_shape (const struct ggml_tensor * t0, const struct ggml_tensor * t1);
++    GGML_API           bool ggml_are_same_stride(const struct ggml_tensor * t0, const struct ggml_tensor * t1);
+
+     GGML_API bool ggml_can_repeat(const struct ggml_tensor * t0, const struct ggml_tensor * t1);
+
+@@ -1119,6 +1137,13 @@ extern "C" {
+             struct ggml_context * ctx,
+             struct ggml_tensor  * a);
+
++    // normalize along rows
++    GGML_API struct ggml_tensor * ggml_norm_ext(
++            struct ggml_context * ctx,
++            struct ggml_tensor  * a,
++            float                 eps,
++            bool                  sub_mean);
++
+     // normalize along rows
+     GGML_API struct ggml_tensor * ggml_norm(
+             struct ggml_context * ctx,
+@@ -2283,7 +2308,7 @@ extern "C" {
+     };
+
+     GGML_API struct gguf_context * gguf_init_empty(void);
+-    GGML_API struct gguf_context * gguf_init_from_file(const char * fname, struct gguf_init_params params);
++    GGML_API struct gguf_context * gguf_init_from_file(struct llamafile * file, struct gguf_init_params params);
+     //GGML_API struct gguf_context * gguf_init_from_buffer(..);
+
+     GGML_API void gguf_free(struct gguf_context * ctx);
+diff --git llama.cpp/grammar-parser.cpp llama.cpp/grammar-parser.cpp
+index 438452e..a518b76 100644

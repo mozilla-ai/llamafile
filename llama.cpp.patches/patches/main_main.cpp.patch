@@ -1,0 +1,293 @@
+--- llama.cpp/main/main.cpp
++++ llama.cpp/main/main.cpp
+@@ -1,35 +1,34 @@
+-#include "common.h"
+-
+-#include "console.h"
+-#include "llama.h"
++// -*- mode:c++;indent-tabs-mode:nil;c-basic-offset:4;coding:utf-8 -*-
++// vi: set et ft=cpp ts=4 sts=4 sw=4 fenc=utf-8 :vi
+
+ #include <cassert>
+ #include <cinttypes>
+ #include <cmath>
++#include <cosmo.h>
+ #include <cstdio>
+ #include <cstring>
+ #include <ctime>
+ #include <fstream>
+ #include <iostream>
++#include <signal.h>
+ #include <sstream>
+ #include <string>
+-#include <vector>
+-
+-#if defined (__unix__) || (defined (__APPLE__) && defined (__MACH__))
+-#include <signal.h>
+ #include <unistd.h>
+-#elif defined (_WIN32)
+-#define WIN32_LEAN_AND_MEAN
+-#ifndef NOMINMAX
+-#define NOMINMAX
+-#endif
+-#include <windows.h>
+-#include <signal.h>
+-#endif
+-
+-#if defined(_MSC_VER)
+-#pragma warning(disable: 4244 4267) // possible loss of data
+-#endif
++#include <vector>
++#include <cosmo.h>
++
++#include "llamafile/version.h"
++#include "llamafile/chatbot.h"
++#include "llama.cpp/llama.h"
++#include "llama.cpp/string.h"
++#include "llama.cpp/common.h"
++#include "llama.cpp/console.h"
++#include "llama.cpp/ggml-cuda.h"
++#include "llama.cpp/ggml-metal.h"
++#include "llama.cpp/llava/llava.h"
++#include "llama.cpp/server/server.h"
++#include "localscore/localscore.h"
++#include "llamafile/server/prog.h"
+
+ static llama_context           ** g_ctx;
+ static llama_model             ** g_model;
+@@ -96,22 +95,41 @@ static void write_logfile(
+     fclose(logfile);
+ }
+
+-#if defined (__unix__) || (defined (__APPLE__) && defined (__MACH__)) || defined (_WIN32)
++static int is_killed;
++
++static void *safe_sigint_handler(void *arg) {
++    while (!is_killed)
++        cosmo_futex_wait(&is_killed, 0, 0, 0, 0);
++    console::cleanup();
++    printf("\n");
++    llama_print_timings(*g_ctx);
++    write_logfile(*g_ctx, *g_params, *g_model, *g_input_tokens, g_output_ss->str(), *g_output_tokens);
++    _exit(128 + SIGINT);
++}
++
++static void launch_sigint_thread(void) {
++    pthread_t th;
++    sigset_t block_every_signal;
++    sigfillset(&block_every_signal);
++    pthread_attr_t attr;
++    pthread_attr_init(&attr);
++    pthread_attr_setsigmask_np(&attr, &block_every_signal);
++    pthread_create(&th, &attr, safe_sigint_handler, 0);
++    pthread_attr_destroy(&attr);
++}
++
+ static void sigint_handler(int signo) {
+     if (signo == SIGINT) {
+-        if (!is_interacting && g_params->interactive) {
+-            is_interacting  = true;
+-            need_insert_eot = true;
++        if (g_params->interactive && !is_interacting) {
++            is_interacting = true;
+         } else {
+-            console::cleanup();
+-            printf("\n");
+-            llama_print_timings(*g_ctx);
+-            write_logfile(*g_ctx, *g_params, *g_model, *g_input_tokens, g_output_ss->str(), *g_output_tokens);
+-            _exit(130);
++            is_killed = true;
++            cosmo_futex_wake(&is_killed, 1, 0);
++            for (;;) {
++            }
+         }
+     }
+ }
+-#endif
+
+ static void llama_log_callback_logTee(ggml_log_level level, const char * text, void * user_data) {
+     (void) level;
+@@ -128,7 +146,91 @@ static std::string chat_add_and_format(struct llama_model * model, std::vector<l
+     return formatted;
+ }
+
++enum Program {
++    UNKNOWN,
++    MAIN,
++    SERVER,
++    CHATBOT,
++    EMBEDDING,
++    LLAMAFILER,
++    LOCALSCORE
++};
++
++enum Program determine_program(char *argv[]) {
++    bool v2 = false;
++    enum Program prog = UNKNOWN;
++    for (int i = 0; argv[i]; ++i) {
++        if (!strcmp(argv[i], "--cli")) {
++            prog = MAIN;
++        } else if (!strcmp(argv[i], "--chat")) {
++            prog = CHATBOT;
++        } else if (!strcmp(argv[i], "--server")) {
++            prog = SERVER;
++        } else if (!strcmp(argv[i], "--embedding")) {
++            prog = EMBEDDING;
++        } else if (!strcmp(argv[i], "--v2")) {
++            v2 = true;
++        } else if (!strcmp(argv[i], "--localscore")) {
++            prog = LOCALSCORE;
++        }
++    }
++    if (prog == SERVER && v2) {
++        prog = LLAMAFILER;
++    }
++    return prog;
++}
++
+ int main(int argc, char ** argv) {
++    llamafile_check_cpu();
++
++    if (llamafile_has(argv, "--version")) {
++        puts("llamafile v" LLAMAFILE_VERSION_STRING);
++        return 0;
++    }
++
++    if (llamafile_has(argv, "-h") ||
++        llamafile_has(argv, "-help") ||
++        llamafile_has(argv, "--help")) {
++        if (llamafile_has(argv, "--v2")) {
++            llamafile_help("/zip/llamafile/server/main.1.asc");
++        } else {
++            llamafile_help("/zip/llama.cpp/main/main.1.asc");
++        }
++        __builtin_unreachable();
++    }
++
++    enum Program prog = determine_program(argv);
++    if (prog == LLAMAFILER)
++        return lf::server::main(argc, argv);
++
++    mallopt(M_GRANULARITY, 2 * 1024 * 1024);
++    mallopt(M_MMAP_THRESHOLD, 16 * 1024 * 1024);
++    mallopt(M_TRIM_THRESHOLD, 128 * 1024 * 1024);
++    ShowCrashReports();
++    argc = cosmo_args("/zip/.args", &argv);
++
++    if (prog == SERVER)
++        return server_cli(argc, argv);
++
++    if (prog == CHATBOT ||
++        (prog == UNKNOWN &&
++         !llamafile_has(argv, "-p") &&
++         !llamafile_has(argv, "-f") &&
++         !llamafile_has(argv, "--random-prompt"))) {
++        return lf::chatbot::main(argc, argv);
++    }
++
++    if (prog == EMBEDDING) {
++        int embedding_cli(int, char **);
++        return embedding_cli(argc, argv);
++    }
++
++    if (prog == LOCALSCORE) {
++        return localscore_cli(argc, argv);
++    }
++
++    launch_sigint_thread();
++
+     gpt_params params;
+     g_params = &params;
+
+@@ -146,6 +248,41 @@ int main(int argc, char ** argv) {
+     llama_log_set(llama_log_callback_logTee, nullptr);
+ #endif // LOG_DISABLE_LOGS
+
++    if (!params.image.empty() && params.mmproj.empty()) {
++        fprintf(stderr, "%s: fatal error: --mmproj must also be passed when an --image is specified in cli mode\n", argv[0]);
++        return 1;
++    }
++
++    if (!FLAG_unsecure && !llamafile_has_gpu() && !g_server_background_mode) {
++        // Enable pledge() security on Linux and OpenBSD.
++        // - We do this *after* opening the log file for writing.
++        // - We do this *before* loading any weights or graphdefs.
++        // In effect, what this does is:
++        // - We'll no longer be able to talk to the network going forward.
++        // - We'll no longer be able to change the filesystem going forward.
++        // Cosmopolitan Libc implements pledge() on Linux using SECCOMP.
++        const char *promises;
++        if (!params.path_prompt_cache.empty() && !params.prompt_cache_ro) {
++            // TODO(jart): Open prompt cache in RW mode before pledge()
++            promises = "stdio rpath tty cpath wpath";
++        } else {
++            promises = "stdio rpath tty";
++        }
++        __pledge_mode = PLEDGE_PENALTY_RETURN_EPERM;
++        if (pledge(0, 0)) {
++            LOG("warning: this OS doesn't support pledge() security\n");
++        } else if (pledge(promises, 0)) {
++            perror("pledge");
++            exit(1);
++        }
++    }
++
++    if (!params.mmproj.empty() &&
++        (!params.image.empty() ||
++         params.prompt.find("<img src=\"") != std::string::npos)) {
++        return llava_cli(argc, argv, params);
++    }
++
+     // TODO: Dump params ?
+     //LOG("Params perplexity: %s\n", LOG_TOSTR(params.perplexity));
+
+@@ -269,7 +406,7 @@ int main(int argc, char ** argv) {
+
+     const bool add_bos = llama_add_bos_token(model);
+     if (!llama_model_has_encoder(model)) {
+-        GGML_ASSERT(!llama_add_eos_token(model));
++        GGML_ASSERT(llama_add_eos_token(model) != 1);
+     }
+     LOG("add_bos: %d\n", add_bos);
+
+@@ -406,21 +543,11 @@ int main(int argc, char ** argv) {
+         LOG_TEE("\n");
+     }
+
+-    // ctrl+C handling
+-    {
+-#if defined (__unix__) || (defined (__APPLE__) && defined (__MACH__))
+-        struct sigaction sigint_action;
+-        sigint_action.sa_handler = sigint_handler;
+-        sigemptyset (&sigint_action.sa_mask);
+-        sigint_action.sa_flags = 0;
+-        sigaction(SIGINT, &sigint_action, NULL);
+-#elif defined (_WIN32)
+-        auto console_ctrl_handler = +[](DWORD ctrl_type) -> BOOL {
+-            return (ctrl_type == CTRL_C_EVENT) ? (sigint_handler(SIGINT), true) : false;
+-        };
+-        SetConsoleCtrlHandler(reinterpret_cast<PHANDLER_ROUTINE>(console_ctrl_handler), true);
+-#endif
+-    }
++    struct sigaction sa, oldsa;
++    sa.sa_handler = sigint_handler;
++    sigemptyset(&sa.sa_mask);
++    sa.sa_flags = 0;
++    sigaction(SIGINT, &sa, &oldsa);
+
+     if (params.interactive) {
+         LOG_TEE("%s: interactive mode on.\n", __func__);
+@@ -979,6 +1106,11 @@ int main(int argc, char ** argv) {
+         llama_state_save_file(ctx, path_session.c_str(), session_tokens.data(), session_tokens.size());
+     }
+
++    sigaction(SIGINT, &oldsa, 0);
++
++    // [jart] ensure trailing newline
++    printf("\n");
++
+     llama_print_timings(ctx);
+     write_logfile(ctx, params, model, input_tokens, output_ss.str(), output_tokens);
+
+diff --git llama.cpp/perplexity/perplexity.cpp llama.cpp/perplexity/perplexity.cpp
+index 484dd58..d0ba8ce 100644

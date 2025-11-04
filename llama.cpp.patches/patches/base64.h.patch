@@ -1,0 +1,299 @@
+--- llama.cpp/base64.h
++++ llama.cpp/base64.h
+@@ -61,21 +61,23 @@ public:
+     };
+
+     /**
+-     Encodes all the elements from `in_begin` to `in_end` to `out`.
+-
+-     @warning The source and destination cannot overlap. The destination must be able to hold at least
+-     `required_encode_size(std::distance(in_begin, in_end))`, otherwise the behavior depends on the output iterator.
+-
+-     @tparam Input_iterator the source; the returned elements are cast to `std::uint8_t` and should not be greater than
+-     8 bits
+-     @tparam Output_iterator the destination; the elements written to it are from the type `char`
+-     @param in_begin the beginning of the source
+-     @param in_end the ending of the source
+-     @param out the destination iterator
+-     @param alphabet which alphabet should be used
+-     @returns the iterator to the next element past the last element copied
+-     @throws see `Input_iterator` and `Output_iterator`
+-    */
++     * Encodes all the elements from `in_begin` to `in_end` to `out`.
++     *
++     * @warning The source and destination cannot overlap. The
++     *     destination must be able to hold at least
++     *     `required_encode_size(std::distance(in_begin, in_end))`,
++     *     otherwise the behavior depends on the output iterator.
++     *
++     * @tparam Input_iterator the source; the returned elements are cast
++     *     to `std::uint8_t` and should not be greater than 8 bits
++     * @tparam Output_iterator the destination; the elements written to it are from the type `char`
++     * @param in_begin the beginning of the source
++     * @param in_end the ending of the source
++     * @param out the destination iterator
++     * @param alphabet which alphabet should be used
++     * @returns the iterator to the next element past the last element copied
++     * @throws see `Input_iterator` and `Output_iterator`
++     */
+     template<typename Input_iterator, typename Output_iterator>
+     static Output_iterator encode(Input_iterator in_begin, Input_iterator in_end, Output_iterator out,
+                                   alphabet alphabet = alphabet::standard)
+@@ -142,60 +144,59 @@ public:
+
+         return out;
+     }
++
+     /**
+-     Encodes a string.
+-
+-     @param str the string that should be encoded
+-     @param alphabet which alphabet should be used
+-     @returns the encoded base64 string
+-     @throws see base64::encode()
+-    */
+-    static std::string encode(const std::string& str, alphabet alphabet = alphabet::standard)
++     * Encodes a string.
++     *
++     * @param str the string that should be encoded
++     * @param alphabet which alphabet should be used
++     * @returns the encoded base64 string
++     * @throws see base64::encode()
++     */
++    static std::string encode(const std::string_view& str, alphabet alphabet = alphabet::standard)
+     {
+         std::string result;
+-
+         result.reserve(required_encode_size(str.length()) + 1);
+-
+         encode(str.begin(), str.end(), std::back_inserter(result), alphabet);
+-
+         return result;
+     }
+-    /**
+-     Encodes a char array.
+
+-     @param buffer the char array
+-     @param size the size of the array
+-     @param alphabet which alphabet should be used
+-     @returns the encoded string
+-    */
++    /**
++     * Encodes a char array.
++     *
++     * @param buffer the char array
++     * @param size the size of the array
++     * @param alphabet which alphabet should be used
++     * @returns the encoded string
++     */
+     static std::string encode(const char* buffer, std::size_t size, alphabet alphabet = alphabet::standard)
+     {
+         std::string result;
+-
+         result.reserve(required_encode_size(size) + 1);
+-
+         encode(buffer, buffer + size, std::back_inserter(result), alphabet);
+-
+         return result;
+     }
++
+     /**
+-     Decodes all the elements from `in_begin` to `in_end` to `out`. `in_begin` may point to the same location as `out`,
+-     in other words: inplace decoding is possible.
+-
+-     @warning The destination must be able to hold at least `required_decode_size(std::distance(in_begin, in_end))`,
+-     otherwise the behavior depends on the output iterator.
+-
+-     @tparam Input_iterator the source; the returned elements are cast to `char`
+-     @tparam Output_iterator the destination; the elements written to it are from the type `std::uint8_t`
+-     @param in_begin the beginning of the source
+-     @param in_end the ending of the source
+-     @param out the destination iterator
+-     @param alphabet which alphabet should be used
+-     @param behavior the behavior when an error was detected
+-     @returns the iterator to the next element past the last element copied
+-     @throws base64_error depending on the set behavior
+-     @throws see `Input_iterator` and `Output_iterator`
+-    */
++     * Decodes all the elements from `in_begin` to `in_end` to `out`.
++     * `in_begin` may point to the same location as `out`, in other
++     * words: inplace decoding is possible.
++     *
++     * @warning The destination must be able to hold at least
++     *     `required_decode_size(std::distance(in_begin, in_end))`,
++     *     otherwise the behavior depends on the output iterator.
++     *
++     * @tparam Input_iterator the source; the returned elements are cast to `char`
++     * @tparam Output_iterator the destination; the elements written to it are from the type `std::uint8_t`
++     * @param in_begin the beginning of the source
++     * @param in_end the ending of the source
++     * @param out the destination iterator
++     * @param alphabet which alphabet should be used
++     * @param behavior the behavior when an error was detected
++     * @returns the iterator to the next element past the last element copied
++     * @throws base64_error depending on the set behavior
++     * @throws see `Input_iterator` and `Output_iterator`
++     */
+     template<typename Input_iterator, typename Output_iterator>
+     static Output_iterator decode(Input_iterator in_begin, Input_iterator in_end, Output_iterator out,
+                                   alphabet alphabet          = alphabet::auto_,
+@@ -242,99 +243,99 @@ public:
+
+         return out;
+     }
++
+     /**
+-     Decodes a string.
+-
+-     @param str the base64 encoded string
+-     @param alphabet which alphabet should be used
+-     @param behavior the behavior when an error was detected
+-     @returns the decoded string
+-     @throws see base64::decode()
+-    */
+-    static std::string decode(const std::string& str, alphabet alphabet = alphabet::auto_,
++     * Decodes a string.
++     *
++     * @param str the base64 encoded string
++     * @param alphabet which alphabet should be used
++     * @param behavior the behavior when an error was detected
++     * @returns the decoded string
++     * @throws see base64::decode()
++     */
++    static std::string decode(const std::string_view& str, alphabet alphabet = alphabet::auto_,
+                               decoding_behavior behavior = decoding_behavior::moderate)
+     {
+         std::string result;
+-
+         result.reserve(max_decode_size(str.length()));
+-
+         decode(str.begin(), str.end(), std::back_inserter(result), alphabet, behavior);
+-
+         return result;
+     }
++
+     /**
+-     Decodes a string.
+-
+-     @param buffer the base64 encoded buffer
+-     @param size the size of the buffer
+-     @param alphabet which alphabet should be used
+-     @param behavior the behavior when an error was detected
+-     @returns the decoded string
+-     @throws see base64::decode()
+-    */
++     * Decodes a string.
++     *
++     * @param buffer the base64 encoded buffer
++     * @param size the size of the buffer
++     * @param alphabet which alphabet should be used
++     * @param behavior the behavior when an error was detected
++     * @returns the decoded string
++     * @throws see base64::decode()
++     */
+     static std::string decode(const char* buffer, std::size_t size, alphabet alphabet = alphabet::auto_,
+                               decoding_behavior behavior = decoding_behavior::moderate)
+     {
+         std::string result;
+-
+         result.reserve(max_decode_size(size));
+-
+         decode(buffer, buffer + size, std::back_inserter(result), alphabet, behavior);
+-
+         return result;
+     }
+-    /**
+-     Decodes a string inplace.
+
+-     @param[in,out] str the base64 encoded string
+-     @param alphabet which alphabet should be used
+-     @param behavior the behavior when an error was detected
+-     @throws base64::decode_inplace()
+-    */
++    /**
++     * Decodes a string inplace.
++     *
++     * @param[in,out] str the base64 encoded string
++     * @param alphabet which alphabet should be used
++     * @param behavior the behavior when an error was detected
++     * @throws base64::decode_inplace()
++     */
+     static void decode_inplace(std::string& str, alphabet alphabet = alphabet::auto_,
+                                decoding_behavior behavior = decoding_behavior::moderate)
+     {
+         str.resize(decode(str.begin(), str.end(), str.begin(), alphabet, behavior) - str.begin());
+     }
++
+     /**
+-     Decodes a char array inplace.
+-
+-     @param[in,out] str the string array
+-     @param size the length of the array
+-     @param alphabet which alphabet should be used
+-     @param behavior the behavior when an error was detected
+-     @returns the pointer to the next element past the last element decoded
+-     @throws base64::decode_inplace()
+-    */
++     * Decodes a char array inplace.
++     *
++     * @param[in,out] str the string array
++     * @param size the length of the array
++     * @param alphabet which alphabet should be used
++     * @param behavior the behavior when an error was detected
++     * @returns the pointer to the next element past the last element decoded
++     * @throws base64::decode_inplace()
++     */
+     static char* decode_inplace(char* str, std::size_t size, alphabet alphabet = alphabet::auto_,
+                                 decoding_behavior behavior = decoding_behavior::moderate)
+     {
+         return decode(str, str + size, str, alphabet, behavior);
+     }
+-    /**
+-     Returns the required decoding size for a given size. The value is calculated with the following formula:
+-
+-     $$
+-     \lceil \frac{size}{4} \rceil \cdot 3
+-     $$
+
+-     @param size the size of the encoded input
+-     @returns the size of the resulting decoded buffer; this the absolute maximum
+-    */
++    /**
++     * Returns the required decoding size for a given size. The value is calculated with the following formula:
++     *
++     * $$
++     * \lceil \frac{size}{4} \rceil \cdot 3
++     * $$
++     *
++     * @param size the size of the encoded input
++     * @returns the size of the resulting decoded buffer; this the absolute maximum
++     */
+     static std::size_t max_decode_size(std::size_t size) noexcept
+     {
+         return (size / 4 + (size % 4 ? 1 : 0)) * 3;
+     }
+-    /**
+-     Returns the required encoding size for a given size. The value is calculated with the following formula:
+-
+-     $$
+-     \lceil \frac{size}{3} \rceil \cdot 4
+-     $$
+
+-     @param size the size of the decoded input
+-     @returns the size of the resulting encoded buffer
+-    */
++    /**
++     * Returns the required encoding size for a given size. The value is calculated with the following formula:
++     *
++     * $$
++     * \lceil \frac{size}{3} \rceil \cdot 4
++     * $$
++     *
++     * @param size the size of the decoded input
++     * @returns the size of the resulting encoded buffer
++     */
+     static std::size_t required_encode_size(std::size_t size) noexcept
+     {
+         return (size / 3 + (size % 3 ? 1 : 0)) * 4;
+diff --git llama.cpp/common.cpp llama.cpp/common.cpp
+index 382d585..dba1b3e 100644

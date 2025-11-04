@@ -1,0 +1,65 @@
+--- llama.cpp/ggml-backend-impl.h
++++ llama.cpp/ggml-backend-impl.h
+@@ -1,3 +1,5 @@
++// -*- mode:c;indent-tabs-mode:nil;c-basic-offset:4;coding:utf-8 -*-
++// vi: set et ft=c ts=4 sts=4 sw=4 fenc=utf-8 :vi
+ #pragma once
+
+ // ggml-backend internal header
+@@ -148,6 +150,54 @@ extern "C" {
+
+     GGML_CALL void ggml_backend_register(const char * name, ggml_backend_init_fn init_fn, ggml_backend_buffer_type_t default_buffer_type, void * user_data);
+
++    //
++    // GGML Backend API
++    //
++    // This struct includes all functions that a backend module needs
++    // the application to define.
++    //
++
++    struct ggml_backend_api {
++        bool *FLAG_log_disable;
++        void (*GGML_CALL exit)(int);
++        void (*GGML_CALL free)(void *);
++        void *(*GGML_CALL malloc)(size_t);
++        char *(*GGML_CALL getenv)(const char *);
++        long (*GGML_CALL write)(int, const void *, long);
++        void (*GGML_CALL ggml_backend_register)(const char *, ggml_backend_init_fn, ggml_backend_buffer_type_t, void *);
++        ggml_backend_buffer_t (*GGML_CALL ggml_backend_buffer_init)(ggml_backend_buffer_type_t, struct ggml_backend_buffer_i, ggml_backend_buffer_context_t, size_t);
++        ggml_backend_buffer_t (*GGML_CALL ggml_backend_cpu_buffer_from_ptr)(void *, size_t);
++        ggml_backend_buffer_type_t (*GGML_CALL ggml_backend_cpu_buffer_type)(void);
++        size_t (*GGML_CALL ggml_backend_buft_get_alloc_size)(ggml_backend_buffer_type_t, struct ggml_tensor *);
++        ggml_backend_buffer_t (*GGML_CALL ggml_backend_buft_alloc_buffer)(ggml_backend_buffer_type_t, size_t);
++        bool (*GGML_CALL ggml_backend_is_cpu)(ggml_backend_t);
++        void (*GGML_CALL ggml_backend_tensor_get)(const struct ggml_tensor *, void *, size_t, size_t);
++        void (*GGML_CALL ggml_backend_tensor_set)(struct ggml_tensor *, const void *, size_t, size_t);
++        bool (*GGML_CALL ggml_is_quantized)(enum ggml_type);
++        size_t (*GGML_CALL ggml_type_size)(enum ggml_type);
++        int64_t (*GGML_CALL ggml_blck_size)(enum ggml_type);
++        bool (*GGML_CALL ggml_is_transposed)(const struct ggml_tensor *);
++        size_t (*GGML_CALL ggml_nbytes)(const struct ggml_tensor *);
++        enum ggml_unary_op (*GGML_CALL ggml_get_unary_op)(const struct ggml_tensor *);
++        int64_t (*GGML_CALL ggml_nelements)(const struct ggml_tensor *);
++        int64_t (*GGML_CALL ggml_nrows)(const struct ggml_tensor *);
++        bool (*GGML_CALL ggml_is_permuted)(const struct ggml_tensor *);
++        bool (*GGML_CALL ggml_is_contiguous)(const struct ggml_tensor *);
++        const char *(*GGML_CALL ggml_op_name)(enum ggml_op);
++        const char *(*GGML_CALL ggml_type_name)(enum ggml_type);
++        size_t (*GGML_CALL ggml_element_size)(const struct ggml_tensor *);
++        size_t (*GGML_CALL ggml_row_size)(enum ggml_type, int64_t);
++        void (*GGML_CALL ggml_rope_yarn_corr_dims)(int, int, float, float, float, float[2]);
++        const char *(*GGML_CALL ggml_op_desc)(const struct ggml_tensor *);
++        bool (*GGML_CALL ggml_backend_buffer_is_host)(ggml_backend_buffer_t);
++        bool (*GGML_CALL ggml_guid_matches)(ggml_guid_t, ggml_guid_t);
++        bool (*GGML_CALL ggml_is_empty)(const struct ggml_tensor *);
++        enum ggml_backend_buffer_usage (*GGML_CALL ggml_backend_buffer_get_usage)(ggml_backend_buffer_t);
++        bool (*GGML_CALL ggml_are_same_shape)(const struct ggml_tensor *, const struct ggml_tensor *);
++        bool (*GGML_CALL ggml_is_contiguous_1)(const struct ggml_tensor *);
++        bool (*GGML_CALL ggml_is_contiguous_2)(const struct ggml_tensor *);
++    };
++
+ #ifdef  __cplusplus
+ }
+ #endif
+diff --git llama.cpp/ggml-backend.c llama.cpp/ggml-backend.c
+index 8856967..ce82fae 100644

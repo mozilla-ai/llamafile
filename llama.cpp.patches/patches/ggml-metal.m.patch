@@ -1,0 +1,175 @@
+--- llama.cpp/ggml-metal.m
++++ llama.cpp/ggml-metal.m
+@@ -1,3 +1,5 @@
++// -*- mode:objc;indent-tabs-mode:nil;c-basic-offset:4;coding:utf-8 -*-
++// vi: set et ft=objc ts=4 sts=4 sw=4 fenc=utf-8 :vi
+ #import "ggml-metal.h"
+
+ #import "ggml-backend-impl.h"
+@@ -7,6 +9,92 @@
+
+ #import <Metal/Metal.h>
+
++static const struct ggml_backend_api *g_backend; // [jart]
++
++#define FLAG_log_disable (*g_backend->FLAG_log_disable)
++#define ggml_backend_buffer_init g_backend->ggml_backend_buffer_init
++#define ggml_backend_buffer_is_host g_backend->ggml_backend_buffer_is_host
++#define ggml_backend_is_cpu g_backend->ggml_backend_is_cpu
++#define ggml_blck_size g_backend->ggml_blck_size
++#define ggml_get_unary_op g_backend->ggml_get_unary_op
++#define ggml_is_contiguous g_backend->ggml_is_contiguous
++#define ggml_is_contiguous_1 g_backend->ggml_is_contiguous_1
++#define ggml_is_quantized g_backend->ggml_is_quantized
++#define ggml_is_transposed g_backend->ggml_is_transposed
++#define ggml_nbytes g_backend->ggml_nbytes
++#define ggml_nelements g_backend->ggml_nelements
++#define ggml_nrows g_backend->ggml_nrows
++#define ggml_op_desc g_backend->ggml_op_desc
++#define ggml_op_name g_backend->ggml_op_name
++#define ggml_type_size g_backend->ggml_type_size
++#define ggml_guid_matches g_backend->ggml_guid_matches
++#define ggml_is_empty g_backend->ggml_is_empty
++#define ggml_are_same_shape g_backend->ggml_are_same_shape
++
++void ggml_metal_link(const struct ggml_backend_api *backend_api) {
++    g_backend = backend_api;
++}
++
++GGML_NORETURN
++static void exit_(int rc) {
++    g_backend->exit(rc);
++#define exit exit_
++#if defined(__GNUC__) || defined(__llvm__)
++    __builtin_unreachable();
++#elif defined(_MSC_VER)
++    __assume(0);
++#endif
++    for (;;);
++}
++
++// printf() and fprintf() runtime bridge
++// this is needed so text gets printed on windows
++// it also helps ensure the atomicity of log lines
++static void ggml_metal_print(const char *fmt, ...) {
++#define GGML_METAL_PRINT_BUFSIZ 512
++#define fflush(_) (void)0
++#define printf(...) ggml_metal_print(__VA_ARGS__)
++#define fprintf(_, ...) ggml_metal_print(__VA_ARGS__)
++    int len;
++    va_list va;
++    char buf[GGML_METAL_PRINT_BUFSIZ];
++    va_start(va, fmt);
++    len = vsnprintf(buf, GGML_METAL_PRINT_BUFSIZ, fmt, va);
++    va_end(va);
++    if (len < 0)
++        len = strnlen(buf, GGML_METAL_PRINT_BUFSIZ);
++    if (len >= GGML_METAL_PRINT_BUFSIZ) {
++        len = GGML_METAL_PRINT_BUFSIZ;
++        buf[len - 4] = '.';
++        buf[len - 3] = '.';
++        buf[len - 2] = '.';
++        buf[len - 1] = '\n';
++    }
++    g_backend->write(2, buf, len);
++}
++
++GGML_NORETURN
++void ggml_abort(const char * file, int line, const char * fmt, ...) {
++    int len;
++    va_list va;
++    char buf[GGML_METAL_PRINT_BUFSIZ];
++    va_start(va, fmt);
++    len = vsnprintf(buf, GGML_METAL_PRINT_BUFSIZ, fmt, va);
++    va_end(va);
++    if (len < 0)
++        len = strnlen(buf, GGML_METAL_PRINT_BUFSIZ);
++    if (len >= GGML_METAL_PRINT_BUFSIZ) {
++        len = GGML_METAL_PRINT_BUFSIZ;
++        buf[len - 4] = '.';
++        buf[len - 3] = '.';
++        buf[len - 2] = '.';
++        buf[len - 1] = '\n';
++    }
++    ggml_metal_print("%s:%d: ", file, line);
++    g_backend->write(2, buf, len);
++    exit_(1);
++}
++
+ #undef MIN
+ #undef MAX
+ #define MIN(a, b) ((a) < (b) ? (a) : (b))
+@@ -216,6 +304,10 @@
+     id<MTLDevice>       device;
+     id<MTLCommandQueue> queue;
+
++    int family;
++    int family_common;
++    int metal_version;
++
+     dispatch_queue_t d_queue;
+
+     struct ggml_metal_kernel kernels[GGML_METAL_KERNEL_TYPE_COUNT];
+@@ -242,6 +334,8 @@ @implementation GGMLMetalClass
+ @end
+
+ static void ggml_metal_default_log_callback(enum ggml_log_level level, const char * msg, void * user_data) {
++    if (FLAG_log_disable) return; // [jart]
++
+     fprintf(stderr, "%s", msg);
+
+     UNUSED(level);
+@@ -417,6 +511,7 @@ static void ggml_metal_log(enum ggml_log_level level, const char * format, ...){
+         for (int i = MTLGPUFamilyApple1 + 20; i >= MTLGPUFamilyApple1; --i) {
+             if ([ctx->device supportsFamily:i]) {
+                 GGML_METAL_LOG_INFO("%s: GPU family: MTLGPUFamilyApple%d  (%d)\n", __func__, i - (int) MTLGPUFamilyApple1 + 1, i);
++                ctx->family = i - MTLGPUFamilyApple1 + 1;
+                 break;
+             }
+         }
+@@ -424,6 +519,7 @@ static void ggml_metal_log(enum ggml_log_level level, const char * format, ...){
+         for (int i = MTLGPUFamilyCommon1 + 5; i >= MTLGPUFamilyCommon1; --i) {
+             if ([ctx->device supportsFamily:i]) {
+                 GGML_METAL_LOG_INFO("%s: GPU family: MTLGPUFamilyCommon%d (%d)\n", __func__, i - (int) MTLGPUFamilyCommon1 + 1, i);
++                ctx->family_common = i - MTLGPUFamilyCommon1 + 1;
+                 break;
+             }
+         }
+@@ -431,6 +527,7 @@ static void ggml_metal_log(enum ggml_log_level level, const char * format, ...){
+         for (int i = MTLGPUFamilyMetal3 + 5; i >= MTLGPUFamilyMetal3; --i) {
+             if ([ctx->device supportsFamily:i]) {
+                 GGML_METAL_LOG_INFO("%s: GPU family: MTLGPUFamilyMetal%d  (%d)\n", __func__, i - (int) MTLGPUFamilyMetal3 + 3, i);
++                ctx->metal_version = i - MTLGPUFamilyMetal3 + 3;
+                 break;
+             }
+         }
+@@ -3277,6 +3374,27 @@ void ggml_backend_metal_set_abort_callback(ggml_backend_t backend, ggml_abort_ca
+     ctx->abort_callback_data = user_data;
+ }
+
++void ggml_backend_metal_get_device_properties(ggml_backend_t backend, struct ggml_metal_device_properties * properties) {
++    GGML_ASSERT(ggml_backend_is_metal(backend));
++
++    struct ggml_backend_metal_context * ctx = (struct ggml_backend_metal_context *)backend->context;
++
++    strncpy(properties->name, [ctx->device name].UTF8String, sizeof(ctx->device.name));
++    properties->memory = ctx->device.recommendedMaxWorkingSetSize / 1073741824.0 ; // TODO is this what i want? mb? 1024*1024*1024 is bytes to gb
++    properties->gpu_family = ctx->family;
++    properties->gpu_family_common = ctx->family_common;
++    properties->metal_version = ctx->metal_version;
++}
++
++void ggml_backend_metal_get_device_memory_usage(ggml_backend_t backend, float * used, float * total) {
++    GGML_ASSERT(ggml_backend_is_metal(backend));
++
++    struct ggml_backend_metal_context * ctx = (struct ggml_backend_metal_context *)backend->context;
++
++    *used = (float)ctx->device.currentAllocatedSize / 1024.0 / 1024.0;
++    *total = (float)ctx->device.recommendedMaxWorkingSetSize / 1024.0 / 1024.0;
++}
++
+ bool ggml_backend_metal_supports_family(ggml_backend_t backend, int family) {
+     GGML_ASSERT(ggml_backend_is_metal(backend));
+
+diff --git llama.cpp/ggml-metal.metal llama.cpp/ggml-metal.metal
+index 3bb37d3..eb07c83 100644

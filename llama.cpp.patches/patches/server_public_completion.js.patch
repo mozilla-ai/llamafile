@@ -1,0 +1,83 @@
+--- llama.cpp/server/public/completion.js
++++ llama.cpp/server/public/completion.js
+@@ -7,6 +7,20 @@ const paramDefaults = {
+
+ let generation_settings = null;
+
++// Returns a new URL that starts with `urlPrefix` and ends with `path`. The
++// `path` must not begin with a slash. This is more robust than `new URL(path,
++// urlPrefix)` because it preserves the prefix's entire path, even when the
++// prefix has no trailing slash.
++function buildUrl(urlPrefix, path) {
++  if (path.startsWith('/')) {
++    throw new Error("path must not have a leading slash");
++  }
++  const base = new URL(urlPrefix);
++  if (!base.pathname.endsWith('/')) {
++    base.pathname += '/';
++  }
++  return new URL(path, base);
++}
+
+ // Completes the prompt as a generator. Recommended for most use cases.
+ //
+@@ -21,15 +35,14 @@ let generation_settings = null;
+ //
+ export async function* llama(prompt, params = {}, config = {}) {
+   let controller = config.controller;
+-  const api_url = config.api_url?.replace(/\/+$/, '') || "";
+-
++  const url_prefix = config.url_prefix || "";
+   if (!controller) {
+     controller = new AbortController();
+   }
+
+   const completionParams = { ...paramDefaults, ...params, prompt };
+
+-  const response = await fetch(`${api_url}/completion`, {
++  const response = await fetch(buildUrl(url_prefix, 'completion'), {
+     method: 'POST',
+     body: JSON.stringify(completionParams),
+     headers: {
+@@ -97,18 +110,18 @@ export async function* llama(prompt, params = {}, config = {}) {
+             }
+           }
+           if (result.error) {
+-            try {
+-              result.error = JSON.parse(result.error);
+-              if (result.error.message.includes('slot unavailable')) {
+-                // Throw an error to be caught by upstream callers
+-                throw new Error('slot unavailable');
+-              } else {
+-                console.error(`llama.cpp error [${result.error.code} - ${result.error.type}]: ${result.error.message}`);
+-              }
+-            } catch(e) {
+-              console.error(`llama.cpp error ${result.error}`)
++            result.error = JSON.parse(result.error);
++            if (result.error.content.includes('slot unavailable')) {
++              // Throw an error to be caught by upstream callers
++              throw new Error('slot unavailable');
++            } else {
++              console.error(`llama.cpp error: ${result.error.content}`);
+             }
+           }
++          if (result.error) {
++            result.error = JSON.parse(result.error);
++            console.error(`llama.cpp error: ${result.error.content}`);
++          }
+         }
+       }
+     }
+@@ -196,8 +209,8 @@ export const llamaComplete = async (params, controller, callback) => {
+ // Get the model info from the server. This is useful for getting the context window and so on.
+ export const llamaModelInfo = async (config = {}) => {
+   if (!generation_settings) {
+-    const api_url = config.api_url?.replace(/\/+$/, '') || "";
+-    const props = await fetch(`${api_url}/props`).then(r => r.json());
++    const url_prefix = config.url_prefix || "";
++    const props = await fetch(buildUrl(url_prefix, 'props')).then(r => r.json());
+     generation_settings = props.default_generation_settings;
+   }
+   return generation_settings;
+diff --git llama.cpp/server/public/index.html llama.cpp/server/public/index.html
+index 8334bcd..7b32b88 100644

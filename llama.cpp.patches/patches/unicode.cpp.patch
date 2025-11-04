@@ -1,0 +1,10 @@
+--- llama.cpp/unicode.cpp
++++ llama.cpp/unicode.cpp
+@@ -5,6 +5,7 @@
+ #include "unicode.h"
+ #include "unicode-data.h"
+
++#include <algorithm>
+ #include <cassert>
+ #include <cstddef>
+ #include <cstdint>

@@ -1,0 +1,33 @@
+--- llama.cpp/ggml-metal.h
++++ llama.cpp/ggml-metal.h
+@@ -35,6 +35,17 @@ struct ggml_cgraph;
+ extern "C" {
+ #endif
+
++struct ggml_metal_device_properties {
++    char name[256];
++    float memory;
++    int core_count;
++    int metal_version;
++    int gpu_family;
++    int gpu_family_common;
++};
++
++void ggml_metal_link(const struct ggml_backend_api *);
++
+ //
+ // backend API
+ // user-code should use only these functions
+@@ -54,6 +65,10 @@ GGML_API void ggml_backend_metal_set_abort_callback(ggml_backend_t backend, ggml
+
+ GGML_API GGML_CALL ggml_backend_buffer_type_t ggml_backend_metal_buffer_type(void);
+
++GGML_API void ggml_backend_metal_get_device_properties(ggml_backend_t backend, struct ggml_metal_device_properties * properties);
++
++GGML_API void ggml_backend_metal_get_device_memory_usage(ggml_backend_t backend, float * used, float * total);
++
+ // helper to check if the device supports a specific family
+ // ideally, the user code should be doing these checks
+ // ref: https://developer.apple.com/metal/Metal-Feature-Set-Tables.pdf
+diff --git llama.cpp/ggml-metal.m llama.cpp/ggml-metal.m
+index 995f193..0ef8c86 100644

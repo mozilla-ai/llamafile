@@ -1,0 +1,95 @@
+--- llama.cpp/llava/llava-cli.cpp
++++ llama.cpp/llava/llava-cli.cpp
+@@ -1,15 +1,20 @@
+-#include "ggml.h"
+-#include "log.h"
+-#include "common.h"
++// -*- mode:c++;indent-tabs-mode:nil;c-basic-offset:4;tab-width:8;coding:utf-8 -*-
++// vi: set et ft=cpp ts=4 sts=4 sw=4 fenc=utf-8 :vi
++
++#include "llama.cpp/ggml.h"
++#include "llama.cpp/common.h"
+ #include "clip.h"
+ #include "llava.h"
+-#include "llama.h"
+-
+-#include "base64.hpp"
++#include "llama.cpp/llama.h"
++#include "llama.cpp/base64.h"
++#include "llamafile/version.h"
+
+ #include <cstdio>
+ #include <cstdlib>
+ #include <vector>
++#include <unistd.h>
++#include <signal.h>
++#include <iostream>
+
+ static bool eval_tokens(struct llama_context * ctx_llama, std::vector<llama_token> tokens, int n_batch, int * n_past) {
+     int N = (int) tokens.size();
+@@ -112,6 +117,16 @@ struct llava_context {
+     struct llama_model * model = NULL;
+ };
+
++struct llava_context * volatile g_ctx;
++static void sigint_handler(int signo) {
++    if (signo == SIGINT) {
++        printf("\n");
++        if (g_ctx)
++            llama_print_timings(g_ctx->ctx_llama);
++        _exit(128 + SIGINT);
++    }
++}
++
+ static void print_usage(int argc, char ** argv, const gpt_params & params) {
+     gpt_params_print_usage(argc, argv, params);
+
+@@ -129,14 +144,14 @@ static struct llava_image_embed * load_image(llava_context * ctx_llava, gpt_para
+         if (!params->image.empty()) {
+             LOG_TEE("using base64 encoded image instead of command line image path\n");
+         }
+-        embed = llava_image_embed_make_with_prompt_base64(ctx_llava->ctx_clip, params->n_threads, prompt);
++        embed = llava_image_embed_make_with_prompt_base64(ctx_llava->ctx_clip, params->n_threads_batch, prompt); // [jart] batch
+         if (!embed) {
+             LOG_TEE("%s: can't load image from prompt\n", __func__);
+             return NULL;
+         }
+         params->prompt = remove_image_from_prompt(prompt);
+     } else {
+-        embed = llava_image_embed_make_with_filename(ctx_llava->ctx_clip, params->n_threads, fname.c_str());
++        embed = llava_image_embed_make_with_filename(ctx_llava->ctx_clip, params->n_threads_batch, fname.c_str()); // [jart] batch
+         if (!embed) {
+             fprintf(stderr, "%s: is %s really an image file?\n", __func__, fname.c_str());
+             return NULL;
+@@ -251,6 +266,7 @@ static struct llava_context * llava_init_context(gpt_params * params, llama_mode
+     }
+
+     auto ctx_llava = (struct llava_context *)malloc(sizeof(llava_context));
++    g_ctx = ctx_llava; // [jart] nosync
+
+     ctx_llava->ctx_llama = ctx_llama;
+     ctx_llava->ctx_clip = ctx_clip;
+@@ -275,15 +291,14 @@ static void llama_log_callback_logTee(ggml_log_level level, const char * text, v
+     LOG_TEE("%s", text);
+ }
+
+-int main(int argc, char ** argv) {
++int llava_cli(int argc, char ** argv, gpt_params & params) {
+     ggml_time_init();
+
+-    gpt_params params;
+-
+-    if (!gpt_params_parse(argc, argv, params)) {
+-        print_usage(argc, argv, params);
+-        return 1;
+-    }
++    struct sigaction sa;
++    sa.sa_handler = sigint_handler;
++    sigemptyset(&sa.sa_mask);
++    sa.sa_flags = 0;
++    sigaction(SIGINT, &sa, NULL);
+
+ #ifndef LOG_DISABLE_LOGS
+     log_set_target(log_filename_generator("llava", "log"));
+diff --git llama.cpp/llava/llava-surgery.py llama.cpp/llava/llava-surgery.py
+index 4f2da3b..515f6b5 100644

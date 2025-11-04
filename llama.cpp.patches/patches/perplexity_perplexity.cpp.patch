@@ -1,0 +1,36 @@
+--- llama.cpp/perplexity/perplexity.cpp
++++ llama.cpp/perplexity/perplexity.cpp
+@@ -1,5 +1,8 @@
+-#include "common.h"
+-#include "llama.h"
++// -*- mode:c++;indent-tabs-mode:nil;c-basic-offset:4;tab-width:8;coding:utf-8 -*-
++// vi: set et ft=cpp ts=4 sts=4 sw=4 fenc=utf-8 :vi
++#include "llama.cpp/common.h"
++#include "llama.cpp/llama.h"
++#include "llama.cpp/string.h"
+
+ #include <cmath>
+ #include <cstdio>
+@@ -1964,6 +1967,20 @@ static void kl_divergence(llama_context * ctx, const gpt_params & params) {
+ int main(int argc, char ** argv) {
+     gpt_params params;
+
++    if (llamafile_has(argv, "--version")) {
++        puts("llamafile-perplexity v" LLAMAFILE_VERSION_STRING);
++        return 0;
++    }
++
++    if (llamafile_has(argv, "-h") ||
++        llamafile_has(argv, "-help") ||
++        llamafile_has(argv, "--help")) {
++        llamafile_help("/zip/llama.cpp/perplexity/perplexity.1.asc");
++        __builtin_unreachable();
++    }
++
++    llamafile_check_cpu();
++
+     params.n_ctx = 512;
+     params.logits_all = true;
+
+diff --git llama.cpp/quantize/quantize.cpp llama.cpp/quantize/quantize.cpp
+index 7312309..90361e1 100644
