@@ -62,6 +62,7 @@ rm -rf docs/
 rm -rf flake.lock
 rm -rf flake.nix
 rm -rf grammars/
+rm -rf include/
 rm -rf media/
 rm -rf mypy.ini
 rm -rf pocs/
@@ -72,6 +73,7 @@ rm -rf pyrightconfig.json
 rm -rf requirements.txt
 rm -rf requirements/
 rm -rf scripts/
+rm -rf server/themes/
 rm -rf spm-headers/
 rm -rf src/
 rm -rf tests/
