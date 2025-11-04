@@ -26,7 +26,14 @@
 
 struct llama_context;
 struct llama_model;
+struct llama_lora_adapter;
 struct clip_ctx;
+
+// Function to get the global LoRA adapter
+extern "C" struct llama_lora_adapter* llamafiler_get_lora_adapter();
+
+// Function to get multiple LoRA adapters with their scales
+extern "C" int llamafiler_get_lora_adapters(struct llama_lora_adapter** adapters, float* scales, int max_adapters);
 
 namespace lf {
 namespace server {
@@ -58,6 +65,7 @@ struct Slot
     llama_context* ctx_ = nullptr;
     std::vector<Atom> history_;
     std::string system_fingerprint_;
+    bool needs_refresh_ = false;
 
     ~Slot();
     Slot(int, llama_model*);
@@ -71,6 +79,7 @@ struct Slot
     int prefill(const std::vector<Atom>&, const ProgressCallback& = nullptr);
     void tokenize(std::vector<Atom>*, std::string_view, bool);
     void dump(std::string*);
+    void mark_for_refresh();
 };
 
 } // namespace server

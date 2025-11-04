@@ -18,6 +18,7 @@
 #include "slot.h"
 #include "llama.cpp/llava/clip.h"
 #include "llama.cpp/llava/llava.h"
+#include "llama.cpp/common.h"
 #include "llamafile/image.h"
 #include "llamafile/llama.h"
 #include "llamafile/llamafile.h"
@@ -31,6 +32,9 @@
 #include <algorithm>
 #include <cassert>
 #include <cosmo.h>
+
+// External declaration for global LoRA adapter storage
+extern std::vector<llama_lora_adapter_container> g_lora_adapters;
 
 namespace lf {
 namespace server {
@@ -79,7 +83,7 @@ Slot::describe_error(int err)
     }
 }
 
-Slot::Slot(int id, llama_model* model) : id_(id), model_(model)
+Slot::Slot(int id, llama_model* model) : id_(id), model_(model), needs_refresh_(false)
 {
     dll_init(&elem_);
     last_used_ = time(0);
@@ -125,6 +129,19 @@ Slot::start()
     system_fingerprint_ = generate_system_fingerprint(&cparams);
     if (!(ctx_ = llama_new_context_with_model(model_, cparams)))
         return false;
+    
+    // Apply LoRA adapters if available using llama.cpp's unified function
+    if (!::g_lora_adapters.empty() && !FLAG_lora_init_without_apply) {
+        SLOG("applying %d LoRA adapter(s) to slot #%d using llama.cpp unified function", 
+             (int)::g_lora_adapters.size(), id_);
+        llama_lora_adapters_apply(ctx_, ::g_lora_adapters);
+    } else if (!::g_lora_adapters.empty() && FLAG_lora_init_without_apply) {
+        // When --lora-init-without-apply is set, explicitly clear any LoRA state
+        // to ensure no residual LoRA effects from model initialization
+        SLOG("clearing LoRA state for slot #%d (--lora-init-without-apply mode)", id_);
+        llama_lora_adapter_clear(ctx_);
+    }
+    
     if (FLAG_mmproj)
         if (!(clip_ctx_ = clip_model_load(FLAG_mmproj, FLAG_verbose)))
             return false;
@@ -293,6 +310,15 @@ Slot::prefill(const std::vector<Atom>& atoms, const ProgressCallback& progress)
     if (!ctx_)
         return uninitialized;
 
+    // Check if we need to refresh due to LoRA adapter changes
+    if (needs_refresh_) {
+        SLOG("Refreshing slot due to LoRA adapter changes");
+        llama_kv_cache_clear(ctx_);
+        history_.clear();
+        needs_refresh_ = false;
+        // Fall through to normal prefill logic with cleared state
+    }
+
     // handle special case of empty prefill
     if (atoms.empty()) {
         llama_kv_cache_clear(ctx_);
@@ -435,6 +461,12 @@ Slot::dump(std::string* result)
             convert_image_to_uri(result, history_[i].image().bytes());
         }
     }
+}
+
+void
+Slot::mark_for_refresh()
+{
+    needs_refresh_ = true;
 }
 
 } // namespace server
