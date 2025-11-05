@@ -1,7 +1,3 @@
-
-
-## Technical details
-
 Here is a succinct overview of the tricks we used to create the fattest
 executable format ever. The long story short is llamafile is a shell
 script that launches itself and runs inference on embedded weights in

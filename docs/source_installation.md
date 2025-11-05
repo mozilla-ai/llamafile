@@ -1,6 +1,3 @@
-
-## Source installation
-
 Developing on llamafile requires a modern version of the GNU `make`
 command (called `gmake` on some systems), `sha256sum` (otherwise `cc`
 will be used to build it), `wget` (or `curl`), and `unzip` available at

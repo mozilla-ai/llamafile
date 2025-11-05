@@ -1,6 +1,3 @@
-
-## Creating llamafiles
-
 If you want to be able to just say:
 
 ```sh

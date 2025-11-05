@@ -31,7 +31,7 @@ chmod +x llava-v1.5-7b-q4.llamafile
 7. When you're done chatting, return to your terminal and hit
 `Control-C` to shut down llamafile.
 
-**Having trouble? See the "Gotchas" section below.**
+**Having trouble? See the [Troubleshooting](troubleshooting.md) page.**
 
 ### JSON API Quickstart
 

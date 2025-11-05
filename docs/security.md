@@ -1,6 +1,3 @@
-
-## Security
-
 llamafile adds pledge() and SECCOMP sandboxing to llama.cpp. This is
 enabled by default. It can be turned off by passing the `--unsecure`
 flag. Sandboxing is currently only supported on Linux and OpenBSD on

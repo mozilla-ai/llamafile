@@ -1,7 +1,4 @@
-
-## Other example llamafiles
-
-We also provide example llamafiles for other models, so you can easily
+We provide example llamafiles for a variety of models, so you can easily
 try out llamafile with different kinds of LLMs.
 
 | Model                   | Size     | License                                                                                                                            | llamafile                                                                                                                                                                                      | other quants                                                                        |
@@ -56,7 +53,7 @@ heart: llamafile allows you to use external weights; this is described
 later in this document.
 
 
-**Having trouble? See the "troubleshooting" section**
+**Having trouble? See the [Troubleshooting](troubleshooting.md) page.**
 
 
 ## A note about models
