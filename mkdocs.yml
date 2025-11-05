@@ -6,12 +6,13 @@ repo_name: llamafile
 nav:
   - Home: index.md
   - Quickstart: quickstart.md
-  - Usage Guide: usage.md
-  - Installation: installation.md
-  - GPU Support: gpu-support.md
-  - Working with Models: models.md
+  - Supported Systems: support.md
+  - Example llamafiles: example_llamafiles.md
+  - Creating llamafiles: creating_llamafiles.md
+  - Source installation: source_installation.md
+  - Technical details: technical_details.md
+  - Security: security.md
   - Troubleshooting: troubleshooting.md
-  - Technical Details: technical-details.md
 
 theme:
   name: material
