@@ -42,7 +42,16 @@ chmod +x llava-v1.5-7b-q4.llamafile
 
 ## Documentation
 
-📚 **Full documentation is available in the [docs/](docs/) folder or online at [mozilla-ai.github.io/llamafile](https://mozilla-ai.github.io/llamafile/)**
+Check the full documentation in the [docs/](docs/) folder or online at [mozilla-ai.github.io/llamafile](https://mozilla-ai.github.io/llamafile/), or directly jump into one of the following subsections:
+
+- [Quickstart](https://mozilla-ai.github.io/llamafile/quickstart/)
+- [Supported Systems](https://mozilla-ai.github.io/llamafile/support/)
+- [Example llamafiles](https://mozilla-ai.github.io/llamafile/example_llamafiles/)
+- [Creating llamafiles](https://mozilla-ai.github.io/llamafile/creating_llamafiles/)
+- [Source installation](https://mozilla-ai.github.io/llamafile/source_installation/)
+- [Technical details](https://mozilla-ai.github.io/llamafile/technical_details/)
+- [Security](https://mozilla-ai.github.io/llamafile/security/)
+- [Troubleshooting](https://mozilla-ai.github.io/llamafile/troubleshooting/)
 
 
 ## Licensing
