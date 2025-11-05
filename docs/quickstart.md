@@ -1,6 +1,3 @@
-
-## Quickstart
-
 The easiest way to try it for yourself is to download our example
 llamafile for the [LLaVA](https://llava-vl.github.io/) model (license: [LLaMA 2](https://ai.meta.com/resources/models-and-libraries/llama-downloads/),
 [OpenAI](https://openai.com/policies/terms-of-use)). LLaVA is a new LLM that can do more
