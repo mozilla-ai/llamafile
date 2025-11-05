@@ -20,7 +20,7 @@ the local file is aligned on a page size boundary. That way, assuming
 the zip file is uncompressed, once it's mmap()'d into memory we can pass
 pointers directly to GPUs like Apple Metal, which require that data be
 page size aligned. Since no existing ZIP archiving tool has an alignment
-flag, we had to write about [500 lines of code](llamafile/zipalign.c) to
+flag, we had to write about [500 lines of code](https://github.com/Mozilla-Ocho/llamafile/blob/HEAD/llamafile/zipalign.c) to
 insert the ZIP files ourselves. However, once there, every existing ZIP
 program should be able to read them, provided they support ZIP64. This
 makes the weights much more easily accessible than they otherwise would
@@ -64,8 +64,8 @@ module, named `ggml-metal.m` (Objective C) and `ggml-cuda.cu` (Nvidia
 C). llamafile embeds those source files within the zip archive and asks
 the platform compiler to build them at runtime, targeting the native GPU
 microarchitecture. If it works, then it's linked with platform C library
-dlopen() implementation. See [llamafile/cuda.c](llamafile/cuda.c) and
-[llamafile/metal.c](llamafile/metal.c).
+dlopen() implementation. See [llamafile/cuda.c](https://github.com/mozilla-ai/llamafile/blob/HEAD/llamafile/cuda.c) and
+[llamafile/metal.c](https://github.com/mozilla-ai/llamafile/blob/HEAD/llamafile/metal.c).
 
 In order to use the platform-specific dlopen() function, we need to ask
 the platform-specific compiler to build a small executable that exposes

@@ -48,7 +48,7 @@ mirostat) that may also be used. For further details on what fields and
 endpoints are available, refer to both the [OpenAI
 documentation](https://platform.openai.com/docs/api-reference/chat/create)
 and the [llamafile server
-README](llama.cpp/server/README.md#api-endpoints).
+README](https://github.com/mozilla-ai/llamafile/blob/HEAD/llamafile/server/README.md#api-endpoints).
 
 <details>
 <summary>Curl API Client Example</summary>
