@@ -184,14 +184,22 @@ when running the above command.
 This section answers the question *"I already have a model downloaded locally by application X, can I use it with llamafile?"*. The general answer is "yes, as long as those models are locally stored in GGUF format" but its implementation can be more or less hacky depending on the application. A few examples (tested on a Mac) follow.
 
 ### LM Studio
-[LM Studio](https://lmstudio.ai/) stores downloaded models in `~/.cache/lm-studio/models`, in subdirectories with the same name of the models (following HuggingFace's `account_name/model_name` format), with the same filename you saw when you chose to download the file.
-
- So if you have downloaded e.g. the `llama-2-7b.Q2_K.gguf` file for `TheBloke/Llama-2-7B-GGUF`, you can run llamafile as follows:
+[LM Studio](https://lmstudio.ai/) (recent versions) stores downloaded models in `~/.lmstudio/models/`, in subdirectories like `.lmstudio/models/lmstudio-community/`, `.lmstudio/models/mlx-community/`, `~/.lmstudio/models/nightmedia/`. Older versions used to save models with the same name of the models (following HuggingFace's `account_name/model_name` format). According to documentation LM Studio aims to preserves the directory structure of models downloaded from Hugging Face. The expected directory structure is as follows:
 
 ```
-cd ~/.cache/lm-studio/models/TheBloke/Llama-2-7B-GGUF
-llamafile -m llama-2-7b.Q2_K.gguf
+~/.lmstudio/models/
+└── publisher/
+    └── model/
+        └── model-file.gguf
 ```
+
+ So if user has downloaded e.g. the `phi-4-reasoning-plus` file for `microsoft/phi-4-reasoning-plus`, user can run `llamafile` as follows:
+
+```
+llamafile -m ~/.lmstudio/models/lmstudio-community/Phi-4-reasoning-plus-GGUF/Phi-4-reasoning-plus-Q8_0.gguf
+```
+
+For more details check [LM Studio Documentation](https://lmstudio.ai/docs/app/advanced/import-model).
 
 ### Ollama
 
