@@ -33,6 +33,7 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <limits.h>
+#include <poll.h>
 #include <string.h>
 #include <string>
 #include <sys/stat.h>
@@ -526,8 +527,23 @@ Client::send_binary(const void* p, size_t n) {
     while (written < n) {
         ssize_t sent = write(fd_, buf + written, n - written);
         if (sent == -1) {
+            if (errno == EINTR)
+                continue;
             if (errno == EAGAIN || errno == EWOULDBLOCK) {
-                // no data can be written right now; retry
+                struct pollfd pfd = { .fd = fd_, .events = POLLOUT };
+                int ret = poll(&pfd, 1, FLAG_http_write_timeout);
+                if (ret < 0) {
+                    if (errno == EINTR)
+                        continue;
+                    SLOG("poll failed %m");
+                    close_connection_ = true;
+                    return false;
+                }
+                if (ret == 0) {
+                    SLOG("write timed out");
+                    close_connection_ = true;
+                    return false;
+                }
                 continue;
             }
             if (errno != ECONNRESET)

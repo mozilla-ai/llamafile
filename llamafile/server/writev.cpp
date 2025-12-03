@@ -16,9 +16,12 @@
 // limitations under the License.
 
 #include "llamafile/server/log.h"
+#include "llamafile/llamafile.h"
 #include "utils.h"
 #include <cerrno>
+#include <poll.h>
 #include <string_view>
+#include <vector>
 
 namespace lf {
 namespace server {
@@ -26,6 +29,7 @@ namespace server {
 ssize_t
 safe_writev(int fd, const iovec* iov, int iovcnt)
 {
+    // Security check for binary content in headers
     for (int i = 0; i < iovcnt; ++i) {
         bool has_binary = false;
         size_t n = iov[i].iov_len;
@@ -39,7 +43,50 @@ safe_writev(int fd, const iovec* iov, int iovcnt)
             return -1;
         }
     }
-    return writev(fd, iov, iovcnt);
+
+    ssize_t total = 0;
+    // Create a mutable copy of iovecs to track progress
+    std::vector<iovec> copy(iov, iov + iovcnt);
+    int i = 0; // Current iovec index
+
+    while (i < iovcnt) {
+        ssize_t sent = writev(fd, copy.data() + i, iovcnt - i);
+        if (sent == -1) {
+            if (errno == EINTR)
+                continue;
+            if (errno == EAGAIN || errno == EWOULDBLOCK) {
+                struct pollfd pfd = { .fd = fd, .events = POLLOUT };
+                int rc = poll(&pfd, 1, FLAG_http_write_timeout);
+                if (rc == 0) {
+                    errno = ETIMEDOUT;
+                    return -1;
+                }
+                if (rc == -1) {
+                    if (errno == EINTR)
+                        continue;
+                    return -1;
+                }
+                continue;
+            }
+            return -1;
+        }
+
+        total += sent;
+        size_t got = sent;
+
+        // Advance the iovecs based on bytes written
+        while (got > 0 && i < iovcnt) {
+            if (got >= copy[i].iov_len) {
+                got -= copy[i].iov_len;
+                ++i;
+            } else {
+                copy[i].iov_base = (char*)copy[i].iov_base + got;
+                copy[i].iov_len -= got;
+                got = 0;
+            }
+        }
+    }
+    return total;
 }
 
 } // namespace server

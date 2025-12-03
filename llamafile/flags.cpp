@@ -79,6 +79,7 @@ int FLAG_flash_attn = false;
 int FLAG_gpu = 0;
 int FLAG_http_ibuf_size = 5 * 1024 * 1024;
 int FLAG_http_obuf_size = 1024 * 1024;
+int FLAG_http_write_timeout = 60000;
 int FLAG_keepalive = 5;
 int FLAG_main_gpu = 0;
 int FLAG_n_gpu_layers = -1;
@@ -343,6 +344,13 @@ void llamafile_get_flags(int argc, char **argv) {
             if (i == argc)
                 missing("--http-obuf-size");
             FLAG_http_obuf_size = atoi(argv[i++]);
+            continue;
+        }
+
+        if (!strcmp(flag, "--http-write-timeout")) {
+            if (i == argc)
+                missing("--http-write-timeout");
+            FLAG_http_write_timeout = atoi(argv[i++]);
             continue;
         }
 

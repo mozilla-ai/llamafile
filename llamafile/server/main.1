@@ -171,6 +171,11 @@ supported by the host operating system. The default keepalive is 5.
 Size of HTTP output buffer size, in bytes. Default is 1048576.
 .It Fl Fl http-ibuf-size Ar N
 Size of HTTP input buffer size, in bytes. Default is 1048576.
+.It Fl Fl http-write-timeout Ar MS
+Socket write timeout in milliseconds. When sending data to a client, if
+the socket buffer is full and the client is not reading, the server will
+wait up to this many milliseconds for the socket to become writable before
+closing the connection. Default is 60000 (60 seconds).
 .It Fl Fl chat-template Ar NAME
 Specifies or overrides chat template for model.
 .Pp
