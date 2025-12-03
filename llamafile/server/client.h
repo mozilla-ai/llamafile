@@ -88,6 +88,7 @@ struct Client
     bool send_binary(const void*, size_t) __wur;
     void defer_cleanup(void (*)(void*), void*);
     bool send_error(int, const char* = nullptr);
+    bool send_redirect(int, const std::string_view&);
     char* append_http_response_message(char*, int, const char* = nullptr);
     bool send_response(char*, char*, const std::string_view) __wur;
     bool send_response_start(char*, char*) __wur;
