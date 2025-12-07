@@ -18,6 +18,8 @@
 #include "llama.h"   // llamafile wrapper
 #include "common.h"  // llama.cpp common (pulls in llama.h types)
 #include <cassert>
+#include <climits>
+#include <stdexcept>
 #include <string>
 #include <vector>
 
@@ -50,6 +52,12 @@ std::vector<llama_token> llamafile_tokenize(const struct llama_model *model,
                                             const std::string_view &text, bool add_special,
                                             bool parse_special) {
     const llama_vocab *vocab = llama_model_get_vocab(model);
+    // Prevent integer overflow: ensure text.size() + 2 fits in an int
+    // INT_MAX is typically 2147483647, so check before the addition
+    if (text.size() > static_cast<size_t>(INT_MAX) - 2) {
+        throw std::length_error("cannot create std::vector larger than max_size()");
+    }
+
     int n_tokens = text.size() + 2 * add_special;
     std::vector<llama_token> result(n_tokens);
     n_tokens = llama_tokenize(vocab, text.data(), text.size(), result.data(), result.size(),
