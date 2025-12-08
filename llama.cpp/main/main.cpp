@@ -199,15 +199,15 @@ int main(int argc, char ** argv) {
         __builtin_unreachable();
     }
 
-    enum Program prog = determine_program(argv);
-    if (prog == LLAMAFILER)
-        return lf::server::main(argc, argv);
-
     mallopt(M_GRANULARITY, 2 * 1024 * 1024);
     mallopt(M_MMAP_THRESHOLD, 16 * 1024 * 1024);
     mallopt(M_TRIM_THRESHOLD, 128 * 1024 * 1024);
     ShowCrashReports();
     argc = cosmo_args("/zip/.args", &argv);
+
+    enum Program prog = determine_program(argv);
+    if (prog == LLAMAFILER)
+        return lf::server::run(argc, argv, true);
 
     if (prog == SERVER)
         return server_cli(argc, argv);

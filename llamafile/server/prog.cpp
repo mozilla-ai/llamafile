@@ -35,7 +35,7 @@ namespace server {
 Server* g_server;
 
 int
-main(int argc, char* argv[])
+run(int argc, char* argv[], bool args_already_loaded)
 {
     llamafile_check_cpu();
     signal(SIGPIPE, SIG_IGN);
@@ -56,7 +56,8 @@ main(int argc, char* argv[])
     }
 
     // get config
-    argc = cosmo_args("/zip/.args", &argv);
+    if (!args_already_loaded)
+        argc = cosmo_args("/zip/.args", &argv);
     llamafile_get_flags(argc, argv);
 
     // initialize subsystems

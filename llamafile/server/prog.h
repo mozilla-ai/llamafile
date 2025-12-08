@@ -4,7 +4,7 @@ namespace lf {
 namespace server {
 
 int
-main(int, char**);
+run(int, char**, bool);
 
 } // namespace server
 } // namespace lf

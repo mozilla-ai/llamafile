@@ -20,5 +20,5 @@
 int
 main(int argc, char* argv[])
 {
-    return lf::server::main(argc, argv);
+    return lf::server::run(argc, argv, false);
 }
