@@ -25,10 +25,6 @@ o/$(MODE)/%.o: %.cc $(COSMOCC)
 	@mkdir -p $(@D)
 	$(COMPILE.cc) -o $@ $<
 
-o/$(MODE)/%.o: %.cc $(COSMOCC)
-	@mkdir -p $(@D)
-	$(COMPILE.cc) -o $@ $<
-
 o/$(MODE)/%.o: %.cpp $(COSMOCC)
 	@mkdir -p $(@D)
 	$(COMPILE.cc) -o $@ $<
