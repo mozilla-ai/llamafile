@@ -129,7 +129,7 @@ int main(int argc, char **argv) {
     // either we create a new kind of example for a custom set of flags
     // or we need to deal with them separately and remove them prior to
     // this step (see removeArgs in main.cpp)
-    if (!common_params_parse(argc, argv, *g_params, LLAMA_EXAMPLE_SERVER)) {
+    if (!common_params_parse(argc, argv, *g_params, LLAMA_EXAMPLE_CLI)) {
         fprintf(stderr, "error: failed to parse flags\n");
         exit(1);
     }
