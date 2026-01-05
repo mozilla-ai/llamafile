@@ -1,7 +1,7 @@
 diff --git a/common/download.cpp b/common/download.cpp
 --- a/llama.cpp/common/download.cpp
 +++ b/llama.cpp/common/download.cpp
-@@ -27,6 +27,8 @@
+@@ -29,6 +29,8 @@
  #ifndef __EMSCRIPTEN__
  #ifdef __linux__
  #include <linux/limits.h>
