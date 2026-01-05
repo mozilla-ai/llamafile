@@ -40,7 +40,7 @@
 #endif
 
 // Forward declaration for server main (defined in llama.cpp/tools/server/server.cpp)
-extern int server_main(int argc, char **argv, char **envp);
+extern int server_main(int argc, char **argv);
 
 enum Program {
     PROG_UNKNOWN,
@@ -88,7 +88,7 @@ int removeArgs(int argc, char* argv[], const std::set<std::string>& args_to_remo
 }
 
 
-int main(int argc, char **argv, char **envp) {
+int main(int argc, char **argv) {
 #ifdef COSMOCC
     // Load arguments from zip file if present (for bundled llamafiles)
     argc = cosmo_args("/zip/.args", &argv);
@@ -101,7 +101,7 @@ int main(int argc, char **argv, char **envp) {
         // remove arguments which llama.cpp does not support
         std::set<std::string> args_to_remove = {"--server"};
         argc = removeArgs(argc, argv, args_to_remove);
-        return server_main(argc, argv, envp);
+        return server_main(argc, argv);
     }
 
     // Chat mode (explicit --chat or default when no -p/-f/--random-prompt)
