@@ -1,25 +1,74 @@
 diff --git a/tools/server/server.cpp b/tools/server/server.cpp
 --- a/llama.cpp/tools/server/server.cpp
 +++ b/llama.cpp/tools/server/server.cpp
-@@ -15,6 +15,10 @@
+@@ -15,6 +15,11 @@
  #include <windows.h>
  #endif
-
+ 
 +#ifdef COSMOCC
 +#include <cosmo.h>
++#include "llamafile.h"
 +#endif
 +
  static std::function<void(int)> shutdown_handler;
  static std::atomic_flag is_terminating = ATOMIC_FLAG_INIT;
-
-@@ -66,6 +70,10 @@ static server_http_context::handler_t ex_wrapper(server_http_context::handler_t
+ 
+@@ -65,7 +70,8 @@ static server_http_context::handler_t ex_wrapper(server_http_context::handler_t
+     };
  }
-
- int main(int argc, char ** argv, char ** envp) {
-+    #ifdef COSMOCC
-+    argc = cosmo_args("/zip/.args", &argv);
-+    #endif
-+
+ 
+-int main(int argc, char ** argv, char ** envp) {
++// Core server logic - can be called from llamafile main.cpp or standalone main()
++int server_main(int argc, char ** argv, char ** envp) {
      // own arguments required by this example
      common_params params;
-
+ 
+@@ -89,6 +95,10 @@ int main(int argc, char ** argv, char ** envp) {
+         params.model_alias = params.model.name;
+     }
+ 
++#ifdef COSMOCC
++    llamafile_has_metal();  // triggers Metal backend registration on macOS ARM64
++#endif
++
+     common_init();
+ 
+     // struct that contains llama context and inference
+@@ -302,5 +312,37 @@ int main(int argc, char ** argv, char ** envp) {
+         llama_memory_breakdown_print(ctx_server.get_llama_context());
+     }
+ 
++#ifdef LLAMAFILE_TUI
++    // By now the program can safely exit:
++    // Metal backend has async logging that llama_synchronize() doesn't wait for.
++    // Without this delay, _exit() might truncate llama_memory_breakdown_print's output
++    sleep(1);
++    // Use _exit() to avoid Metal cleanup crash (dangling refs with TUI + Metal + server)
++    _exit(0);
++#else
+     return 0;
++#endif
+ }
++
++// Standalone entry point for llama-server executable
++// Not compiled when building as part of llamafile TUI (which has its own main)
++// Having this allows us to test cosmocc-compiled llama.cpp in isolation.
++#ifndef LLAMAFILE_TUI
++int main(int argc, char ** argv, char ** envp) {
++#ifdef COSMOCC
++    argc = cosmo_args("/zip/.args", &argv);
++
++    // Check if verbose mode is requested (must be set before Metal init)
++    bool verbose = llamafile_has(argv, "--verbose");
++    FLAG_verbose = verbose ? 1 : 0;
++    
++    if (llamafile_has_metal()) {
++        // Metal dylib loaded - disable logging in it too (it has its own copy of ggml)
++        if (!verbose) {
++            llamafile_metal_log_set(llamafile_log_callback_null, NULL);
++        }
++    }
++#endif
++    return server_main(argc, argv, envp);
++}
++#endif

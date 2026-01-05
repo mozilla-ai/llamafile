@@ -1,0 +1,32 @@
+diff --git a/tools/server/server-queue.cpp b/tools/server/server-queue.cpp
+--- a/llama.cpp/tools/server/server-queue.cpp
++++ b/llama.cpp/tools/server/server-queue.cpp
+@@ -4,6 +4,9 @@
+ #include "log.h"
+ 
+ #include <chrono>
++#include <cerrno>
++#include <system_error>
++#include <csignal>
+ 
+ #define QUE_INF(fmt, ...) LOG_INF("que  %12.*s: " fmt, 12, __func__, __VA_ARGS__)
+ #define QUE_WRN(fmt, ...) LOG_WRN("que  %12.*s: " fmt, 12, __func__, __VA_ARGS__)
+@@ -95,6 +98,18 @@ void server_queue::terminate() {
+ }
+ 
+ void server_queue::start_loop() {
++    // Block SIGINT and SIGTERM on this thread to prevent EINTR during
++    // condition_variable::wait(). In Cosmopolitan libc, condition_variable
++    // throws std::system_error(EINTR) when interrupted by signals, and this
++    // exception cannot be caught (goes directly to std::terminate).
++    // The main thread handles these signals, sets running=false, and calls
++    // notify_all() to wake us up cleanly.
++    sigset_t block_mask;
++    sigemptyset(&block_mask);
++    sigaddset(&block_mask, SIGINT);
++    sigaddset(&block_mask, SIGTERM);
++    pthread_sigmask(SIG_BLOCK, &block_mask, nullptr);
++
+     running = true;
+ 
+     while (true) {

@@ -17,7 +17,34 @@
 
 #include "highlight.h"
 #include "util.h"
+
 #include <cosmo.h>
+#include <libc/intrin/bsr.h>
+#include <libc/serialize.h>
+
+// UTF-8 Thompson-Pike macros
+#ifndef ThomPikeCont
+#define ThomPikeCont(x)     (0200 == (0300 & (x)))
+#define ThomPikeByte(x)     ((x) & (((1 << ThomPikeMsb(x)) - 1) | 3))
+#define ThomPikeLen(x)      (7 - ThomPikeMsb(x))
+#define ThomPikeMsb(x)      ((255 & (x)) < 252 ? bsr(255 & ~(x)) : 1)
+#define ThomPikeMerge(x, y) ((x) << 6 | (077 & (y)))
+#endif
+
+// UTF-8 encode a codepoint into a packed uint64 (little-endian)
+static inline uint64_t tpenc(uint32_t c) {
+    if (c < 0x80) {
+        return c;
+    } else if (c < 0x800) {
+        return (0xC0 | (c >> 6)) | ((0x80 | (c & 0x3F)) << 8);
+    } else if (c < 0x10000) {
+        return (0xE0 | (c >> 12)) | ((0x80 | ((c >> 6) & 0x3F)) << 8) |
+               ((0x80 | (c & 0x3F)) << 16);
+    } else {
+        return (0xF0 | (c >> 18)) | ((0x80 | ((c >> 12) & 0x3F)) << 8) |
+               ((0x80 | ((c >> 6) & 0x3F)) << 16) | ((0x80 | (c & 0x3F)) << 24);
+    }
+}
 
 enum
 {

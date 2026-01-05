@@ -16,8 +16,9 @@
 // limitations under the License.
 
 #pragma once
-#include <__fwd/string_view.h>
-#include <__fwd/vector.h>
+#include <string>
+#include <string_view>
+#include <vector>
 
 // Many llama.cpp APIs take boolean parameters at the end. Please favor
 // passing these constants as arguments instead, for better readability

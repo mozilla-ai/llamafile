@@ -18,10 +18,15 @@
 #include "compute.h"
 
 #include <cosmo.h>
+#include <cstring>
 #include <libc/intrin/x86.h>
 #include <sys/auxv.h>
 
-#include "llama.cpp/string.h"
+#include "common.h"
+
+static bool starts_with_str(const char *str, const char *prefix) {
+    return strncmp(str, prefix, strlen(prefix)) == 0;
+}
 
 #ifdef __x86_64__
 static void cpuid(unsigned leaf, unsigned subleaf, unsigned *info) {
@@ -58,7 +63,7 @@ std::string llamafile_describe_cpu() {
             char buf[1024];
             while (fgets(buf, sizeof(buf), f)) {
                 if (!strncmp(buf, "model name", 10) ||
-                    startswith(buf, "Model\t\t:")) { // e.g. raspi
+                    starts_with_str(buf, "Model\t\t:")) { // e.g. raspi
                     char *p = strchr(buf, ':');
                     if (p) {
                         p++;
@@ -74,16 +79,13 @@ std::string llamafile_describe_cpu() {
             fclose(f);
         }
     }
-    if (IsXnu()) {
-        char cpu_name[128] = {0};
-        size_t size = sizeof(cpu_name);
-        if (sysctlbyname("machdep.cpu.brand_string", cpu_name, &size, NULL, 0) != -1)
-            id = cpu_name;
-    }
+    // Note: macOS CPU detection removed for cosmopolitan cross-compilation
+    // compatibility. The CPU brand string will come from /proc/cpuinfo
+    // or x86 CPUID on x86_64.
 #endif
-    id = replace_all(id, " 96-Cores", "");
-    id = replace_all(id, "(TM)", "");
-    id = replace_all(id, "(R)", "");
+    string_replace_all(id, " 96-Cores", "");
+    string_replace_all(id, "(TM)", "");
+    string_replace_all(id, "(R)", "");
 
     std::string march;
 #ifdef __x86_64__

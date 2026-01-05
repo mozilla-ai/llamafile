@@ -304,9 +304,14 @@ TOOL_IMATRIX_OBJS := $(TOOL_IMATRIX_SRCS:%.cpp=o/$(MODE)/%.cpp.o)
 TOOL_PERPLEXITY_OBJS := $(TOOL_PERPLEXITY_SRCS:%.cpp=o/$(MODE)/%.cpp.o)
 TOOL_BENCH_OBJS := $(TOOL_BENCH_SRCS:%.cpp=o/$(MODE)/%.cpp.o)
 TOOL_SERVER_OBJS := $(TOOL_SERVER_SRCS:%.cpp=o/$(MODE)/%.cpp.o)
+# llamafile objects are used to add dynamic metal support
+TOOL_LLAMAFILE_OBJS := \
+	o/$(MODE)/llamafile/llamafile.o \
+	o/$(MODE)/llamafile/metal.o \
+	o/$(MODE)/llamafile/zip.o
 
 # Server objects depend on generated assets
-$(TOOL_SERVER_OBJS): $(SERVER_ASSETS)
+$(TOOL_SERVER_OBJS): $(SERVER_ASSETS) llamafile/llamafile.h
 
 # ==============================================================================
 # Compiler flags
@@ -325,6 +330,9 @@ $(TOOL_PERPLEXITY_OBJS) $(TOOL_BENCH_OBJS) $(TOOL_SERVER_OBJS) $(MTMD_OBJS): \
 		-iquote llama.cpp/tools/mtmd \
 		-iquote o/$(MODE)/llama.cpp/tools/server \
 		-isystem llama.cpp/vendor
+
+# Server needs llamafile headers for Metal support
+$(TOOL_SERVER_OBJS): private CPPFLAGS += -iquote llamafile
 
 # Version definitions
 $(GGML_OBJS): private CCFLAGS += \
@@ -425,10 +433,11 @@ o/$(MODE)/llama.cpp/server/llama-server: \
 	$(TOOL_SERVER_OBJS) \
 	$(MTMD_OBJS) \
 	$(HTTPLIB_OBJS) \
+	$(TOOL_LLAMAFILE_OBJS) \
 	o/$(MODE)/llama.cpp/llama.cpp.a \
 	$(SERVER_ASSETS)
 	@mkdir -p $(dir $@)
-	$(LINK.o) $(TOOL_SERVER_OBJS) $(MTMD_OBJS) $(HTTPLIB_OBJS) o/$(MODE)/llama.cpp/llama.cpp.a $(LOADLIBES) $(LDLIBS) -o $@
+	$(LINK.o) $(TOOL_SERVER_OBJS) $(MTMD_OBJS) $(HTTPLIB_OBJS) $(TOOL_LLAMAFILE_OBJS) o/$(MODE)/llama.cpp/llama.cpp.a $(LOADLIBES) $(LDLIBS) -o $@
 
 # ==============================================================================
 # Dependencies

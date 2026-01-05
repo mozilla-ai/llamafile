@@ -17,14 +17,19 @@
 
 #include "chatbot.h"
 
+#include <cstring>
 #include <glob.h>
 #include <string>
 #include <sys/stat.h>
 
-#include "llamafile/bestline.h"
+#include "bestline.h"
 
 namespace lf {
 namespace chatbot {
+
+static bool starts_with(const char *str, const char *prefix) {
+    return strncmp(str, prefix, strlen(prefix)) == 0;
+}
 
 static bool is_directory(const char *path) {
     struct stat st;
@@ -32,7 +37,7 @@ static bool is_directory(const char *path) {
 }
 
 void on_completion(const char *line, int pos, bestlineCompletions *comp) {
-    if (startswith(line, "/upload ")) {
+    if (starts_with(line, "/upload ")) {
         std::string pattern(line + strlen("/upload "));
         pattern += '*';
         glob_t gl;
@@ -63,7 +68,7 @@ void on_completion(const char *line, int pos, bestlineCompletions *comp) {
             "/upload", // usage: /upload FILE
         };
         for (int i = 0; i < sizeof(kCompletions) / sizeof(*kCompletions); ++i)
-            if (startswith(kCompletions[i], line))
+            if (starts_with(kCompletions[i], line))
                 bestlineAddCompletion(comp, kCompletions[i]);
     }
 }

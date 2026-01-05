@@ -17,8 +17,9 @@
 
 #include "llamafile.h"
 #include "zip.h"
-#include <assert.h>
 #include <cosmo.h>
+#include <libc/assert.h>
+#include <libc/str/str.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <limits.h>
@@ -26,7 +27,10 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <sys/mman.h>
+#include <sys/stat.h>
+#include <time.h>
 #include <unistd.h>
 
 #define Min(a, b) ((a) < (b) ? (a) : (b))
@@ -330,7 +334,7 @@ size_t llamafile_tell(struct llamafile *file) {
     if (!file->fp)
         return file->position;
     long ret = ftell(file->fp);
-    npassert(ret != -1); // shouldn't fail because we seeked earlier
+    assert(ret != -1); // shouldn't fail because we seeked earlier
     return (size_t)ret;
 }
 
@@ -410,4 +414,335 @@ void llamafile_unref(struct llamafile *file) {
 
 void llamafile_close(struct llamafile *file) {
     llamafile_unref(file);
+}
+
+// ==============================================================================
+// FLAG variable definitions
+// ==============================================================================
+// These are Cosmopolitan FLAG system variables. For migration to other
+// platforms, replace these with your own configuration system.
+
+bool FLAGS_READY = false;
+bool FLAG_ascii = false;
+bool FLAG_completion_mode = false;
+bool FLAG_fast = false;
+bool FLAG_iq = false;
+bool FLAG_log_disable = false;
+bool FLAG_mlock = false;
+bool FLAG_mmap = true;
+bool FLAG_no_display_prompt = false;
+bool FLAG_nocompile = false;
+bool FLAG_nologo = false;
+bool FLAG_precise = false;
+bool FLAG_recompile = false;
+bool FLAG_tinyblas = false;
+bool FLAG_trace = false;
+bool FLAG_trap = false;
+bool FLAG_unsecure = false;
+bool FLAG_v2 = false;
+const char *FLAG_chat_template = NULL;
+const char *FLAG_db = NULL;
+const char *FLAG_db_startup_sql = NULL;
+const char *FLAG_file = NULL;
+const char *FLAG_ip_header = NULL;
+const char *FLAG_listen = "127.0.0.1:8080";
+const char *FLAG_mmproj = NULL;
+const char *FLAG_model = NULL;
+const char *FLAG_prompt = NULL;
+const char *FLAG_url_prefix = "";
+const char *FLAG_www_root = NULL;
+double FLAG_token_rate = 0;
+float FLAG_decay_growth = 0;
+float FLAG_frequency_penalty = 0;
+float FLAG_presence_penalty = 0;
+float FLAG_reserve_tokens = 0;
+float FLAG_temperature = 0.8;
+float FLAG_top_p = 0.95;
+int FLAG_batch = 512;
+int FLAG_ctx_size = 0;
+int FLAG_decay_delay = 0;
+int FLAG_flash_attn = 0;
+int FLAG_gpu = LLAMAFILE_GPU_AUTO;
+int FLAG_http_ibuf_size = 65536;
+int FLAG_http_obuf_size = 65536;
+int FLAG_keepalive = 5;
+int FLAG_main_gpu = 0;
+int FLAG_n_gpu_layers = -1;
+int FLAG_slots = 1;
+int FLAG_split_mode = 0;
+int FLAG_threads = 0;
+int FLAG_threads_batch = 0;
+int FLAG_token_burst = 0;
+int FLAG_token_cidr = 0;
+int FLAG_ubatch = 512;
+int FLAG_verbose = 0;
+int FLAG_warmup = 0;
+int FLAG_workers = 0;
+unsigned FLAG_seed = 0;
+
+// ==============================================================================
+// Utility functions
+// ==============================================================================
+
+bool llamafile_has(char **a, const char *x) {
+    for (int i = 0; a[i]; ++i)
+        if (!strcmp(a[i], x))
+            return true;
+    return false;
+}
+
+static const char *llamafile_get_home_dir(void) {
+    const char *homedir;
+    if (!(homedir = getenv("HOME")) || !*homedir)
+        homedir = ".";
+    return homedir;
+}
+
+/**
+ * Returns path of directory for app-specific files.
+ * Path includes version number: ~/.llamafile/v/<major>.<minor>.<patch>/
+ * This ensures different versions don't overwrite each other's compiled dylibs.
+ */
+void llamafile_get_app_dir(char *path, size_t size) {
+    snprintf(path, size, "%s/.llamafile/v/%d.%d.%d/",
+             llamafile_get_home_dir(),
+             LLAMAFILE_VERSION_MAJOR,
+             LLAMAFILE_VERSION_MINOR,
+             LLAMAFILE_VERSION_PATCH);
+}
+
+static int copy_file_contents(int fdin, int fdout) {
+    char buf[8192];
+    ssize_t nread;
+    while ((nread = read(fdin, buf, sizeof(buf))) > 0) {
+        char *ptr = buf;
+        while (nread > 0) {
+            ssize_t nwritten = write(fdout, ptr, nread);
+            if (nwritten < 0) return -1;
+            nread -= nwritten;
+            ptr += nwritten;
+        }
+    }
+    return nread < 0 ? -1 : 0;
+}
+
+/**
+ * Returns true if `zip` was successfully copied to `to`.
+ *
+ * Copying happens atomically. The `zip` argument is a file system path,
+ * which may reside under `/zip/...` to relocate a compressed executable
+ * asset to the local filesystem.
+ */
+bool llamafile_extract(const char *zip, const char *to) {
+    int fdin, fdout;
+    char stage[PATH_MAX];
+    if (FLAG_verbose)
+        fprintf(stderr, "extracting %s to %s\n", zip, to);
+    strlcpy(stage, to, sizeof(stage));
+    if (strlcat(stage, ".XXXXXX", sizeof(stage)) >= sizeof(stage)) {
+        errno = ENAMETOOLONG;
+        perror(to);
+        return false;
+    }
+    if ((fdout = mkstemp(stage)) == -1) {
+        perror(stage);
+        return false;
+    }
+    if ((fdin = open(zip, O_RDONLY | O_CLOEXEC)) == -1) {
+        perror(zip);
+        close(fdout);
+        unlink(stage);
+        return false;
+    }
+    if (copy_file_contents(fdin, fdout) == -1) {
+        perror(zip);
+        close(fdin);
+        close(fdout);
+        unlink(stage);
+        return false;
+    }
+    if (close(fdout)) {
+        perror(to);
+        close(fdin);
+        unlink(stage);
+        return false;
+    }
+    if (close(fdin)) {
+        perror(zip);
+        unlink(stage);
+        return false;
+    }
+    if (rename(stage, to)) {
+        perror(to);
+        unlink(stage);
+        return false;
+    }
+    return true;
+}
+
+static int is_file_newer_than_time(const char *path, const char *other) {
+    struct stat st1, st2;
+    if (stat(path, &st1)) {
+        perror(path);
+        return -1;
+    }
+    if (stat(other, &st2)) {
+        if (errno == ENOENT) {
+            return true;
+        } else {
+            perror(other);
+            return -1;
+        }
+    }
+    return timespec_cmp(st1.st_mtim, st2.st_mtim) > 0;
+}
+
+static int is_file_newer_than_bytes(const char *path, const char *other) {
+    int other_fd;
+    if ((other_fd = open(other, O_RDONLY | O_CLOEXEC)) == -1) {
+        if (errno == ENOENT) {
+            return true;
+        } else {
+            perror(other);
+            return -1;
+        }
+    }
+    int path_fd;
+    if ((path_fd = open(path, O_RDONLY | O_CLOEXEC)) == -1) {
+        perror(path);
+        close(other_fd);
+        return -1;
+    }
+    int res;
+    off_t i = 0;
+    for (;;) {
+        char path_buf[512];
+        ssize_t path_rc = pread(path_fd, path_buf, sizeof(path_buf), i);
+        if (path_rc == -1) {
+            perror(path);
+            res = -1;
+            break;
+        }
+        char other_buf[512];
+        ssize_t other_rc = pread(other_fd, other_buf, sizeof(other_buf), i);
+        if (other_rc == -1) {
+            perror(other);
+            res = -1;
+            break;
+        }
+        if (!path_rc || !other_rc) {
+            if (!path_rc && !other_rc)
+                res = false;
+            else
+                res = true;
+            break;
+        }
+        size_t size = path_rc;
+        if (other_rc < path_rc)
+            size = other_rc;
+        if (memcmp(path_buf, other_buf, size)) {
+            res = true;
+            break;
+        }
+        i += size;
+    }
+    if (close(path_fd)) {
+        perror(path);
+        res = -1;
+    }
+    if (close(other_fd)) {
+        perror(other);
+        res = -1;
+    }
+    return res;
+}
+
+/**
+ * Returns 1 if `path` should replace `other`, 0 if not, -1 on error.
+ *
+ * For /zip/ paths, compares file contents byte-by-byte.
+ * For regular paths, compares modification timestamps.
+ */
+int llamafile_is_file_newer_than(const char *path, const char *other) {
+    if (startswith(path, "/zip/"))
+        return is_file_newer_than_bytes(path, other);
+    else
+        return is_file_newer_than_time(path, other);
+}
+
+// ==============================================================================
+// Logging
+// ==============================================================================
+
+void llamafile_log_callback_null(int level, const char *text, void *user_data) {
+    (void)level;
+    (void)text;
+    (void)user_data;
+}
+
+// ==============================================================================
+// GPU support
+// ==============================================================================
+// llamafile_has_metal() is defined in metal.c with full dynamic loading support
+
+bool llamafile_has_cuda(void) {
+    // TODO: Implement CUDA/ROCm dynamic loading support
+    return false;
+}
+
+bool llamafile_has_amd_gpu(void) {
+    // TODO: Implement AMD GPU support
+    return false;
+}
+
+bool llamafile_has_gpu(void) {
+    return llamafile_has_metal() || llamafile_has_cuda();
+}
+
+const char *llamafile_describe_gpu(void) {
+    switch (FLAG_gpu) {
+    case LLAMAFILE_GPU_AUTO:
+        return "auto";
+    case LLAMAFILE_GPU_AMD:
+        return "amd";
+    case LLAMAFILE_GPU_APPLE:
+        return "apple";
+    case LLAMAFILE_GPU_NVIDIA:
+        return "nvidia";
+    case LLAMAFILE_GPU_DISABLE:
+        return "disabled";
+    default:
+        return "error";
+    }
+}
+
+int llamafile_gpu_parse(const char *s) {
+    if (!strcasecmp(s, "disable") || !strcasecmp(s, "disabled"))
+        return LLAMAFILE_GPU_DISABLE;
+    if (!strcasecmp(s, "auto"))
+        return LLAMAFILE_GPU_AUTO;
+    if (!strcasecmp(s, "amd") || !strcasecmp(s, "rocblas") || !strcasecmp(s, "rocm") || !strcasecmp(s, "hip"))
+        return LLAMAFILE_GPU_AMD;
+    if (!strcasecmp(s, "apple") || !strcasecmp(s, "metal"))
+        return LLAMAFILE_GPU_APPLE;
+    if (!strcasecmp(s, "nvidia") || !strcasecmp(s, "cublas"))
+        return LLAMAFILE_GPU_NVIDIA;
+    return LLAMAFILE_GPU_ERROR;
+}
+
+int llamafile_gpu_layers(int n_gpu_layers) {
+    if (FLAG_gpu == LLAMAFILE_GPU_DISABLE)
+        return 0;
+    if (n_gpu_layers < 0 && FLAG_gpu > 0)
+        n_gpu_layers = INT_MAX;
+    if (n_gpu_layers <= 0 && llamafile_has_metal())
+        n_gpu_layers = INT_MAX;
+    if (n_gpu_layers > 0 && !llamafile_has_gpu()) {
+        FLAG_gpu = LLAMAFILE_GPU_DISABLE;
+        n_gpu_layers = 0;
+    }
+    if (n_gpu_layers <= 0) {
+        FLAG_gpu = LLAMAFILE_GPU_DISABLE;
+    }
+    return n_gpu_layers;
 }

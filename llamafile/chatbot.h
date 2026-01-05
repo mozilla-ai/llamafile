@@ -16,9 +16,9 @@
 // limitations under the License.
 
 #pragma once
-#include <__fwd/string.h>
-#include <__fwd/string_view.h>
-#include <__fwd/vector.h>
+#include <string>
+#include <string_view>
+#include <vector>
 #include <signal.h>
 
 #define DEFAULT_SYSTEM_PROMPT \
@@ -27,10 +27,11 @@
     "human's questions."
 
 struct bestlineCompletions;
-struct clip_ctx;
-struct gpt_params;
+struct common_params;
+struct common_sampler;
 struct llama_context;
 struct llama_model;
+struct mtmd_context;
 
 namespace lf {
 namespace chatbot {
@@ -48,14 +49,16 @@ enum SpecialToken {
 extern bool g_manual_mode;
 extern bool g_said_something;
 extern char g_last_printed_char;
-extern clip_ctx *g_clip;
+extern mtmd_context *g_mtmd;          // multimodal context (replaces g_clip)
 extern enum Role g_role;
-extern gpt_params g_params;
+extern common_params *g_params;       // pointer to params (replaces gpt_params)
+extern common_sampler *g_sampler;     // sampler context (new)
 extern int g_system_prompt_tokens;
 extern llama_context *g_ctx;
 extern llama_model *g_model;
 extern std::vector<int> g_history;
 extern volatile sig_atomic_t g_got_sigint;
+extern bool g_interrupted_exit;
 
 int main(int, char **);
 

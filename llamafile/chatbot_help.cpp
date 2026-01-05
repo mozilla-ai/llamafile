@@ -19,7 +19,7 @@
 
 #include <vector>
 
-#include "llamafile/color.h"
+#include "color.h"
 
 namespace lf {
 namespace chatbot {
