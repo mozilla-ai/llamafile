@@ -84,7 +84,6 @@ LLAMA_SRCS_CPP := \
 	llama.cpp/src/models/gemma-embedding.cpp \
 	llama.cpp/src/models/gemma.cpp \
 	llama.cpp/src/models/gemma2-iswa.cpp \
-	llama.cpp/src/models/gemma3-iswa.cpp \
 	llama.cpp/src/models/gemma3n-iswa.cpp \
 	llama.cpp/src/models/glm4-moe.cpp \
 	llama.cpp/src/models/glm4.cpp \
@@ -105,10 +104,13 @@ LLAMA_SRCS_CPP := \
 	llama.cpp/src/models/llada.cpp \
 	llama.cpp/src/models/llama-iswa.cpp \
 	llama.cpp/src/models/llama.cpp \
+	llama.cpp/src/models/maincoder.cpp \
 	llama.cpp/src/models/mamba.cpp \
+	llama.cpp/src/models/mimo2-iswa.cpp \
 	llama.cpp/src/models/minicpm3.cpp \
 	llama.cpp/src/models/minimax-m2.cpp \
 	llama.cpp/src/models/mistral3.cpp \
+	llama.cpp/src/models/modern-bert.cpp \
 	llama.cpp/src/models/mpt.cpp \
 	llama.cpp/src/models/nemotron-h.cpp \
 	llama.cpp/src/models/nemotron.cpp \
@@ -124,6 +126,7 @@ LLAMA_SRCS_CPP := \
 	llama.cpp/src/models/phi3.cpp \
 	llama.cpp/src/models/plamo.cpp \
 	llama.cpp/src/models/plamo2.cpp \
+	llama.cpp/src/models/plamo3.cpp \
 	llama.cpp/src/models/plm.cpp \
 	llama.cpp/src/models/qwen.cpp \
 	llama.cpp/src/models/qwen2.cpp \
@@ -198,6 +201,7 @@ COMMON_SRCS_CPP := \
 	llama.cpp/common/log.cpp \
 	llama.cpp/common/ngram-cache.cpp \
 	llama.cpp/common/peg-parser.cpp \
+	llama.cpp/common/preset.cpp \
 	llama.cpp/common/regex-partial.cpp \
 	llama.cpp/common/sampling.cpp \
 	llama.cpp/common/speculative.cpp \
