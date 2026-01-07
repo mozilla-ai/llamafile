@@ -113,9 +113,9 @@ setup: # Initialize and configure all dependencies (submodules, patches, etc.)
 	@echo "Applying llama.cpp patches..."
 	@export TMPDIR=$$(pwd)/o/tmp && ./llama.cpp.patches/apply-patches.sh
 	@echo "Setup complete!"
-	@if [ ! -f zipalign/.git ]; then \
+	@if [ ! -f third_party/zipalign/.git ]; then \
 		echo "Initializing zipalign submodule..."; \
-		git submodule update --init zipalign; \
+		git submodule update --init third_party/zipalign; \
 	fi
 
 ifneq ($(MAKECMDGOALS),setup)
