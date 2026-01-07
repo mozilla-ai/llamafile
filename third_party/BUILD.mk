@@ -23,7 +23,7 @@ o/$(MODE)/third_party/zipalign/zipalign: o/$(MODE)/third_party/zipalign/zipalign
 
 o/$(MODE)/third_party/zipalign/%.o: third_party/zipalign/%.c
 	@mkdir -p $(@D)
-	$(CC) $(CFLAGS) -c -o $@ $<
+	$(CC) $(CFLAGS) -I$(COSMOCC)/include/third_party/zlib -c -o $@ $<
 
 .PHONY: o/$(MODE)/third_party/zipalign
 o/$(MODE)/third_party/zipalign: o/$(MODE)/third_party/zipalign/zipalign
