@@ -7,4 +7,6 @@
 [submodule "llama.cpp"]
 	path = llama.cpp
 	url = https://github.com/ggerganov/llama.cpp.git
-
+[submodule "third_party/zipalign"]
+	path = third_party/zipalign
+	url = https://github.com/jart/zipalign.git
