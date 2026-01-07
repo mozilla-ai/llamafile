@@ -85,5 +85,5 @@ jobs:
 
         ---
         *This PR was automatically created by the update-llama-cpp workflow.*" \
-          --base main \
+          --base new_build_wip \
           --head "$BRANCH_NAME"
