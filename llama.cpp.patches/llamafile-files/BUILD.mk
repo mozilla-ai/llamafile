@@ -84,7 +84,7 @@ LLAMA_SRCS_CPP := \
 	llama.cpp/src/models/gemma-embedding.cpp \
 	llama.cpp/src/models/gemma.cpp \
 	llama.cpp/src/models/gemma2-iswa.cpp \
-	llama.cpp/src/models/gemma3-iswa.cpp \
+	llama.cpp/src/models/gemma3.cpp \
 	llama.cpp/src/models/gemma3n-iswa.cpp \
 	llama.cpp/src/models/glm4-moe.cpp \
 	llama.cpp/src/models/glm4.cpp \
@@ -105,10 +105,13 @@ LLAMA_SRCS_CPP := \
 	llama.cpp/src/models/llada.cpp \
 	llama.cpp/src/models/llama-iswa.cpp \
 	llama.cpp/src/models/llama.cpp \
+	llama.cpp/src/models/maincoder.cpp \
 	llama.cpp/src/models/mamba.cpp \
+	llama.cpp/src/models/mimo2-iswa.cpp \
 	llama.cpp/src/models/minicpm3.cpp \
 	llama.cpp/src/models/minimax-m2.cpp \
 	llama.cpp/src/models/mistral3.cpp \
+	llama.cpp/src/models/modern-bert.cpp \
 	llama.cpp/src/models/mpt.cpp \
 	llama.cpp/src/models/nemotron-h.cpp \
 	llama.cpp/src/models/nemotron.cpp \
@@ -124,6 +127,7 @@ LLAMA_SRCS_CPP := \
 	llama.cpp/src/models/phi3.cpp \
 	llama.cpp/src/models/plamo.cpp \
 	llama.cpp/src/models/plamo2.cpp \
+	llama.cpp/src/models/plamo3.cpp \
 	llama.cpp/src/models/plm.cpp \
 	llama.cpp/src/models/qwen.cpp \
 	llama.cpp/src/models/qwen2.cpp \
@@ -198,6 +202,7 @@ COMMON_SRCS_CPP := \
 	llama.cpp/common/log.cpp \
 	llama.cpp/common/ngram-cache.cpp \
 	llama.cpp/common/peg-parser.cpp \
+	llama.cpp/common/preset.cpp \
 	llama.cpp/common/regex-partial.cpp \
 	llama.cpp/common/sampling.cpp \
 	llama.cpp/common/speculative.cpp \
@@ -248,7 +253,21 @@ MTMD_SRCS_CPP := \
 	llama.cpp/tools/mtmd/clip.cpp \
 	llama.cpp/tools/mtmd/mtmd.cpp \
 	llama.cpp/tools/mtmd/mtmd-helper.cpp \
-	llama.cpp/tools/mtmd/mtmd-audio.cpp
+	llama.cpp/tools/mtmd/mtmd-audio.cpp \
+	llama.cpp/tools/mtmd/models/cogvlm.cpp \
+	llama.cpp/tools/mtmd/models/conformer.cpp \
+	llama.cpp/tools/mtmd/models/glm4v.cpp \
+	llama.cpp/tools/mtmd/models/internvl.cpp \
+	llama.cpp/tools/mtmd/models/kimivl.cpp \
+	llama.cpp/tools/mtmd/models/llama4.cpp \
+	llama.cpp/tools/mtmd/models/llava.cpp \
+	llama.cpp/tools/mtmd/models/minicpmv.cpp \
+	llama.cpp/tools/mtmd/models/pixtral.cpp \
+	llama.cpp/tools/mtmd/models/qwen2vl.cpp \
+	llama.cpp/tools/mtmd/models/qwen3vl.cpp \
+	llama.cpp/tools/mtmd/models/siglip.cpp \
+	llama.cpp/tools/mtmd/models/whisper-enc.cpp \
+	llama.cpp/tools/mtmd/models/youtuvl.cpp
 
 MTMD_OBJS := $(MTMD_SRCS_CPP:%.cpp=o/$(MODE)/%.cpp.o)
 
@@ -282,7 +301,6 @@ SERVER_ASSETS := \
 # ==============================================================================
 
 # Tool source files
-TOOL_MAIN_SRCS := llama.cpp/tools/main/main.cpp
 TOOL_QUANTIZE_SRCS := llama.cpp/tools/quantize/quantize.cpp
 TOOL_IMATRIX_SRCS := llama.cpp/tools/imatrix/imatrix.cpp
 TOOL_PERPLEXITY_SRCS := llama.cpp/tools/perplexity/perplexity.cpp
@@ -298,7 +316,6 @@ TOOL_SERVER_SRCS := \
 	llama.cpp/tools/server/server-task.cpp
 
 # Tool object files
-TOOL_MAIN_OBJS := $(TOOL_MAIN_SRCS:%.cpp=o/$(MODE)/%.cpp.o)
 TOOL_QUANTIZE_OBJS := $(TOOL_QUANTIZE_SRCS:%.cpp=o/$(MODE)/%.cpp.o)
 TOOL_IMATRIX_OBJS := $(TOOL_IMATRIX_SRCS:%.cpp=o/$(MODE)/%.cpp.o)
 TOOL_PERPLEXITY_OBJS := $(TOOL_PERPLEXITY_SRCS:%.cpp=o/$(MODE)/%.cpp.o)
@@ -318,7 +335,7 @@ $(TOOL_SERVER_OBJS): $(SERVER_ASSETS) llamafile/llamafile.h
 # ==============================================================================
 
 # Include paths for new llama.cpp structure
-$(LLAMA_CPP_OBJS) $(TOOL_MAIN_OBJS) $(TOOL_QUANTIZE_OBJS) $(TOOL_IMATRIX_OBJS) \
+$(LLAMA_CPP_OBJS) $(TOOL_QUANTIZE_OBJS) $(TOOL_IMATRIX_OBJS) \
 $(TOOL_PERPLEXITY_OBJS) $(TOOL_BENCH_OBJS) $(TOOL_SERVER_OBJS) $(MTMD_OBJS): \
 	private CPPFLAGS += \
 		-iquote llama.cpp/common \
@@ -394,24 +411,18 @@ o/$(MODE)/llama.cpp/ggml/src/ggml-cpu/quants.c.o: \
 # ==============================================================================
 
 # All llama.cpp tools need pthread and OpenMP for threading
-o/$(MODE)/llama.cpp/main/main \
 o/$(MODE)/llama.cpp/quantize/quantize \
 o/$(MODE)/llama.cpp/imatrix/imatrix \
 o/$(MODE)/llama.cpp/perplexity/perplexity \
 o/$(MODE)/llama.cpp/llama-bench/llama-bench \
 o/$(MODE)/llama.cpp/server/llama-server: \
 	private LDFLAGS += -fopenmp
-o/$(MODE)/llama.cpp/main/main \
 o/$(MODE)/llama.cpp/quantize/quantize \
 o/$(MODE)/llama.cpp/imatrix/imatrix \
 o/$(MODE)/llama.cpp/perplexity/perplexity \
 o/$(MODE)/llama.cpp/llama-bench/llama-bench \
 o/$(MODE)/llama.cpp/server/llama-server: \
 	private LDLIBS += -lpthread
-
-o/$(MODE)/llama.cpp/main/main: \
-	$(TOOL_MAIN_OBJS) \
-	o/$(MODE)/llama.cpp/llama.cpp.a
 
 o/$(MODE)/llama.cpp/quantize/quantize: \
 	$(TOOL_QUANTIZE_OBJS) \
@@ -444,7 +455,7 @@ o/$(MODE)/llama.cpp/server/llama-server: \
 # ==============================================================================
 
 $(LLAMA_CPP_OBJS): llama.cpp/BUILD.mk
-$(TOOL_MAIN_OBJS) $(TOOL_QUANTIZE_OBJS) $(TOOL_IMATRIX_OBJS) \
+$(TOOL_QUANTIZE_OBJS) $(TOOL_IMATRIX_OBJS) \
 $(TOOL_PERPLEXITY_OBJS) $(TOOL_BENCH_OBJS) $(TOOL_SERVER_OBJS): llama.cpp/BUILD.mk
 
 # ==============================================================================
@@ -454,7 +465,6 @@ $(TOOL_PERPLEXITY_OBJS) $(TOOL_BENCH_OBJS) $(TOOL_SERVER_OBJS): llama.cpp/BUILD.
 .PHONY: o/$(MODE)/llama.cpp
 o/$(MODE)/llama.cpp: \
 	o/$(MODE)/llama.cpp/llama.cpp.a \
-	o/$(MODE)/llama.cpp/main/main \
 	o/$(MODE)/llama.cpp/server/llama-server \
 	o/$(MODE)/llama.cpp/quantize/quantize \
 	o/$(MODE)/llama.cpp/imatrix/imatrix \

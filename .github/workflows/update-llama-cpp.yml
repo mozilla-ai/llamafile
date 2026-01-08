@@ -1,0 +1,89 @@
+name: Update llama.cpp submodule
+
+on:
+  schedule:
+    - cron: '0 0 * * 1'
+  workflow_dispatch:
+
+jobs:
+  update-submodule:
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: write
+      pull-requests: write
+
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        submodules: recursive
+        fetch-depth: 0
+
+    - name: Configure git
+      run: |
+        git config user.name "github-actions[bot]"
+        git config user.email "github-actions[bot]@users.noreply.github.com"
+
+    - name: Check for submodule updates
+      id: check
+      run: |
+        cd llama.cpp
+
+        CURRENT_COMMIT=$(git rev-parse HEAD)
+        echo "Current commit: $CURRENT_COMMIT"
+
+        git fetch origin master
+
+        LATEST_COMMIT=$(git rev-parse origin/master)
+        echo "Latest commit: $LATEST_COMMIT"
+
+        if [ "$CURRENT_COMMIT" != "$LATEST_COMMIT" ]; then
+          echo "needs_update=true" >> "$GITHUB_OUTPUT"
+          echo "current_commit=$CURRENT_COMMIT" >> "$GITHUB_OUTPUT"
+          echo "latest_commit=$LATEST_COMMIT" >> "$GITHUB_OUTPUT"
+          echo "current_short=$(echo $CURRENT_COMMIT | cut -c1-7)" >> "$GITHUB_OUTPUT"
+          echo "latest_short=$(echo $LATEST_COMMIT | cut -c1-7)" >> "$GITHUB_OUTPUT"
+        else
+          echo "needs_update=false" >> "$GITHUB_OUTPUT"
+          echo "Submodule is up to date"
+        fi
+
+    - name: Update submodule and create PR
+      if: steps.check.outputs.needs_update == 'true'
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        BRANCH_NAME="update-llama-cpp-${{ steps.check.outputs.latest_short }}"
+
+        if git ls-remote --heads origin "$BRANCH_NAME" | grep -q "$BRANCH_NAME"; then
+          echo "Branch $BRANCH_NAME already exists, skipping"
+          exit 0
+        fi
+
+        EXISTING_PR=$(gh pr list --search "Update llama.cpp submodule" --state open --json number --jq '.[0].number')
+        if [ -n "$EXISTING_PR" ]; then
+          echo "PR #$EXISTING_PR already exists for updating llama.cpp, skipping"
+          exit 0
+        fi
+
+        git checkout -b "$BRANCH_NAME"
+
+        cd llama.cpp
+        git checkout origin/master
+        cd ..
+
+        git add llama.cpp
+        git commit -m "Update llama.cpp submodule to ${{ steps.check.outputs.latest_short }}"
+
+        git push origin "$BRANCH_NAME"
+
+        gh pr create \
+          --title "Update llama.cpp submodule to ${{ steps.check.outputs.latest_short }}" \
+          --body "This PR updates the llama.cpp submodule from \`${{ steps.check.outputs.current_short }}\` to \`${{ steps.check.outputs.latest_short }}\`.
+
+        **Changes:** https://github.com/ggerganov/llama.cpp/compare/${{ steps.check.outputs.current_commit }}...${{ steps.check.outputs.latest_commit }}
+
+        ---
+        *This PR was automatically created by the update-llama-cpp workflow.*" \
+          --base new_build_wip \
+          --head "$BRANCH_NAME"
