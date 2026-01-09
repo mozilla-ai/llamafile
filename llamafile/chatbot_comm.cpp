@@ -21,15 +21,16 @@
 #include <sstream>
 #include <vector>
 
-#include "llama.cpp/llama.h"
-#include "llamafile/llamafile.h"
+#include "llama.h"
+#include "llamafile.h"
+#include "sampling.h"  // llama.cpp common/sampling.h
 
 namespace lf {
 namespace chatbot {
 
 void on_stats(const std::vector<std::string> &args) {
     FLAG_log_disable = false;
-    llama_print_timings(g_ctx);
+    common_perf_print(g_ctx, g_sampler);
     FLAG_log_disable = true;
 }
 

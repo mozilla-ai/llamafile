@@ -22,11 +22,13 @@
 #include <termios.h>
 #include <unistd.h>
 
-#include "llama.cpp/base64.h"
-#include "llamafile/macros.h"
-#include "llamafile/xterm.h"
-#include "third_party/stb/stb_image.h"
-#include "third_party/stb/stb_image_resize2.h"
+#include "base64.hpp"
+#include "macros.h"
+#include "xterm.h"
+
+// STB image libraries (from third_party via -isystem)
+#include "stb/stb_image.h"
+#include "stb/stb_image_resize2.h"
 
 namespace lf {
 

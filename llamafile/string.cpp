@@ -16,10 +16,14 @@
 // limitations under the License.
 
 #include "string.h"
+#include <cassert>
 #include <cctype>
 #include <cosmo.h>
 #include <cstdio>
+#include <ctime>
+#include <fcntl.h>
 #include <string>
+#include <unistd.h>
 #include <utility>
 #include <vector>
 
@@ -167,6 +171,56 @@ std::string collapse(const std::string_view &input) {
         }
     }
     return result;
+}
+
+/**
+ * Reads entire file into memory.
+ */
+ssize_t slurp(std::string *r, const char *path) {
+    int fd;
+    if ((fd = open(path, O_RDONLY)) == -1)
+        return -1;
+    size_t toto = 0;
+    size_t orig = r->size();
+    for (;;) {
+        size_t want = 16384;
+        size_t size = r->size();
+        r->resize(size + want);
+        ssize_t rc;
+        if ((rc = read(fd, r->data() + size, want)) == -1) {
+            r->resize(orig);
+            close(fd);
+            return -1;
+        }
+        size_t got = rc;
+        r->resize(size + got);
+        toto += got;
+        if (!got)
+            break;
+    }
+    if (close(fd)) {
+        r->resize(orig);
+        return -1;
+    }
+    return toto;
+}
+
+/**
+ * Turns timestamp into string.
+ */
+std::string iso8601(struct timespec ts) {
+    struct tm tm;
+    if (!localtime_r(&ts.tv_sec, &tm))
+        if (!gmtime_r(&ts.tv_sec, &tm))
+            abort();
+    char res[256];
+    char *ptr = res;
+    char *end = res + sizeof(res);
+    ptr += strftime(ptr, end - ptr, "%Y-%m-%d %H:%M:%S", &tm);
+    ptr += snprintf(ptr, end - ptr, ".%09ld", ts.tv_nsec);
+    ptr += strftime(ptr, end - ptr, "%z %Z", &tm);
+    assert(ptr + 1 <= end);
+    return res;
 }
 
 } // namespace lf

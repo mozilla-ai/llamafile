@@ -19,8 +19,8 @@
 
 #include <cstdio>
 
-#include "llamafile/color.h"
-#include "llamafile/llamafile.h"
+#include "color.h"
+#include "llamafile.h"
 
 namespace lf {
 namespace chatbot {

@@ -1,0 +1,12 @@
+diff --git a/common/download.cpp b/common/download.cpp
+--- a/llama.cpp/common/download.cpp
++++ b/llama.cpp/common/download.cpp
+@@ -29,6 +29,8 @@
+ #ifndef __EMSCRIPTEN__
+ #ifdef __linux__
+ #include <linux/limits.h>
++#elif defined(COSMOCC)
++#include <linux/limits.h>
+ #elif defined(_WIN32)
+ #   if !defined(PATH_MAX)
+ #   define PATH_MAX MAX_PATH

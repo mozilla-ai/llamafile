@@ -3,246 +3,258 @@
 
 PKGS += LLAMAFILE
 
-LLAMAFILE_FILES := $(wildcard llamafile/*.*)
-LLAMAFILE_HDRS = $(filter %.h,$(LLAMAFILE_FILES))
-LLAMAFILE_INCS = $(filter %.inc,$(LLAMAFILE_FILES))
-LLAMAFILE_SRCS_C = $(filter %.c,$(LLAMAFILE_FILES))
-LLAMAFILE_SRCS_CU = $(filter %.cu,$(LLAMAFILE_FILES))
-LLAMAFILE_SRCS_CPP = $(filter %.cpp,$(LLAMAFILE_FILES))
-LLAMAFILE_SRCS = $(LLAMAFILE_SRCS_C) $(LLAMAFILE_SRCS_CPP) $(LLAMAFILE_SRCS_CU)
-LLAMAFILE_DOCS = $(filter %.1,$(LLAMAFILE_FILES))
+# ==============================================================================
+# Version information
+# ==============================================================================
 
-LLAMAFILE_OBJS :=					\
-	$(LLAMAFILE_SRCS_C:%.c=o/$(MODE)/%.o)		\
-	$(LLAMAFILE_SRCS_CPP:%.cpp=o/$(MODE)/%.o)	\
-	$(LLAMAFILE_FILES:%=o/$(MODE)/%.zip.o)		\
+LLAMAFILE_VERSION_MAJOR := 0
+LLAMAFILE_VERSION_MINOR := 10
+LLAMAFILE_VERSION_PATCH := 0
+LLAMAFILE_VERSION_STRING := $(LLAMAFILE_VERSION_MAJOR).$(LLAMAFILE_VERSION_MINOR).$(LLAMAFILE_VERSION_PATCH)-dev
 
-$(LLAMAFILE_OBJS): private CCFLAGS += -g
+# ==============================================================================
+# Include paths
+# ==============================================================================
 
-# this executable defines its own malloc(), free(), etc.
-# therefore we want to avoid it going inside the .a file
-LLAMAFILE_OBJS := $(filter-out o/$(MODE)/llamafile/zipalign.o,$(LLAMAFILE_OBJS))
+LLAMAFILE_INCLUDES := \
+	-iquote llamafile \
+	-iquote llama.cpp/common \
+	-iquote llama.cpp/include \
+	-iquote llama.cpp/ggml/include \
+	-iquote llama.cpp/ggml/src \
+	-iquote llama.cpp/ggml/src/ggml-cpu \
+	-iquote llama.cpp/src \
+	-iquote llama.cpp/tools/mtmd \
+	-isystem llama.cpp/vendor \
+	-isystem third_party
 
-include llamafile/highlight/BUILD.mk
-include llamafile/server/BUILD.mk
+# ==============================================================================
+# Compiler flags
+# ==============================================================================
+# When LLAMAFILE_TUI is defined, llama.cpp server's main() function is renamed
+# to server_main() and called by llamafile's main.cpp. In the standalone build,
+# this flag is off and a new main() function is compiled to call server_main
+# (see llama.cpp/tools/server/server.cpp).
 
-o/$(MODE)/llamafile/zipalign:				\
-		o/$(MODE)/llamafile/zipalign.o		\
-		o/$(MODE)/llamafile/help.o		\
-		o/$(MODE)/llamafile/has.o		\
-		o/$(MODE)/llamafile/zipalign.1.asc.zip.o
+LLAMAFILE_CPPFLAGS := \
+	$(LLAMAFILE_INCLUDES) \
+	-DLLAMAFILE_VERSION_MAJOR=$(LLAMAFILE_VERSION_MAJOR) \
+	-DLLAMAFILE_VERSION_MINOR=$(LLAMAFILE_VERSION_MINOR) \
+	-DLLAMAFILE_VERSION_PATCH=$(LLAMAFILE_VERSION_PATCH) \
+	-DLLAMAFILE_VERSION_STRING=\"$(LLAMAFILE_VERSION_STRING)\" \
+	-DLLAMAFILE_TUI \
+	-DCOSMOCC=1
 
-o/$(MODE)/llamafile/zipcheck:				\
-		o/$(MODE)/llamafile/zipcheck.o		\
-		o/$(MODE)/llamafile/zip.o		\
+# ==============================================================================
+# Source files - Highlight library
+# ==============================================================================
 
-o/$(MODE)/llamafile/simple:				\
-		o/$(MODE)/llamafile/simple.o		\
-		o/$(MODE)/llama.cpp/llama.cpp.a		\
+LLAMAFILE_HIGHLIGHT_SRCS := \
+	llamafile/highlight/color_bleeder.cpp \
+	llamafile/highlight/highlight.cpp \
+	llamafile/highlight/highlight_ada.cpp \
+	llamafile/highlight/highlight_asm.cpp \
+	llamafile/highlight/highlight_basic.cpp \
+	llamafile/highlight/highlight_bnf.cpp \
+	llamafile/highlight/highlight_c.cpp \
+	llamafile/highlight/highlight_cmake.cpp \
+	llamafile/highlight/highlight_cobol.cpp \
+	llamafile/highlight/highlight_csharp.cpp \
+	llamafile/highlight/highlight_css.cpp \
+	llamafile/highlight/highlight_d.cpp \
+	llamafile/highlight/highlight_forth.cpp \
+	llamafile/highlight/highlight_fortran.cpp \
+	llamafile/highlight/highlight_go.cpp \
+	llamafile/highlight/highlight_haskell.cpp \
+	llamafile/highlight/highlight_html.cpp \
+	llamafile/highlight/highlight_java.cpp \
+	llamafile/highlight/highlight_js.cpp \
+	llamafile/highlight/highlight_julia.cpp \
+	llamafile/highlight/highlight_kotlin.cpp \
+	llamafile/highlight/highlight_ld.cpp \
+	llamafile/highlight/highlight_lisp.cpp \
+	llamafile/highlight/highlight_lua.cpp \
+	llamafile/highlight/highlight_m4.cpp \
+	llamafile/highlight/highlight_make.cpp \
+	llamafile/highlight/highlight_markdown.cpp \
+	llamafile/highlight/highlight_matlab.cpp \
+	llamafile/highlight/highlight_ocaml.cpp \
+	llamafile/highlight/highlight_pascal.cpp \
+	llamafile/highlight/highlight_perl.cpp \
+	llamafile/highlight/highlight_php.cpp \
+	llamafile/highlight/highlight_python.cpp \
+	llamafile/highlight/highlight_r.cpp \
+	llamafile/highlight/highlight_ruby.cpp \
+	llamafile/highlight/highlight_rust.cpp \
+	llamafile/highlight/highlight_scala.cpp \
+	llamafile/highlight/highlight_shell.cpp \
+	llamafile/highlight/highlight_sql.cpp \
+	llamafile/highlight/highlight_swift.cpp \
+	llamafile/highlight/highlight_tcl.cpp \
+	llamafile/highlight/highlight_tex.cpp \
+	llamafile/highlight/highlight_txt.cpp \
+	llamafile/highlight/highlight_typescript.cpp \
+	llamafile/highlight/highlight_zig.cpp \
+	llamafile/highlight/util.cpp
 
-o/$(MODE)/llamafile/tokenize:				\
-		o/$(MODE)/llamafile/tokenize.o		\
-		o/$(MODE)/llama.cpp/llama.cpp.a		\
+# ==============================================================================
+# Source files - Core TUI
+# ==============================================================================
 
-o/$(MODE)/llamafile/curl:					\
-		o/$(MODE)/llamafile/curl.o			\
-		o/$(MODE)/llama.cpp/llama.cpp.a			\
-		o/$(MODE)/third_party/mbedtls/mbedtls.a		\
+LLAMAFILE_SRCS_C := \
+	llamafile/bestline.c \
+	llamafile/llamafile.c \
+	llamafile/metal.c \
+	llamafile/zip.c
+
+LLAMAFILE_SRCS_CPP := \
+	llamafile/chatbot_comm.cpp \
+	llamafile/chatbot_comp.cpp \
+	llamafile/chatbot_eval.cpp \
+	llamafile/chatbot_file.cpp \
+	llamafile/chatbot_help.cpp \
+	llamafile/chatbot_hint.cpp \
+	llamafile/chatbot_hist.cpp \
+	llamafile/chatbot_logo.cpp \
+	llamafile/chatbot_main.cpp \
+	llamafile/chatbot_repl.cpp \
+	llamafile/compute.cpp \
+	llamafile/datauri.cpp \
+	llamafile/image.cpp \
+	llamafile/llama.cpp \
+	llamafile/string.cpp \
+	llamafile/xterm.cpp \
+	$(LLAMAFILE_HIGHLIGHT_SRCS)
+
+# ==============================================================================
+# Object files
+# ==============================================================================
+
+LLAMAFILE_OBJS := \
+	$(LLAMAFILE_SRCS_C:%.c=o/$(MODE)/%.o) \
+	$(LLAMAFILE_SRCS_CPP:%.cpp=o/$(MODE)/%.o)
+
+# ==============================================================================
+# Dependency libraries
+# ==============================================================================
+
+# Dependencies from llama.cpp/BUILD.mk:
+#   GGML_OBJS   - Core tensor operations
+#   LLAMA_OBJS  - LLM inference
+#   COMMON_OBJS - Common utilities (arg parsing, sampling, chat templates)
+#   MTMD_OBJS   - Multimodal support (vision models)
+#   HTTPLIB_OBJS - HTTP client support for downloads
+# Dependencies from llamafile/highlight/BUILD.mk:
+#   We only need the gperf-generated keyword dictionary objects, not the
+#   highlight cpp files (since we have our own copies in llamafile/highlight)
+
+LLAMAFILE_HIGHLIGHT_GPERF_FILES := $(wildcard llamafile/highlight/*.gperf)
+LLAMAFILE_HIGHLIGHT_KEYWORDS := $(LLAMAFILE_HIGHLIGHT_GPERF_FILES:%.gperf=o/$(MODE)/%.o)
+
+# Server objects for llamafile
+LLAMAFILE_SERVER_SUPPORT_OBJS := \
+	o/$(MODE)/llama.cpp/tools/server/server-common.cpp.o \
+	o/$(MODE)/llama.cpp/tools/server/server-context.cpp.o \
+	o/$(MODE)/llama.cpp/tools/server/server-http.cpp.o \
+	o/$(MODE)/llama.cpp/tools/server/server-models.cpp.o \
+	o/$(MODE)/llama.cpp/tools/server/server-queue.cpp.o \
+	o/$(MODE)/llama.cpp/tools/server/server-task.cpp.o
+
+# Metal source files to embed in the executable (for runtime compilation on macOS)
+# These are extracted at runtime and compiled into ggml-metal.dylib
+LLAMAFILE_METAL_SOURCES := \
+	o/$(MODE)/llama.cpp/ggml/src/ggml.c.zip.o \
+	o/$(MODE)/llama.cpp/ggml/src/ggml-alloc.c.zip.o \
+	o/$(MODE)/llama.cpp/ggml/src/ggml-backend.cpp.zip.o \
+	o/$(MODE)/llama.cpp/ggml/src/ggml-quants.c.zip.o \
+	o/$(MODE)/llama.cpp/ggml/src/ggml-threading.cpp.zip.o \
+	o/$(MODE)/llama.cpp/ggml/include/ggml.h.zip.o \
+	o/$(MODE)/llama.cpp/ggml/include/gguf.h.zip.o \
+	o/$(MODE)/llama.cpp/ggml/include/ggml-cpu.h.zip.o \
+	o/$(MODE)/llama.cpp/ggml/include/ggml-alloc.h.zip.o \
+	o/$(MODE)/llama.cpp/ggml/include/ggml-backend.h.zip.o \
+	o/$(MODE)/llama.cpp/ggml/include/ggml-metal.h.zip.o \
+	o/$(MODE)/llama.cpp/ggml/src/ggml-impl.h.zip.o \
+	o/$(MODE)/llama.cpp/ggml/src/ggml-common.h.zip.o \
+	o/$(MODE)/llama.cpp/ggml/src/ggml-quants.h.zip.o \
+	o/$(MODE)/llama.cpp/ggml/src/ggml-threading.h.zip.o \
+	o/$(MODE)/llama.cpp/ggml/src/ggml-backend-impl.h.zip.o \
+	o/$(MODE)/llama.cpp/ggml/src/ggml-cpu/ggml-cpu-impl.h.zip.o \
+	o/$(MODE)/llama.cpp/ggml/src/ggml-metal/ggml-metal.cpp.zip.o \
+	o/$(MODE)/llama.cpp/ggml/src/ggml-metal/ggml-metal.metal.zip.o \
+	o/$(MODE)/llama.cpp/ggml/src/ggml-metal/ggml-metal-impl.h.zip.o \
+	o/$(MODE)/llama.cpp/ggml/src/ggml-metal/ggml-metal-device.h.zip.o \
+	o/$(MODE)/llama.cpp/ggml/src/ggml-metal/ggml-metal-device.m.zip.o \
+	o/$(MODE)/llama.cpp/ggml/src/ggml-metal/ggml-metal-device.cpp.zip.o \
+	o/$(MODE)/llama.cpp/ggml/src/ggml-metal/ggml-metal-context.h.zip.o \
+	o/$(MODE)/llama.cpp/ggml/src/ggml-metal/ggml-metal-context.m.zip.o \
+	o/$(MODE)/llama.cpp/ggml/src/ggml-metal/ggml-metal-common.h.zip.o \
+	o/$(MODE)/llama.cpp/ggml/src/ggml-metal/ggml-metal-common.cpp.zip.o \
+	o/$(MODE)/llama.cpp/ggml/src/ggml-metal/ggml-metal-ops.h.zip.o \
+	o/$(MODE)/llama.cpp/ggml/src/ggml-metal/ggml-metal-ops.cpp.zip.o
+
+LLAMAFILE_DEPS := \
+	$(GGML_OBJS) \
+	$(LLAMA_OBJS) \
+	$(COMMON_OBJS) \
+	$(MTMD_OBJS) \
+	$(HTTPLIB_OBJS) \
+	$(LLAMAFILE_SERVER_SUPPORT_OBJS) \
+	$(LLAMAFILE_HIGHLIGHT_KEYWORDS) \
+	$(LLAMAFILE_METAL_SOURCES) \
+	o/$(MODE)/third_party/stb/stb_image_resize2.o
+
+# ==============================================================================
+# Server integration
+# ==============================================================================
+
+# Include paths needed for server compilation
+LLAMAFILE_SERVER_INCS := \
+	$(LLAMAFILE_INCLUDES) \
+	-iquote llama.cpp/tools/server \
+	-iquote o/$(MODE)/llama.cpp/tools/server
+
+# Compile server.cpp
+o/$(MODE)/llamafile/server.cpp.o: llama.cpp/tools/server/server.cpp $(SERVER_ASSETS)
+	@mkdir -p $(@D)
+	$(CXX) $(CXXFLAGS) $(LLAMAFILE_CPPFLAGS) $(LLAMAFILE_SERVER_INCS) -c -o $@ $<
+
+# ==============================================================================
+# Main executable
+# ==============================================================================
+
+o/$(MODE)/llamafile/main.o: llamafile/main.cpp
+	@mkdir -p $(@D)
+	$(CXX) $(CXXFLAGS) $(LLAMAFILE_CPPFLAGS) -c -o $@ $<
+
+o/$(MODE)/llamafile/llamafile: \
+		o/$(MODE)/llamafile/main.o \
+		o/$(MODE)/llamafile/server.cpp.o \
+		$(LLAMAFILE_OBJS) \
+		$(LLAMAFILE_DEPS) \
+		$(SERVER_ASSETS)
+	@mkdir -p $(@D)
+	$(CXX) $(LDFLAGS) -o $@ $(filter %.o,$^) $(LDLIBS)
+
+# ==============================================================================
+# Pattern rules for llamafile sources
+# ==============================================================================
+
+o/$(MODE)/llamafile/%.o: llamafile/%.c
+	@mkdir -p $(@D)
+	$(CC) $(CFLAGS) $(LLAMAFILE_CPPFLAGS) -c -o $@ $<
+
+o/$(MODE)/llamafile/%.o: llamafile/%.cpp
+	@mkdir -p $(@D)
+	$(CXX) $(CXXFLAGS) $(LLAMAFILE_CPPFLAGS) -c -o $@ $<
+
+o/$(MODE)/llamafile/highlight/%.o: llamafile/highlight/%.cpp
+	@mkdir -p $(@D)
+	$(CXX) $(CXXFLAGS) $(LLAMAFILE_CPPFLAGS) -c -o $@ $<
+
+# ==============================================================================
+# Targets
+# ==============================================================================
 
 .PHONY: o/$(MODE)/llamafile
-o/$(MODE)/llamafile:						\
-		$(LLAMAFILE_OBJS)				\
-		o/$(MODE)/llamafile/server			\
-		o/$(MODE)/llamafile/simple			\
-		o/$(MODE)/llamafile/zipalign			\
-		o/$(MODE)/llamafile/zipcheck			\
-		o/$(MODE)/llamafile/tokenize			\
-		o/$(MODE)/llamafile/addnl			\
-		o/$(MODE)/llamafile/high			\
-		o/$(MODE)/llamafile/datauri_test.runs		\
-		o/$(MODE)/llamafile/parse_cidr_test.runs	\
-		o/$(MODE)/llamafile/pool_cancel_test.runs	\
-		o/$(MODE)/llamafile/pool_test.runs		\
-		o/$(MODE)/llamafile/json_test.runs		\
-		o/$(MODE)/llamafile/thread_test.runs		\
-		o/$(MODE)/llamafile/vmathf_test.runs		\
-
-################################################################################
-# microarchitectures
-#
-#### Intel CPU Line
-#
-# - 2006 core           X64 SSE4.1 (only on 45nm variety) (-march=core2)
-# - 2008 nehalem        SSE4.2 VT-x VT-d RDTSCP POPCNT (-march=nehalem)
-# - 2010 westmere       CLMUL AES (-march=westmere)
-# - 2011 sandybridge    AVX TXT (-march=sandybridge)
-# - 2012 ivybridge      F16C MOVBE FSGSBASE (-march=ivybridge)
-# - 2013 haswell        AVX2 TSX BMI1 BMI2 FMA (-march=haswell)
-# - 2014 broadwell      RDSEED ADX PREFETCHW (-march=broadwell)
-# - 2015 skylake        SGX ADX MPX AVX-512[xeon-only] (-march=skylake / -march=skylake-avx512)
-# - 2018 cannonlake     SHA (-march=cannonlake)
-# - 2019 cascadelake    VNNI
-# - 2021 alderlake      efficiency cores
-#
-#### AMD CPU Line
-#
-# - 2003 k8             SSE SSE2 (-march=k8)
-# - 2005 k8 (Venus)     SSE3 (-march=k8-sse3)
-# - 2008 barcelona      SSE4a?! (-march=barcelona)
-# - 2011 bulldozer      SSSE3 SSE4.1 SSE4.2 CLMUL AVX AES FMA4?! (-march=bdver1)
-# - 2011 piledriver     BMI1 FMA (-march=bdver2)
-# - 2015 excavator      AVX2 BMI2 MOVBE (-march=bdver4)
-# - 2017 ryzen          F16C SHA ADX (-march=znver1)
-# - 2023 zen4           AVX512F AVX512VL AVX512VNNI AVX512BF16 (-march=znver4)
-#
-#### ARM Revisions
-#
-# - armv8.0-a           raspberry pi 4
-# - armv8.2-a           raspberry pi 5
-# - armv8.5-a           apple m1
-# - armv8.6-a           apple m2
-#
-#### ARM Features
-#
-# - HWCAP_CRC32         +crc32    (e.g. m1, rpi4)  __ARM_FEATRUE_CRC32
-# - HWCAP_FPHP          +fp16     (e.g. m1, rpi5)  __ARM_FEATURE_FP16_SCALAR_ARITHMETIC
-# - HWCAP_ASIMDHP       +fp16     (e.g. m1, rpi5)  __ARM_FEATURE_FP16_VECTOR_ARITHMETIC
-# - HWCAP_ASIMDDP       +dotprod  (e.g. m1, rpi5)  __ARM_FEATURE_DOTPROD
-#
-
-o/$(MODE)/llamafile/iqk_mul_mat_amd_avx2.o: private TARGET_ARCH += -Xx86_64-mtune=skylake -Xx86_64-mavx -Xx86_64-mavx2 -Xx86_64-mfma -Xx86_64-mf16c
-o/$(MODE)/llamafile/iqk_mul_mat_amd_zen4.o: private TARGET_ARCH += -Xx86_64-mtune=skylake -Xx86_64-mavx -Xx86_64-mavx2 -Xx86_64-mfma -Xx86_64-mf16c -Xx86_64-mavx512f -Xx86_64-mavx512vl -Xx86_64-mavx512vnni -Xx86_64-mavx512bw -Xx86_64-mavx512dq
-o/$(MODE)/llamafile/iqk_mul_mat_arm82.o: private TARGET_ARCH += -Xaarch64-march=armv8.2-a+dotprod+fp16
-o/$(MODE)/llamafile/tinyblas_cpu_sgemm_amd_avx.o: private TARGET_ARCH += -Xx86_64-mtune=sandybridge -Xx86_64-mavx -Xx86_64-mf16c
-o/$(MODE)/llamafile/tinyblas_cpu_mixmul_amd_avx.o: private TARGET_ARCH += -Xx86_64-mtune=sandybridge -Xx86_64-mavx -Xx86_64-mf16c
-o/$(MODE)/llamafile/tinyblas_cpu_sgemm_amd_fma.o: private TARGET_ARCH += -Xx86_64-mtune=bdver2 -Xx86_64-mavx -Xx86_64-mf16c -Xx86_64-mfma
-o/$(MODE)/llamafile/tinyblas_cpu_mixmul_amd_fma.o: private TARGET_ARCH += -Xx86_64-mtune=bdver2 -Xx86_64-mavx -Xx86_64-mf16c -Xx86_64-mfma
-o/$(MODE)/llamafile/tinyblas_cpu_sgemm_amd_avx2.o: private TARGET_ARCH += -Xx86_64-mtune=skylake -Xx86_64-mavx -Xx86_64-mf16c -Xx86_64-mfma -Xx86_64-mavx2 -Xx86_64-mfma
-o/$(MODE)/llamafile/tinyblas_cpu_mixmul_amd_avx2.o: private TARGET_ARCH += -Xx86_64-mtune=skylake -Xx86_64-mavx -Xx86_64-mf16c -Xx86_64-mfma -Xx86_64-mavx2 -Xx86_64-mfma
-o/$(MODE)/llamafile/tinyblas_cpu_sgemm_amd_avxvnni.o: private TARGET_ARCH += -Xx86_64-mtune=alderlake -Xx86_64-mavx -Xx86_64-mf16c -Xx86_64-mfma -Xx86_64-mavx2 -Xx86_64-mavxvnni
-o/$(MODE)/llamafile/tinyblas_cpu_mixmul_amd_avxvnni.o: private TARGET_ARCH += -Xx86_64-mtune=alderlake -Xx86_64-mavx -Xx86_64-mf16c -Xx86_64-mfma -Xx86_64-mavx2 -Xx86_64-mavxvnni
-o/$(MODE)/llamafile/tinyblas_cpu_sgemm_amd_avx512f.o: private TARGET_ARCH += -Xx86_64-mtune=cannonlake -Xx86_64-mavx -Xx86_64-mf16c -Xx86_64-mfma -Xx86_64-mavx2 -Xx86_64-mavx512f
-o/$(MODE)/llamafile/tinyblas_cpu_mixmul_amd_avx512f.o: private TARGET_ARCH += -Xx86_64-mtune=cannonlake -Xx86_64-mavx -Xx86_64-mf16c -Xx86_64-mfma -Xx86_64-mavx2 -Xx86_64-mavx512f
-o/$(MODE)/llamafile/tinyblas_cpu_sgemm_amd_zen4.o: private TARGET_ARCH += -Xx86_64-mtune=znver4 -Xx86_64-mavx -Xx86_64-mf16c -Xx86_64-mfma -Xx86_64-mavx2 -Xx86_64-mavx512f -Xx86_64-mavx512vl -Xx86_64-mavx512vnni -Xx86_64-mavx512bf16
-o/$(MODE)/llamafile/tinyblas_cpu_mixmul_amd_zen4.o: private TARGET_ARCH += -Xx86_64-mtune=znver4 -Xx86_64-mavx -Xx86_64-mf16c -Xx86_64-mfma -Xx86_64-mavx2 -Xx86_64-mavx512f -Xx86_64-mavx512vl -Xx86_64-mavx512vnni -Xx86_64-mavx512bf16
-o/$(MODE)/llamafile/tinyblas_cpu_sgemm_arm82.o: private TARGET_ARCH += -Xaarch64-march=armv8.2-a+dotprod+fp16
-o/$(MODE)/llamafile/tinyblas_cpu_mixmul_arm82.o: private TARGET_ARCH += -Xaarch64-march=armv8.2-a+dotprod+fp16
-
-o/$(MODE)/llamafile/sgemm.o: private CXXFLAGS += -Os
-
-o/$(MODE)/llamafile/sgemm_matmul_test.o			\
-o/$(MODE)/llamafile/sgemm_sss_test.o			\
-o/$(MODE)/llamafile/sgemm_vecdot_test.o			\
-o/$(MODE)/llamafile/iqk_mul_mat_amd_avx2.o		\
-o/$(MODE)/llamafile/iqk_mul_mat_amd_zen4.o		\
-o/$(MODE)/llamafile/iqk_mul_mat_arm82.o			\
-o/$(MODE)/llamafile/tinyblas_cpu_mixmul_amd_avx2.o	\
-o/$(MODE)/llamafile/tinyblas_cpu_mixmul_amd_avx512f.o	\
-o/$(MODE)/llamafile/tinyblas_cpu_mixmul_amd_avx.o	\
-o/$(MODE)/llamafile/tinyblas_cpu_mixmul_amd_avxvnni.o	\
-o/$(MODE)/llamafile/tinyblas_cpu_mixmul_amd_fma.o	\
-o/$(MODE)/llamafile/tinyblas_cpu_mixmul_amd_zen4.o	\
-o/$(MODE)/llamafile/tinyblas_cpu_mixmul_arm80.o		\
-o/$(MODE)/llamafile/tinyblas_cpu_mixmul_arm82.o		\
-o/$(MODE)/llamafile/tinyblas_cpu_sgemm_amd_avx2.o	\
-o/$(MODE)/llamafile/tinyblas_cpu_sgemm_amd_avx512f.o	\
-o/$(MODE)/llamafile/tinyblas_cpu_sgemm_amd_avx.o	\
-o/$(MODE)/llamafile/tinyblas_cpu_sgemm_amd_avxvnni.o	\
-o/$(MODE)/llamafile/tinyblas_cpu_sgemm_amd_fma.o	\
-o/$(MODE)/llamafile/tinyblas_cpu_sgemm_amd_zen4.o	\
-o/$(MODE)/llamafile/tinyblas_cpu_sgemm_arm80.o		\
-o/$(MODE)/llamafile/tinyblas_cpu_sgemm_arm82.o:		\
-		private CCFLAGS += -O3 -fopenmp -mgcc
-
-################################################################################
-# testing
-
-o/$(MODE)/llamafile/json_test:						\
-		o/$(MODE)/llamafile/json_test.o				\
-		o/$(MODE)/llamafile/json.o				\
-		o/$(MODE)/llamafile/hextoint.o				\
-		o/$(MODE)/double-conversion/double-conversion.a		\
-
-o/$(MODE)/llamafile/vmathf_test:			\
-		o/$(MODE)/llamafile/vmathf_test.o	\
-		o/$(MODE)/llama.cpp/llama.cpp.a		\
-
-o/$(MODE)/llamafile/parse_cidr_test:			\
-		o/$(MODE)/llamafile/parse_cidr_test.o	\
-		o/$(MODE)/llamafile/parse_cidr.o	\
-		o/$(MODE)/llamafile/parse_ip.o		\
-
-o/$(MODE)/llamafile/pool_test:				\
-		o/$(MODE)/llamafile/pool_test.o		\
-		o/$(MODE)/llamafile/crash.o		\
-		o/$(MODE)/llamafile/pool.o		\
-
-o/$(MODE)/llamafile/datauri_test:			\
-		o/$(MODE)/llamafile/datauri_test.o	\
-		o/$(MODE)/llama.cpp/llama.cpp.a		\
-		o/$(MODE)/third_party/stb/stb.a		\
-
-o/$(MODE)/llamafile/high:					\
-		o/$(MODE)/llamafile/high.o			\
-		o/$(MODE)/llamafile/highlight/highlight.a	\
-		o/$(MODE)/llama.cpp/llama.cpp.a			\
-
-o/$(MODE)/llamafile/hex2xterm:				\
-		o/$(MODE)/llamafile/hex2xterm.o		\
-		o/$(MODE)/llamafile/xterm.o		\
-
-o/$(MODE)/llamafile/pool_cancel_test:			\
-		o/$(MODE)/llamafile/pool_cancel_test.o	\
-		o/$(MODE)/llamafile/crash.o		\
-		o/$(MODE)/llamafile/pool.o		\
-
-o/$(MODE)/llamafile/thread_test:			\
-		o/$(MODE)/llamafile/thread_test.o	\
-		o/$(MODE)/llamafile/crash.o		\
-		o/$(MODE)/llamafile/dll3.o		\
-
-o/$(MODE)/llamafile/sgemm_sss_test: private LDFLAGS += -fopenmp
-o/$(MODE)/llamafile/sgemm_sss_test.o: private CCFLAGS += -fopenmp
-o/$(MODE)/llamafile/sgemm_matmul_test: private LDFLAGS += -fopenmp
-o/$(MODE)/llamafile/sgemm_matmul_test.o: private CCFLAGS += -fopenmp
-
-o/$(MODE)/llamafile/sgemm_sss_test:			\
-		o/$(MODE)/llamafile/sgemm_sss_test.o	\
-		o/$(MODE)/llama.cpp/llama.cpp.a
-
-o/$(MODE)/llamafile/sgemm_matmul_test:			\
-		o/$(MODE)/llamafile/sgemm_matmul_test.o	\
-		o/$(MODE)/llama.cpp/llama.cpp.a
-
-o/$(MODE)/llamafile/sgemm_vecdot_test:			\
-		o/$(MODE)/llamafile/sgemm_vecdot_test.o	\
-		o/$(MODE)/llama.cpp/llama.cpp.a
-
-o/$(MODE)/llamafile/sgemm_vecdot_test:			\
-		private LDFLAGS += -fopenmp
-
-o/$(MODE)/llamafile/%.o: llamafile/%.cu llamafile/BUILD.mk
-	@mkdir -p $(@D)
-	build/cudacc -fPIE -g -O3 -march=native -ffast-math --use_fast_math -c -o $@ $<
-
-o/$(MODE)/llamafile/tinyblas_test:			\
-		o/$(MODE)/llamafile/tinyblas_test.o	\
-		o/$(MODE)/llamafile/tinyblas.o		\
-		o/$(MODE)/llamafile/tester.o
-	build/cudacc -g -o $@ $^ -lcublas
-
-o/$(MODE)/llamafile/compcap:				\
-		o/$(MODE)/llamafile/compcap.o
-	build/cudacc -g -o $@ $^ -lcublas
-
-o/$(MODE)/llamafile/cudaprops:				\
-		o/$(MODE)/llamafile/cudaprops.o		\
-		o/$(MODE)/llamafile/tester.o
-	build/cudacc -g -o $@ $^ -lcublas
-
-o/$(MODE)/llamafile/pick_a_warp_kernel: private LDFLAGS += -fopenmp
-o/$(MODE)/llamafile/pick_a_warp_kernel.o: private CFLAGS += -fopenmp
-
-.PHONY: o/$(MODE)/llamafile/check
-o/$(MODE)/llamafile/check:				\
-		o/$(MODE)/llamafile/tinyblas_test.runs
+o/$(MODE)/llamafile: o/$(MODE)/llamafile/llamafile

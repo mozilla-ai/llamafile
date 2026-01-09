@@ -17,8 +17,38 @@
 
 #include "xterm.h"
 
+#include <cosmo.h>
+#include <stdlib.h>
+#include <string.h>
+
 #define SQR(X) ((X) * (X))
 #define UNCUBE(x) x < 48 ? 0 : x < 115 ? 1 : (x - 35) / 40
+
+/**
+ * Detect if terminal supports 24-bit color.
+ */
+bool is_rgb_terminal(void) {
+
+    if (IsWindows())
+        return true;
+
+    const char *colorterm = getenv("COLORTERM");
+    if (colorterm && (!strcasecmp(colorterm, "truecolor") || //
+                      !strcasecmp(colorterm, "24bit"))) {
+        return true;
+    }
+
+    const char *term = getenv("TERM");
+    if (term && (strstr(term, "24bit") || //
+                 strstr(term, "truecolor") || //
+                 strstr(term, "iterm") || //
+                 strstr(term, "kitty") || //
+                 strstr(term, "wezterm"))) {
+        return true;
+    }
+
+    return false;
+}
 
 /**
  * Quantizes 24-bit RGB to xterm256 code range [16,256).

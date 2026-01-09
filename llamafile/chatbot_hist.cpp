@@ -20,11 +20,11 @@
 #include <cassert>
 #include <vector>
 
-#include "llama.cpp/llama.h"
-#include "llamafile/color.h"
-#include "llamafile/llama.h"
-#include "llamafile/macros.h"
-#include "llamafile/string.h"
+#include "common.h"  // llama.cpp common (includes llama.h)
+#include "llama.h"   // llamafile wrapper functions
+#include "color.h"
+#include "macros.h"
+#include "string.h"
 
 namespace lf {
 namespace chatbot {
@@ -32,9 +32,9 @@ namespace chatbot {
 bool g_manual_mode;
 enum Role g_role = ROLE_USER;
 int g_system_prompt_tokens;
-std::vector<llama_pos> g_stack;
-std::vector<llama_pos> g_undo;
-std::vector<llama_token> g_history;
+std::vector<int> g_stack;
+std::vector<int> g_undo;
+std::vector<int> g_history;
 
 const char *get_role_name(enum Role role) {
     switch (role) {
@@ -92,22 +92,23 @@ int tokens_used(void) {
     return g_history.size();
 }
 
-std::string describe_token(llama_token token) {
-    if (token == llama_token_bos(g_model))
+std::string describe_token(int token) {
+    const llama_vocab *vocab = llama_model_get_vocab(g_model);
+    if (token == llama_vocab_bos(vocab))
         return "§";
-    if (token == llama_token_eos(g_model))
+    if (token == llama_vocab_eos(vocab))
         return "∎";
-    if (token == llama_token_cls(g_model))
+    if (token == llama_vocab_cls(vocab))
         return "⌘";
-    if (token == llama_token_sep(g_model))
+    if (token == llama_vocab_sep(vocab))
         return "⋯";
-    if (token == llama_token_pad(g_model))
+    if (token == llama_vocab_pad(vocab))
         return "␣";
-    if (token == llama_token_nl(g_model))
+    if (token == llama_vocab_nl(vocab))
         return "↵";
-    if (llama_token_is_eog(g_model, token))
+    if (llama_vocab_is_eog(vocab, token))
         return "⌟";
-    if (llama_token_is_control(g_model, token))
+    if (llama_vocab_is_control(vocab, token))
         return "∷";
     std::string s = token_to_piece(g_ctx, token, DONT_RENDER_SPECIAL_TOKENS);
     if (s.empty())
@@ -115,11 +116,11 @@ std::string describe_token(llama_token token) {
     return s;
 }
 
-std::string describe_erasure(llama_pos begin, llama_pos end) {
-    unassert(begin <= end);
-    unassert(end <= tokens_used());
+std::string describe_erasure(int begin, int end) {
+    assert(begin <= end);
+    assert(end <= tokens_used());
     std::string description;
-    llama_pos pos = begin;
+    int pos = begin;
     while (pos < end && description.size() < 63)
         description += describe_token(g_history[pos++]);
     if (!description.empty() && pos < end)
@@ -130,8 +131,8 @@ std::string describe_erasure(llama_pos begin, llama_pos end) {
     return description;
 }
 
-std::string describe_position(llama_pos pos) {
-    unassert(pos <= tokens_used());
+std::string describe_position(int pos) {
+    assert(pos <= tokens_used());
     std::string description;
     while (pos > 0 && description.size() < 63)
         description = describe_token(g_history[--pos]) + description;
@@ -143,7 +144,7 @@ std::string describe_position(llama_pos pos) {
     return description;
 }
 
-static void fix_stack(std::vector<llama_pos> *stack) {
+static void fix_stack(std::vector<int> *stack) {
     while (!stack->empty() && stack->back() > tokens_used())
         stack->pop_back();
 }
@@ -154,10 +155,10 @@ void fix_stacks(void) {
     g_system_prompt_tokens = MIN(g_system_prompt_tokens, tokens_used());
 }
 
-static std::vector<llama_pos> adjust_stack(llama_pos erase_begin, llama_pos erase_end,
-                                           const std::vector<llama_pos> &stack) {
-    std::vector<llama_pos> builder;
-    for (llama_pos pos : stack) {
+static std::vector<int> adjust_stack(int erase_begin, int erase_end,
+                                     const std::vector<int> &stack) {
+    std::vector<int> builder;
+    for (int pos : stack) {
         if (erase_begin <= pos && pos < erase_end)
             continue;
         if (pos >= erase_end)
@@ -167,7 +168,7 @@ static std::vector<llama_pos> adjust_stack(llama_pos erase_begin, llama_pos eras
     return builder;
 }
 
-void adjust_stacks(llama_pos erase_begin, llama_pos erase_end) {
+void adjust_stacks(int erase_begin, int erase_end) {
     g_undo = adjust_stack(erase_begin, erase_end, g_undo);
     g_stack = adjust_stack(erase_begin, erase_end, g_stack);
 }
@@ -197,15 +198,16 @@ void on_forget(const std::vector<std::string> &args) {
         return;
     }
     int erase_count;
-    llama_pos erase_begin = g_undo[1];
-    llama_pos erase_end = g_undo.size() > 2 ? g_undo[2] : tokens_used();
+    int erase_begin = g_undo[1];
+    int erase_end = g_undo.size() > 2 ? g_undo[2] : tokens_used();
     if (!(erase_count = erase_end - erase_begin)) {
         err("error: nothing left to forget");
         return;
     }
     printf(FAINT "forgetting: %s" RESET "\n", describe_erasure(erase_begin, erase_end).c_str());
-    llama_kv_cache_seq_rm(g_ctx, 0, erase_begin, erase_end);
-    llama_kv_cache_seq_add(g_ctx, 0, erase_end, -1, -erase_count);
+    llama_memory_t mem = llama_get_memory(g_ctx);
+    llama_memory_seq_rm(mem, 0, erase_begin, erase_end);
+    llama_memory_seq_add(mem, 0, erase_end, -1, -erase_count);
     g_history.erase(g_history.begin() + erase_begin, //
                     g_history.begin() + erase_end);
     adjust_stacks(erase_begin, erase_end);
@@ -213,8 +215,9 @@ void on_forget(const std::vector<std::string> &args) {
 }
 
 void rewind(int pos) {
-    unassert(pos <= tokens_used());
-    llama_kv_cache_seq_rm(g_ctx, 0, pos, -1);
+    assert(pos <= tokens_used());
+    llama_memory_t mem = llama_get_memory(g_ctx);
+    llama_memory_seq_rm(mem, 0, pos, -1);
     g_history.resize(pos);
 }
 
@@ -239,7 +242,7 @@ void on_manual(const std::vector<std::string> &args) {
 
 void on_context(const std::vector<std::string> &args) {
     int configured_context = llama_n_ctx(g_ctx);
-    int max_context = llama_n_ctx_train(g_model);
+    int max_context = llama_model_n_ctx_train(g_model);
     printf("%d out of %d context tokens used (%d tokens remaining)\n", tokens_used(),
            configured_context, configured_context - tokens_used());
     if (configured_context < max_context)

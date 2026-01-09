@@ -21,17 +21,35 @@
 #include <sys/stat.h>
 #include <vector>
 
-#include "llama.cpp/common.h"
-#include "llamafile/color.h"
-#include "llamafile/image.h"
-#include "llamafile/llama.h"
-#include "llamafile/string.h"
+#include "common.h"
+#include "llama.h"
+#include "color.h"
+#include "image.h"
+#include "llama.h"  // llamafile wrapper
+#include "string.h"
 
 namespace lf {
 namespace chatbot {
 
 static bool has_binary(const std::string_view s) {
     return s.find('\0') != std::string_view::npos;
+}
+
+// Helper to apply chat template for a single system message
+static std::string apply_system_template(const std::string &content) {
+    const char *tmpl = g_params->chat_template.empty()
+                       ? llama_model_chat_template(g_model, nullptr)
+                       : g_params->chat_template.c_str();
+
+    llama_chat_message chat[] = {{"system", content.c_str()}};
+    int len = llama_chat_apply_template(tmpl, chat, 1, false, nullptr, 0);
+    if (len < 0) {
+        return "";
+    }
+
+    std::string result(len, '\0');
+    llama_chat_apply_template(tmpl, chat, 1, false, &result[0], result.size());
+    return result;
 }
 
 void on_upload(const std::vector<std::string> &args) {
@@ -64,7 +82,7 @@ void on_upload(const std::vector<std::string> &args) {
     markdown += iso8601(st.st_mtim);
     markdown += "\n\n";
     if (is_image(content)) {
-        if (!g_clip) {
+        if (!g_mtmd) {
             err("%s: need --mmproj model to process images", path);
             return;
         }
@@ -83,10 +101,13 @@ void on_upload(const std::vector<std::string> &args) {
             markdown += '\n';
         markdown += "``````";
     }
-    std::vector<llama_chat_msg> chat = {{"system", std::move(markdown)}};
-    if (!eval_string(
-            llama_chat_apply_template(g_model, g_params.chat_template, chat, DONT_ADD_ASSISTANT),
-            DONT_ADD_SPECIAL, PARSE_SPECIAL)) {
+    std::string formatted = apply_system_template(markdown);
+    if (formatted.empty()) {
+        err("failed to apply chat template");
+        rewind(tokens_used_before);
+        return;
+    }
+    if (!eval_string(formatted, DONT_ADD_SPECIAL, PARSE_SPECIAL)) {
         rewind(tokens_used_before);
         return;
     }

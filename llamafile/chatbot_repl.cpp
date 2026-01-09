@@ -22,12 +22,13 @@
 #include <cstdio>
 #include <string_view>
 
-#include "llama.cpp/common.h"
-#include "llama.cpp/llama.h"
-#include "llamafile/bestline.h"
-#include "llamafile/color.h"
-#include "llamafile/highlight/highlight.h"
-#include "llamafile/llama.h"
+#include "common.h"
+#include "llama.h"
+#include "sampling.h"
+#include "bestline.h"
+#include "color.h"
+#include "highlight/highlight.h"
+#include "llama.h"  // llamafile wrapper
 
 namespace lf {
 namespace chatbot {
@@ -37,9 +38,29 @@ bool g_said_something;
 char g_last_printed_char;
 volatile sig_atomic_t g_got_sigint;
 
+// Helper to apply chat template
+static std::string apply_chat_template(const std::vector<llama_chat_message> &messages, bool add_assistant) {
+    const char *tmpl = g_params->chat_template.empty()
+                       ? llama_model_chat_template(g_model, nullptr)
+                       : g_params->chat_template.c_str();
+
+    // First call to get required size
+    int len = llama_chat_apply_template(tmpl, messages.data(), messages.size(), add_assistant, nullptr, 0);
+    if (len < 0) {
+        return "";
+    }
+
+    std::string result(len, '\0');
+    llama_chat_apply_template(tmpl, messages.data(), messages.size(), add_assistant, &result[0], result.size());
+    return result;
+}
+
 void on_sigint(int sig) {
     g_got_sigint = 1;
 }
+
+// Flag to track if we're exiting due to interrupt (skip cleanup)
+bool g_interrupted_exit = false;
 
 bool is_empty(const char *s) {
     int c;
@@ -91,49 +112,54 @@ bool out_of_context(int extra) {
     err("error: ran out of context window at %d tokens\n"
         "consider passing `-c %d` at startup for the maximum\n"
         "you can free up more space using /forget or /clear",
-        tokens_used() + extra, llama_n_ctx_train(g_model));
+        tokens_used() + extra, llama_model_n_ctx_train(g_model));
     return false;
 }
 
 void repl() {
 
     // setup conversation
-    if (llama_should_add_bos_token(g_model)) {
+    const llama_vocab *vocab = llama_model_get_vocab(g_model);
+    if (llama_vocab_get_add_bos(vocab)) {
         print_ephemeral("loading bos token...");
-        eval_token(llama_token_bos(g_model));
+        eval_token(llama_vocab_bos(vocab));
     }
     record_undo();
 
     // make base models have no system prompt by default
-    if (is_base_model() && g_params.prompt == DEFAULT_SYSTEM_PROMPT)
-        g_params.prompt = "";
+    if (is_base_model() && g_params->prompt == DEFAULT_SYSTEM_PROMPT)
+        g_params->prompt = "";
 
     // setup system prompt
-    if (!g_params.prompt.empty()) {
+    if (!g_params->prompt.empty()) {
         print_ephemeral("loading system prompt...");
         std::string msg;
         if (is_base_model()) {
-            msg = g_params.prompt;
+            msg = g_params->prompt;
         } else {
-            std::vector<llama_chat_msg> chat = {{"system", g_params.prompt}};
-            msg = llama_chat_apply_template(g_model, g_params.chat_template, chat,
-                                            DONT_ADD_ASSISTANT);
+            llama_chat_message chat[] = {{"system", g_params->prompt.c_str()}};
+            msg = apply_chat_template({chat, chat + 1}, false);
         }
         if (!eval_string(msg, DONT_ADD_SPECIAL, PARSE_SPECIAL))
             exit(6);
         llama_synchronize(g_ctx);
         g_system_prompt_tokens = tokens_used();
         clear_ephemeral();
-        if (g_params.display_prompt)
-            printf("%s\n", g_params.special ? msg.c_str() : g_params.prompt.c_str());
+        if (g_params->display_prompt)
+            printf("%s\n", g_params->special ? msg.c_str() : g_params->prompt.c_str());
     }
 
     // perform important setup
     HighlightTxt txt;
     HighlightMarkdown markdown;
     ColorBleeder bleeder(is_base_model() ? (Highlight *)&txt : (Highlight *)&markdown);
-    llama_sampling_context *sampler = llama_sampling_init(g_params.sparams);
-    signal(SIGINT, on_sigint);
+
+    // Save old signal handler and install ours
+    struct sigaction sa, old_sa;
+    sa.sa_handler = on_sigint;
+    sa.sa_flags = 0;
+    sigemptyset(&sa.sa_mask);
+    sigaction(SIGINT, &sa, &old_sa);
 
     // run chatbot
     for (;;) {
@@ -147,8 +173,13 @@ void repl() {
         write(1, RESET, strlen(RESET));
         g_last_printed_char = '\n';
         if (!line) {
-            if (g_got_sigint)
+            if (g_got_sigint) {
                 ensure_newline();
+            }
+            // Skip cleanup to avoid Metal crash (see chatbot_main)
+            // Setting g_interrupted_exit here covers both CTRL+C
+            // (sigint) and CTRL+D (newline)
+            g_interrupted_exit = true;
             break;
         }
         if (!is_base_model() && is_empty(line)) {
@@ -170,8 +201,8 @@ void repl() {
         if (is_base_model()) {
             msg = line;
         } else {
-            std::vector<llama_chat_msg> chat = {{get_role_name(g_role), line}};
-            msg = llama_chat_apply_template(g_model, g_params.chat_template, chat, add_assi);
+            llama_chat_message chat[] = {{get_role_name(g_role), line}};
+            msg = apply_chat_template({chat, chat + 1}, add_assi);
         }
         if (!eval_string(msg, DONT_ADD_SPECIAL, PARSE_SPECIAL)) {
             rewind(tokens_used_before);
@@ -187,14 +218,14 @@ void repl() {
                 eval_token(llamafile_token_eot(g_model));
                 break;
             }
-            llama_token id = llama_sampling_sample(sampler, g_ctx, NULL);
-            llama_sampling_accept(sampler, g_ctx, id, APPLY_GRAMMAR);
+            llama_token id = common_sampler_sample(g_sampler, g_ctx, -1);
+            common_sampler_accept(g_sampler, id, true);
             if (!eval_token(id))
                 break;
-            if (llama_token_is_eog(g_model, id))
+            if (llama_vocab_is_eog(llama_model_get_vocab(g_model), id))
                 break;
             std::string s;
-            bleeder.feed(&s, token_to_piece(g_ctx, id, g_params.special));
+            bleeder.feed(&s, token_to_piece(g_ctx, id, g_params->special));
             print(s);
             fflush(stdout);
         }
@@ -206,8 +237,8 @@ void repl() {
         ensure_newline();
     }
 
-    // cleanup resources
-    llama_sampling_free(sampler);
+    // Restore original signal handler before cleanup
+    sigaction(SIGINT, &old_sa, nullptr);
 }
 
 } // namespace chatbot
