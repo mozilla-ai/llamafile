@@ -18,6 +18,7 @@ jobs:
       with:
         submodules: recursive
         fetch-depth: 0
+        ref: new_build_wip
 
     - name: Configure git
       run: |
