@@ -21,8 +21,9 @@ endif
 # the root package is `o//` by default
 # building a package also builds its sub-packages
 .PHONY: o/$(MODE)/
-o/$(MODE)/:	o/$(MODE)/llamafile					\
-		o/$(MODE)/llama.cpp
+o/$(MODE)/:	o/$(MODE)/llamafile	\
+		o/$(MODE)/llama.cpp \
+		o/$(MODE)/third_party/zipalign
 
 .PHONY: install
 install: o/$(MODE)/llamafile/llamafile
