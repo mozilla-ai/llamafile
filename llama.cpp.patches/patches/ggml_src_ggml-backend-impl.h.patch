@@ -1,0 +1,23 @@
+diff --git a/ggml/src/ggml-backend-impl.h b/ggml/src/ggml-backend-impl.h
+--- a/llama.cpp/ggml/src/ggml-backend-impl.h
++++ b/llama.cpp/ggml/src/ggml-backend-impl.h
+@@ -39,7 +39,7 @@ extern "C" {
+     //
+ 
+     struct ggml_backend_buffer_i {
+-        // (optional) free the buffer
++        // (optional) free the buffer context
+         void         (*free_buffer)  (ggml_backend_buffer_t buffer);
+         // base address of the buffer
+         void *       (*get_base)     (ggml_backend_buffer_t buffer);
+@@ -55,6 +55,10 @@ extern "C" {
+         void         (*clear)        (ggml_backend_buffer_t buffer, uint8_t value);
+         // (optional) reset any internal state due to tensor initialization, such as tensor extras
+         void         (*reset)        (ggml_backend_buffer_t buffer);
++        // (optional) free the buffer struct itself - used for cross-module memory management
++        // (eg. when buffer is allocated by a dynamically loaded library)
++        // if NULL, the default 'delete buffer' is used
++        void         (*free_struct)  (ggml_backend_buffer_t buffer);
+     };
+ 
+     struct ggml_backend_buffer {
