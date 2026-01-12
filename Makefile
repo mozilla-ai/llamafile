@@ -8,8 +8,8 @@ MAKEFLAGS += --no-builtin-rules
 .DELETE_ON_ERROR:
 .FEATURES: output-sync
 
-# setup target needs to run before build/config.mk checks make version
-ifneq ($(MAKECMDGOALS),setup)
+# setup and reset-repo targets need to run before build/config.mk checks make version
+ifeq ($(filter $(MAKECMDGOALS),setup reset-repo),)
 include build/config.mk
 include build/rules.mk
 
@@ -50,14 +50,12 @@ setup: # Initialize and configure all dependencies (submodules, patches, etc.)
 	fi
 	@echo "Applying whisper.cpp patches..."
 	@export TMPDIR=$$(pwd)/o/tmp && ./whisper.cpp.patches/apply-patches.sh
-
 	@if [ ! -f stable-diffusion.cpp/.git ]; then \
 		echo "Initializing stable-diffusion.cpp submodule..."; \
 		git submodule update --init stable-diffusion.cpp; \
 	fi
 	@echo "Applying stable-diffusion.cpp patches..."
 	@export TMPDIR=$$(pwd)/o/tmp && ./stable-diffusion.cpp.patches/apply-patches.sh
-
 	@if [ ! -f llama.cpp/.git ]; then \
 		echo "Initializing llama.cpp submodule..."; \
 		git submodule update --init llama.cpp; \
@@ -72,7 +70,20 @@ setup: # Initialize and configure all dependencies (submodules, patches, etc.)
 		git submodule update --init third_party/zipalign; \
 	fi
 
-ifneq ($(MAKECMDGOALS),setup)
+.PHONY: reset-repo
+reset-repo: # Reset all submodules to their original state (removes patches)
+	@echo "Resetting submodules to original state..."
+	@for dir in llama.cpp whisper.cpp stable-diffusion.cpp third_party/zipalign; do \
+		if [ -e "$$dir" ]; then \
+			echo "Removing $$dir..."; \
+			rm -rf "$$dir"; \
+		fi; \
+		echo "Restoring $$dir..."; \
+		git checkout "$$dir"; \
+	done
+	@echo "Reset complete. Run 'make setup' to reinitialize and apply patches."
+
+ifeq ($(filter $(MAKECMDGOALS),setup reset-repo),)
 include build/deps.mk
 include build/tags.mk
 endif
