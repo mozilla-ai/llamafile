@@ -1,3 +1,23 @@
+llamafile uses [zipalign](https://github.com/jart/zipalign) to bundle its main
+executable together with model weights and a set of default arguments.
+
+We are including zipalign as a git submodule and building it together with
+llamafile, so if you managed to successfully compile llamafile you also have
+the `zipalign` executable in the `o/third_party/zipalign` folder. If you want
+to build zipalign alone, just run
+
+```sh
+make o//third_party/zipalign
+```
+
+> **NOTE:**
+The zipalign tool we are referring to here is not the
+[Android](https://developer.android.com/tools/zipalign) one! Please refer
+to the GitHub repo above for an in-depth description and up-to-date code.
+
+# Creating a llamafile
+
+
 If you want to be able to just say:
 
 ```sh
