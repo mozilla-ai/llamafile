@@ -20,6 +20,7 @@
 #include "common.h"
 #include "llama.h"
 #include "mtmd.h"
+#include "mtmd-helper.h"
 #include "datauri.h"
 #include "image.h"
 #include "llama.h"  // llamafile wrapper
@@ -60,27 +61,6 @@ bool eval_tokens(std::vector<llama_token> tokens) {
     return true;
 }
 
-// TODO: Image support needs to be adapted to the new mtmd API
-// The old llava_image_embed API has been replaced with mtmd.
-// Key differences:
-// - mtmd_helper_bitmap_init_from_file() loads images
-// - mtmd_tokenize() tokenizes text + images together
-// - The image embedding is integrated into the tokenization process
-// For now, this function returns false indicating image processing is not yet supported.
-bool eval_image(const std::string_view binary) {
-    if (!g_mtmd) {
-        err("multimodal model not loaded (use --mmproj to specify vision model)");
-        return false;
-    }
-
-    // TODO: Implement using new mtmd API:
-    // 1. Create mtmd_bitmap from binary data
-    // 2. Use mtmd_tokenize to process
-    // 3. Decode the chunks
-    err("image processing not yet implemented with new mtmd API");
-    return false;
-}
-
 bool eval_token(int id) {
     return eval_tokens({id});
 }
@@ -89,12 +69,92 @@ bool eval_plain_text(const std::string &str, bool add_special, bool parse_specia
     return eval_tokens(llamafile_tokenize(g_model, str, add_special, parse_special));
 }
 
+// Helper to evaluate chunks from mtmd_tokenize and update g_history.
+// Uses mtmd_helper_eval_chunk_single() for consistency with llama.cpp server.
+static bool eval_mtmd_chunks(mtmd_input_chunks *chunks) {
+    size_t n_chunks = mtmd_input_chunks_size(chunks);
+
+    // Check if we have enough context
+    size_t total_tokens = mtmd_helper_get_n_tokens(chunks);
+    if (tokens_used() + (int)total_tokens > llama_n_ctx(g_ctx))
+        return out_of_context(total_tokens);
+
+    // Evaluate each chunk using the same helper as llama.cpp server
+    for (size_t i = 0; i < n_chunks; i++) {
+        if (g_got_sigint) {
+            g_got_sigint = false;
+            clear_ephemeral();
+            return false;
+        }
+
+        const mtmd_input_chunk *chunk = mtmd_input_chunks_get(chunks, i);
+        auto chunk_type = mtmd_input_chunk_get_type(chunk);
+        size_t n_tokens = mtmd_input_chunk_get_n_tokens(chunk);
+
+        // Show progress for large prompts or image processing
+        if (chunk_type == MTMD_INPUT_CHUNK_TYPE_TEXT) {
+            if ((int)n_tokens > g_params->n_batch)
+                print_ephemeral("loading prompt...");
+        } else {
+            print_ephemeral("processing image...");
+        }
+
+        // Use the same helper function as llama.cpp server
+        llama_pos n_past = tokens_used();
+        llama_pos new_n_past = n_past;
+        int32_t ret = mtmd_helper_eval_chunk_single(
+            g_mtmd, g_ctx, chunk,
+            n_past,
+            0,  // seq_id
+            g_params->n_batch,
+            true,  // logits_last
+            &new_n_past);
+
+        if (ret != 0) {
+            if (chunk_type == MTMD_INPUT_CHUNK_TYPE_TEXT)
+                err("failed to evaluate text chunk");
+            else
+                err("failed to evaluate image chunk");
+            return false;
+        }
+
+        // Update history for context tracking
+        if (chunk_type == MTMD_INPUT_CHUNK_TYPE_TEXT) {
+            // Add actual tokens to history
+            size_t n_text_tokens;
+            const llama_token *tokens = mtmd_input_chunk_get_tokens_text(chunk, &n_text_tokens);
+            g_history.insert(g_history.end(), tokens, tokens + n_text_tokens);
+        } else {
+            // Add placeholder tokens for image/audio
+            for (size_t j = 0; j < n_tokens; j++) {
+                g_history.push_back(IMAGE_PLACEHOLDER_TOKEN);
+            }
+        }
+    }
+
+    clear_ephemeral();
+    llama_synchronize(g_ctx);
+    return true;
+}
+
+// Evaluate a string that may contain embedded data URIs for images.
+// Images are processed using the mtmd API which requires tokenizing
+// text and images together.
 bool eval_string(std::string_view s, bool add_special, bool parse_special) {
+    // First pass: find all data URIs and collect images
+    std::string modified_text;
+    mtmd::bitmaps bitmaps;
     size_t i = 0;
-    for (;;) {
+    size_t last_pos = 0;
+
+    while (i < s.size()) {
         size_t pos = s.find("data:", i);
-        if (pos == std::string_view::npos)
-            return eval_plain_text(std::string(s), add_special, parse_special);
+        if (pos == std::string_view::npos) {
+            // No more data URIs, append rest of string
+            modified_text += s.substr(last_pos);
+            break;
+        }
+
         i = pos + 5;
         DataUri uri;
         size_t end = uri.parse(s.substr(pos + 5));
@@ -102,6 +162,7 @@ bool eval_string(std::string_view s, bool add_special, bool parse_special) {
             continue;
         if (!lf::startscasewith(uri.mime, "image/"))
             continue;
+
         std::string image;
         try {
             image = uri.decode();
@@ -110,13 +171,60 @@ bool eval_string(std::string_view s, bool add_special, bool parse_special) {
         }
         if (!is_image(image))
             continue;
-        if (!eval_plain_text(std::string(s.substr(0, pos)), add_special, parse_special))
+
+        // We have a valid image - check if we have multimodal support
+        if (!g_mtmd) {
+            err("multimodal model not loaded (use --mmproj to specify vision model)");
             return false;
-        if (!eval_image(image))
+        }
+
+        // Append text before this data URI
+        modified_text += s.substr(last_pos, pos - last_pos);
+
+        // Create bitmap from image data
+        mtmd::bitmap bmp(mtmd_helper_bitmap_init_from_buf(
+            g_mtmd, (const unsigned char *)image.data(), image.size()));
+        if (!bmp.ptr) {
+            err("failed to load image");
             return false;
-        s = s.substr(i + end);
-        i = 0;
+        }
+        bitmaps.entries.push_back(std::move(bmp));
+
+        // Add marker where image should go
+        modified_text += mtmd_default_marker();
+
+        // Move past this data URI
+        last_pos = i + end;
+        i = last_pos;
     }
+
+    // If no images found, just evaluate as plain text
+    if (bitmaps.entries.empty()) {
+        return eval_plain_text(std::string(s), add_special, parse_special);
+    }
+
+    // Use mtmd_tokenize to process text with images
+    mtmd_input_text text;
+    text.text = modified_text.c_str();
+    text.add_special = add_special;
+    text.parse_special = parse_special;
+
+    mtmd::input_chunks chunks(mtmd_input_chunks_init());
+    auto bitmaps_c_ptr = bitmaps.c_ptr();
+    int32_t res = mtmd_tokenize(g_mtmd, chunks.ptr.get(), &text,
+                                bitmaps_c_ptr.data(), bitmaps_c_ptr.size());
+    if (res != 0) {
+        if (res == 1)
+            err("number of images doesn't match number of markers in prompt");
+        else if (res == 2)
+            err("image preprocessing error");
+        else
+            err("failed to tokenize prompt with images (error %d)", res);
+        return false;
+    }
+
+    // Evaluate the chunks
+    return eval_mtmd_chunks(chunks.ptr.get());
 }
 
 } // namespace chatbot
