@@ -44,18 +44,21 @@ cosmocc-ci: $(COSMOCC) $(PREFIX)/bin/ape # cosmocc toolchain setup in ci context
 setup: # Initialize and configure all dependencies (submodules, patches, etc.)
 	@echo "Setting up dependencies..."
 	@mkdir -p o/tmp
+
 	@if [ ! -f whisper.cpp/.git ]; then \
 		echo "Initializing whisper.cpp submodule..."; \
 		git submodule update --init whisper.cpp; \
 	fi
 	@echo "Applying whisper.cpp patches..."
 	@export TMPDIR=$$(pwd)/o/tmp && ./whisper.cpp.patches/apply-patches.sh
+
 	@if [ ! -f stable-diffusion.cpp/.git ]; then \
 		echo "Initializing stable-diffusion.cpp submodule..."; \
 		git submodule update --init stable-diffusion.cpp; \
 	fi
 	@echo "Applying stable-diffusion.cpp patches..."
 	@export TMPDIR=$$(pwd)/o/tmp && ./stable-diffusion.cpp.patches/apply-patches.sh
+
 	@if [ ! -f llama.cpp/.git ]; then \
 		echo "Initializing llama.cpp submodule..."; \
 		git submodule update --init llama.cpp; \
@@ -64,14 +67,15 @@ setup: # Initialize and configure all dependencies (submodules, patches, etc.)
 	@cd llama.cpp && git submodule update --init
 	@echo "Applying llama.cpp patches..."
 	@export TMPDIR=$$(pwd)/o/tmp && ./llama.cpp.patches/apply-patches.sh
-	@echo "Setup complete!"
+
 	@if [ ! -f third_party/zipalign/.git ]; then \
 		echo "Initializing zipalign submodule..."; \
 		git submodule update --init third_party/zipalign; \
 	fi
+	@echo "Setup complete!"
 
 .PHONY: reset-repo
-reset-repo: # Reset all submodules to their original state (removes patches)
+reset-repo: # Reset all submodules to their original state (removes patches or any other change)
 	@echo "Resetting submodules to original state..."
 	@for dir in llama.cpp whisper.cpp stable-diffusion.cpp third_party/zipalign; do \
 		if [ -e "$$dir" ]; then \
