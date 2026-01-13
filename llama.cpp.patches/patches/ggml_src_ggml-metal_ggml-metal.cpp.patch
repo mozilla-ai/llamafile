@@ -1,0 +1,34 @@
+diff --git a/ggml/src/ggml-metal/ggml-metal.cpp b/ggml/src/ggml-metal/ggml-metal.cpp
+--- a/llama.cpp/ggml/src/ggml-metal/ggml-metal.cpp
++++ b/llama.cpp/ggml/src/ggml-metal/ggml-metal.cpp
+@@ -79,6 +79,14 @@ static void ggml_backend_metal_buffer_shared_clear(ggml_backend_buffer_t buffer,
+     ggml_metal_buffer_clear(ctx, value);
+ }
+ 
++// free_struct callback for cross-module memory management
++// When the Metal backend is loaded as a dynamic library, the buffer struct
++// is allocated by the dylib's 'new' operator and must be freed by the dylib's
++// 'delete' operator (not the main executable's)
++static void ggml_backend_metal_buffer_free_struct(ggml_backend_buffer_t buffer) {
++    delete buffer;
++}
++
+ static ggml_backend_buffer_i ggml_backend_metal_buffer_shared_i = {
+     /* .free_buffer     = */ ggml_backend_metal_buffer_shared_free_buffer,
+     /* .get_base        = */ ggml_backend_metal_buffer_shared_get_base,
+@@ -89,6 +97,7 @@ static ggml_backend_buffer_i ggml_backend_metal_buffer_shared_i = {
+     /* .cpy_tensor      = */ ggml_backend_metal_buffer_shared_cpy_tensor,
+     /* .clear           = */ ggml_backend_metal_buffer_shared_clear,
+     /* .reset           = */ NULL,
++    /* .free_struct     = */ ggml_backend_metal_buffer_free_struct,
+ };
+ 
+ // private buffer
+@@ -163,6 +172,7 @@ static ggml_backend_buffer_i ggml_backend_metal_buffer_private_i = {
+     /* .cpy_tensor      = */ ggml_backend_metal_buffer_private_cpy_tensor,
+     /* .clear           = */ ggml_backend_metal_buffer_private_clear,
+     /* .reset           = */ NULL,
++    /* .free_struct     = */ ggml_backend_metal_buffer_free_struct,
+ };
+ 
+ //

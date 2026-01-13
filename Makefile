@@ -8,8 +8,8 @@ MAKEFLAGS += --no-builtin-rules
 .DELETE_ON_ERROR:
 .FEATURES: output-sync
 
-# setup target needs to run before build/config.mk checks make version
-ifneq ($(MAKECMDGOALS),setup)
+# setup and reset-repo targets need to run before build/config.mk checks make version
+ifeq ($(filter $(MAKECMDGOALS),setup reset-repo),)
 include build/config.mk
 include build/rules.mk
 
@@ -21,8 +21,9 @@ endif
 # the root package is `o//` by default
 # building a package also builds its sub-packages
 .PHONY: o/$(MODE)/
-o/$(MODE)/:	o/$(MODE)/llamafile					\
-		o/$(MODE)/llama.cpp
+o/$(MODE)/:	o/$(MODE)/llamafile	\
+		o/$(MODE)/llama.cpp \
+		o/$(MODE)/third_party/zipalign
 
 .PHONY: install
 install: o/$(MODE)/llamafile/llamafile
@@ -43,6 +44,7 @@ cosmocc-ci: $(COSMOCC) $(PREFIX)/bin/ape # cosmocc toolchain setup in ci context
 setup: # Initialize and configure all dependencies (submodules, patches, etc.)
 	@echo "Setting up dependencies..."
 	@mkdir -p o/tmp
+
 	@if [ ! -f whisper.cpp/.git ]; then \
 		echo "Initializing whisper.cpp submodule..."; \
 		git submodule update --init whisper.cpp; \
@@ -65,9 +67,27 @@ setup: # Initialize and configure all dependencies (submodules, patches, etc.)
 	@cd llama.cpp && git submodule update --init
 	@echo "Applying llama.cpp patches..."
 	@export TMPDIR=$$(pwd)/o/tmp && ./llama.cpp.patches/apply-patches.sh
+
+	@if [ ! -f third_party/zipalign/.git ]; then \
+		echo "Initializing zipalign submodule..."; \
+		git submodule update --init third_party/zipalign; \
+	fi
 	@echo "Setup complete!"
 
-ifneq ($(MAKECMDGOALS),setup)
+.PHONY: reset-repo
+reset-repo: # Reset all submodules to their original state (removes patches or any other change)
+	@echo "Resetting submodules to original state..."
+	@for dir in llama.cpp whisper.cpp stable-diffusion.cpp third_party/zipalign; do \
+		if [ -e "$$dir" ]; then \
+			echo "Removing $$dir..."; \
+			rm -rf "$$dir"; \
+		fi; \
+		echo "Restoring $$dir..."; \
+		git checkout "$$dir"; \
+	done
+	@echo "Reset complete. Run 'make setup' to reinitialize and apply patches."
+
+ifeq ($(filter $(MAKECMDGOALS),setup reset-repo),)
 include build/deps.mk
 include build/tags.mk
 endif
