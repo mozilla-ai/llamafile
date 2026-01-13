@@ -71,13 +71,17 @@ bool eval_plain_text(const std::string &str, bool add_special, bool parse_specia
 
 // Helper to evaluate chunks from mtmd_tokenize and update g_history.
 // Uses mtmd_helper_eval_chunk_single() for consistency with llama.cpp server.
+// Tracks n_past explicitly to handle M-RoPE models where n_pos != n_tokens.
 static bool eval_mtmd_chunks(mtmd_input_chunks *chunks) {
     size_t n_chunks = mtmd_input_chunks_size(chunks);
 
-    // Check if we have enough context
-    size_t total_tokens = mtmd_helper_get_n_tokens(chunks);
-    if (tokens_used() + (int)total_tokens > llama_n_ctx(g_ctx))
-        return out_of_context(total_tokens);
+    // Check context using n_pos (not n_tokens) for M-RoPE compatibility
+    llama_pos total_pos = mtmd_helper_get_n_pos(chunks);
+    if (tokens_used() + total_pos > llama_n_ctx(g_ctx))
+        return out_of_context(total_pos);
+
+    // Track position explicitly across chunks (like llama.cpp server)
+    llama_pos n_past = tokens_used();
 
     // Evaluate each chunk using the same helper as llama.cpp server
     for (size_t i = 0; i < n_chunks; i++) {
@@ -89,10 +93,10 @@ static bool eval_mtmd_chunks(mtmd_input_chunks *chunks) {
 
         const mtmd_input_chunk *chunk = mtmd_input_chunks_get(chunks, i);
         auto chunk_type = mtmd_input_chunk_get_type(chunk);
-        size_t n_tokens = mtmd_input_chunk_get_n_tokens(chunk);
 
         // Show progress for large prompts or image processing
         if (chunk_type == MTMD_INPUT_CHUNK_TYPE_TEXT) {
+            size_t n_tokens = mtmd_input_chunk_get_n_tokens(chunk);
             if ((int)n_tokens > g_params->n_batch)
                 print_ephemeral("loading prompt...");
         } else {
@@ -100,7 +104,6 @@ static bool eval_mtmd_chunks(mtmd_input_chunks *chunks) {
         }
 
         // Use the same helper function as llama.cpp server
-        llama_pos n_past = tokens_used();
         llama_pos new_n_past = n_past;
         int32_t ret = mtmd_helper_eval_chunk_single(
             g_mtmd, g_ctx, chunk,
@@ -119,17 +122,22 @@ static bool eval_mtmd_chunks(mtmd_input_chunks *chunks) {
         }
 
         // Update history for context tracking
+        // Use n_pos (not n_tokens) for M-RoPE model compatibility
+        llama_pos n_pos = mtmd_input_chunk_get_n_pos(chunk);
         if (chunk_type == MTMD_INPUT_CHUNK_TYPE_TEXT) {
             // Add actual tokens to history
             size_t n_text_tokens;
             const llama_token *tokens = mtmd_input_chunk_get_tokens_text(chunk, &n_text_tokens);
             g_history.insert(g_history.end(), tokens, tokens + n_text_tokens);
         } else {
-            // Add placeholder tokens for image/audio
-            for (size_t j = 0; j < n_tokens; j++) {
+            // Add placeholder tokens for image/audio (use n_pos for M-RoPE)
+            for (llama_pos j = 0; j < n_pos; j++) {
                 g_history.push_back(IMAGE_PLACEHOLDER_TOKEN);
             }
         }
+
+        // Update position for next chunk
+        n_past = new_n_past;
     }
 
     clear_ephemeral();
