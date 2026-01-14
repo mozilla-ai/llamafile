@@ -79,6 +79,7 @@ LLAMA_SRCS_CPP := \
 	llama.cpp/src/models/ernie4-5.cpp \
 	llama.cpp/src/models/exaone.cpp \
 	llama.cpp/src/models/exaone4.cpp \
+	llama.cpp/src/models/exaone-moe.cpp \
 	llama.cpp/src/models/falcon-h1.cpp \
 	llama.cpp/src/models/falcon.cpp \
 	llama.cpp/src/models/gemma-embedding.cpp \
@@ -262,6 +263,7 @@ MTMD_SRCS_CPP := \
 	llama.cpp/tools/mtmd/models/llama4.cpp \
 	llama.cpp/tools/mtmd/models/llava.cpp \
 	llama.cpp/tools/mtmd/models/minicpmv.cpp \
+	llama.cpp/tools/mtmd/models/mobilenetv5.cpp \
 	llama.cpp/tools/mtmd/models/pixtral.cpp \
 	llama.cpp/tools/mtmd/models/qwen2vl.cpp \
 	llama.cpp/tools/mtmd/models/qwen3vl.cpp \
