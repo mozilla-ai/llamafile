@@ -10,8 +10,7 @@ jobs:
     runs-on: ubuntu-latest
 
     permissions:
-      contents: write
-      pull-requests: write
+      issues: write
 
     steps:
     - uses: actions/checkout@v4
@@ -19,11 +18,6 @@ jobs:
         submodules: recursive
         fetch-depth: 0
         ref: new_build_wip
-
-    - name: Configure git
-      run: |
-        git config user.name "github-actions[bot]"
-        git config user.email "github-actions[bot]@users.noreply.github.com"
 
     - name: Check for submodule updates
       id: check
@@ -49,74 +43,69 @@ jobs:
           echo "Submodule is up to date"
         fi
 
-    - name: Update submodule and create PR
+    - name: Create issue for Copilot
       if: steps.check.outputs.needs_update == 'true'
       env:
         GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
-        BRANCH_NAME="update-llama-cpp-${{ steps.check.outputs.latest_short }}"
-
-        if git ls-remote --heads origin "$BRANCH_NAME" | grep -q "$BRANCH_NAME"; then
-          echo "Branch $BRANCH_NAME already exists, skipping"
+        # Check if an issue already exists for this update
+        EXISTING_ISSUE=$(gh issue list --search "Update llama.cpp submodule to ${{ steps.check.outputs.latest_short }}" --state open --json number --jq '.[0].number')
+        if [ -n "$EXISTING_ISSUE" ]; then
+          echo "Issue #$EXISTING_ISSUE already exists for this update, skipping"
           exit 0
         fi
 
-        EXISTING_PR=$(gh pr list --search "Update llama.cpp submodule" --state open --json number --jq '.[0].number')
-        if [ -n "$EXISTING_PR" ]; then
-          echo "PR #$EXISTING_PR already exists for updating llama.cpp, skipping"
-          exit 0
-        fi
+        # Create an issue and assign it to Copilot
+        gh issue create \
+          --title "Update llama.cpp submodule to ${{ steps.check.outputs.latest_short }}" \
+          --assignee "copilot" \
+          --body "A new version of llama.cpp is available. Please update the submodule from \`${{ steps.check.outputs.current_short }}\` to \`${{ steps.check.outputs.latest_short }}\` and make necessary adjustments.
 
-        git checkout -b "$BRANCH_NAME"
+        ## Step 1: Update the submodule
 
+        \`\`\`bash
         cd llama.cpp
+        git fetch origin master
         git checkout origin/master
         cd ..
-
         git add llama.cpp
-        git commit -m "Update llama.cpp submodule to ${{ steps.check.outputs.latest_short }}"
+        \`\`\`
 
-        git push origin "$BRANCH_NAME"
+        ## Step 2: Verify and update patches
 
-        gh pr create \
-          --title "Update llama.cpp submodule to ${{ steps.check.outputs.latest_short }}" \
-          --body "This PR updates the llama.cpp submodule from \`${{ steps.check.outputs.current_short }}\` to \`${{ steps.check.outputs.latest_short }}\`.
+        - Review the patches in \`llama.cpp.patches/patches/\`
+        - Check if each patch still applies cleanly to the new llama.cpp version
+        - Update any patches that have conflicts due to upstream changes
+        - Run the patch application script to verify:
+          \`\`\`bash
+          cd llama.cpp.patches && ./apply-patches.sh
+          \`\`\`
 
-        **Changes:** https://github.com/ggerganov/llama.cpp/compare/${{ steps.check.outputs.current_commit }}...${{ steps.check.outputs.latest_commit }}
+        ## Step 3: Update BUILD.mk dependencies
 
-        ---
-        *This PR was automatically created by the update-llama-cpp workflow.*" \
-          --base new_build_wip \
-          --head "$BRANCH_NAME"
+        - Review \`llama.cpp/BUILD.mk\` for any new source files or dependencies added upstream
+        - Remove references to any deleted source files
+        - Ensure all new dependencies are properly included
+        - Check the upstream changes for new/removed files in \`llama.cpp/src/\`, \`llama.cpp/common/\`, \`llama.cpp/ggml/\`
 
-        # Post a comment tagging @copilot with instructions
-        gh pr comment "$BRANCH_NAME" --body "@copilot Please help complete this llama.cpp submodule update by performing the following tasks:
+        ## Step 4: Update llamafile integration code
 
-        ## Tasks
-
-        1. **Verify and update patches**
-           - Review the patches in \`llama.cpp.patches/patches/\`
-           - Check if each patch still applies cleanly to the new llama.cpp version
-           - Update any patches that have conflicts due to upstream changes
-
-        2. **Update BUILD.mk dependencies**
-           - Review \`llama.cpp/BUILD.mk\` for any new source files or dependencies added upstream
-           - Remove references to any deleted source files
-           - Ensure all new dependencies are properly included
-
-        3. **Update llamafile integration code**
-           - Check if the llamafile code that calls llama.cpp server/main needs updates
-           - Review \`llamafile/\` for any API changes in llama.cpp that need to be reflected
+        - Check if the llamafile code that calls llama.cpp server/main needs updates
+        - Review \`llamafile/\` for any API changes in llama.cpp that need to be reflected
+        - Pay attention to changes in \`llama.cpp/include/\` for API modifications
 
         ## Verification
 
-        After making changes, verify the build works by running:
+        After making changes, verify the build works:
         \`\`\`bash
+        make clean
         make -j\$(nproc)
         \`\`\`
 
         ## Reference
 
-        - Upstream changes: https://github.com/ggerganov/llama.cpp/compare/${{ steps.check.outputs.current_commit }}...${{ steps.check.outputs.latest_commit }}
-        - Example PR with similar updates: https://github.com/mozilla-ai/llamafile/pull/847
-        "
+        - **Upstream changes:** https://github.com/ggerganov/llama.cpp/compare/${{ steps.check.outputs.current_commit }}...${{ steps.check.outputs.latest_commit }}
+        - **Example PR with similar updates:** https://github.com/mozilla-ai/llamafile/pull/847
+
+        ---
+        *This issue was automatically created by the update-llama-cpp workflow.*"
