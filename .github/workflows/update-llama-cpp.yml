@@ -58,7 +58,7 @@ jobs:
         # Create an issue and assign it to Copilot
         gh issue create \
           --title "Update llama.cpp submodule to ${{ steps.check.outputs.latest_short }}" \
-          --assignee "copilot" \
+          --assignee "daavoo" \
           --body "A new version of llama.cpp is available. Please update the submodule from \`${{ steps.check.outputs.current_short }}\` to \`${{ steps.check.outputs.latest_short }}\` and make necessary adjustments.
 
         ## Step 1: Update the submodule
