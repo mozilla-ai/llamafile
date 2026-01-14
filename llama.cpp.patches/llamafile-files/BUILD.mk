@@ -77,9 +77,9 @@ LLAMA_SRCS_CPP := \
 	llama.cpp/src/models/dream.cpp \
 	llama.cpp/src/models/ernie4-5-moe.cpp \
 	llama.cpp/src/models/ernie4-5.cpp \
+	llama.cpp/src/models/exaone-moe.cpp \
 	llama.cpp/src/models/exaone.cpp \
 	llama.cpp/src/models/exaone4.cpp \
-	llama.cpp/src/models/exaone-moe.cpp \
 	llama.cpp/src/models/falcon-h1.cpp \
 	llama.cpp/src/models/falcon.cpp \
 	llama.cpp/src/models/gemma-embedding.cpp \
