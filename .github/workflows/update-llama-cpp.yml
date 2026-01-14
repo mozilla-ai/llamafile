@@ -88,3 +88,35 @@ jobs:
         *This PR was automatically created by the update-llama-cpp workflow.*" \
           --base new_build_wip \
           --head "$BRANCH_NAME"
+
+        # Post a comment tagging @copilot with instructions
+        gh pr comment "$BRANCH_NAME" --body "@copilot Please help complete this llama.cpp submodule update by performing the following tasks:
+
+        ## Tasks
+
+        1. **Verify and update patches**
+           - Review the patches in \`llama.cpp.patches/patches/\`
+           - Check if each patch still applies cleanly to the new llama.cpp version
+           - Update any patches that have conflicts due to upstream changes
+
+        2. **Update BUILD.mk dependencies**
+           - Review \`llama.cpp/BUILD.mk\` for any new source files or dependencies added upstream
+           - Remove references to any deleted source files
+           - Ensure all new dependencies are properly included
+
+        3. **Update llamafile integration code**
+           - Check if the llamafile code that calls llama.cpp server/main needs updates
+           - Review \`llamafile/\` for any API changes in llama.cpp that need to be reflected
+
+        ## Verification
+
+        After making changes, verify the build works by running:
+        \`\`\`bash
+        make -j\$(nproc)
+        \`\`\`
+
+        ## Reference
+
+        - Upstream changes: https://github.com/ggerganov/llama.cpp/compare/${{ steps.check.outputs.current_commit }}...${{ steps.check.outputs.latest_commit }}
+        - Example PR with similar updates: https://github.com/mozilla-ai/llamafile/pull/847
+        "
