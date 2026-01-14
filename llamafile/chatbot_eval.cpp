@@ -149,47 +149,23 @@ static bool eval_mtmd_chunks(mtmd_input_chunks *chunks) {
 // Images are processed using the mtmd API which requires tokenizing
 // text and images together.
 bool eval_string(std::string_view s, bool add_special, bool parse_special) {
-    // First pass: find all data URIs and collect images
-    std::string modified_text;
+    // Extract data URIs from the input
+    DataUriExtraction extraction = extract_data_uris(s, mtmd_default_marker());
+
+    // If no images found, just evaluate as plain text
+    if (extraction.images.empty()) {
+        return eval_plain_text(std::string(s), add_special, parse_special);
+    }
+
+    // We have images - check if we have multimodal support
+    if (!g_mtmd) {
+        err("multimodal model not loaded (use --mmproj to specify vision model)");
+        return false;
+    }
+
+    // Create bitmaps from decoded image data
     mtmd::bitmaps bitmaps;
-    size_t i = 0;
-    size_t last_pos = 0;
-
-    while (i < s.size()) {
-        size_t pos = s.find("data:", i);
-        if (pos == std::string_view::npos) {
-            // No more data URIs, append rest of string
-            modified_text += s.substr(last_pos);
-            break;
-        }
-
-        i = pos + 5;
-        DataUri uri;
-        size_t end = uri.parse(s.substr(pos + 5));
-        if (end == std::string_view::npos)
-            continue;
-        if (!lf::startscasewith(uri.mime, "image/"))
-            continue;
-
-        std::string image;
-        try {
-            image = uri.decode();
-        } catch (const base64_error &e) {
-            continue;
-        }
-        if (!is_image(image))
-            continue;
-
-        // We have a valid image - check if we have multimodal support
-        if (!g_mtmd) {
-            err("multimodal model not loaded (use --mmproj to specify vision model)");
-            return false;
-        }
-
-        // Append text before this data URI
-        modified_text += s.substr(last_pos, pos - last_pos);
-
-        // Create bitmap from image data
+    for (const auto &image : extraction.images) {
         mtmd::bitmap bmp(mtmd_helper_bitmap_init_from_buf(
             g_mtmd, (const unsigned char *)image.data(), image.size()));
         if (!bmp.ptr) {
@@ -197,23 +173,11 @@ bool eval_string(std::string_view s, bool add_special, bool parse_special) {
             return false;
         }
         bitmaps.entries.push_back(std::move(bmp));
-
-        // Add marker where image should go
-        modified_text += mtmd_default_marker();
-
-        // Move past this data URI
-        last_pos = i + end;
-        i = last_pos;
-    }
-
-    // If no images found, just evaluate as plain text
-    if (bitmaps.entries.empty()) {
-        return eval_plain_text(std::string(s), add_special, parse_special);
     }
 
     // Use mtmd_tokenize to process text with images
     mtmd_input_text text;
-    text.text = modified_text.c_str();
+    text.text = extraction.modified_text.c_str();
     text.add_special = add_special;
     text.parse_special = parse_special;
 

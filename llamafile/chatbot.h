@@ -46,6 +46,13 @@ enum SpecialToken {
     IMAGE_PLACEHOLDER_TOKEN = -31337,
 };
 
+// Result of extracting data URIs from text
+struct DataUriExtraction {
+    std::string modified_text;           // text with data URIs replaced by marker
+    std::vector<std::string> images;     // decoded image data
+    const char *marker;                  // marker string used for replacement
+};
+
 extern bool g_manual_mode;
 extern bool g_said_something;
 extern char g_last_printed_char;
@@ -63,6 +70,7 @@ extern bool g_interrupted_exit;
 int main(int, char **);
 
 bool eval_string(std::string_view, bool, bool);
+DataUriExtraction extract_data_uris(std::string_view, const char *marker);
 bool eval_token(int);
 bool eval_tokens(std::vector<int>);
 bool handle_command(const char *);
