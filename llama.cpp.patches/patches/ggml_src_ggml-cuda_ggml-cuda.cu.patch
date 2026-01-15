@@ -1,0 +1,56 @@
+diff --git a/ggml/src/ggml-cuda/ggml-cuda.cu b/ggml/src/ggml-cuda/ggml-cuda.cu
+--- a/llama.cpp/ggml/src/ggml-cuda/ggml-cuda.cu
++++ b/llama.cpp/ggml/src/ggml-cuda/ggml-cuda.cu
+@@ -668,6 +668,14 @@ static void ggml_backend_cuda_buffer_clear(ggml_backend_buffer_t buffer, uint8_t
+     CUDA_CHECK(cudaStreamSynchronize(cudaStreamPerThread));
+ }
+ 
++// free_struct callback for cross-module memory management
++// When the CUDA backend is loaded as a dynamic library, the buffer struct
++// is allocated by the DSO's 'new' operator and must be freed by the DSO's
++// 'delete' operator (not the main executable's)
++static void ggml_backend_cuda_buffer_free_struct(ggml_backend_buffer_t buffer) {
++    delete buffer;
++}
++
+ static const ggml_backend_buffer_i ggml_backend_cuda_buffer_interface = {
+     /* .free_buffer     = */ ggml_backend_cuda_buffer_free_buffer,
+     /* .get_base        = */ ggml_backend_cuda_buffer_get_base,
+@@ -678,6 +686,7 @@ static const ggml_backend_buffer_i ggml_backend_cuda_buffer_interface = {
+     /* .cpy_tensor      = */ ggml_backend_cuda_buffer_cpy_tensor,
+     /* .clear           = */ ggml_backend_cuda_buffer_clear,
+     /* .reset           = */ NULL,
++    /* .free_struct     = */ ggml_backend_cuda_buffer_free_struct,
+ };
+ 
+ // cuda buffer type
+@@ -990,6 +999,7 @@ static const ggml_backend_buffer_i ggml_backend_cuda_split_buffer_interface = {
+     /* .cpy_tensor      = */ NULL,
+     /* .clear           = */ ggml_backend_cuda_split_buffer_clear,
+     /* .reset           = */ NULL,
++    /* .free_struct     = */ ggml_backend_cuda_buffer_free_struct,
+ };
+ 
+ // cuda split buffer type
+@@ -1144,12 +1154,20 @@ static ggml_backend_buffer_t ggml_backend_cuda_host_buffer_type_alloc_buffer(ggm
+ 
+     if (ptr == nullptr) {
+         // fallback to cpu buffer
+-        return ggml_backend_buft_alloc_buffer(ggml_backend_cpu_buffer_type(), size);
++        // Note: must set free_struct for cross-module memory management since the
++        // buffer is allocated by the DSO's copy of ggml_backend_buft_alloc_buffer
++        ggml_backend_buffer_t buffer = ggml_backend_buft_alloc_buffer(ggml_backend_cpu_buffer_type(), size);
++        if (buffer != nullptr) {
++            buffer->iface.free_struct = ggml_backend_cuda_buffer_free_struct;
++        }
++        return buffer;
+     }
+ 
+     ggml_backend_buffer_t buffer = ggml_backend_cpu_buffer_from_ptr(ptr, size);
+     buffer->buft = buft;
+     buffer->iface.free_buffer = ggml_backend_cuda_host_buffer_free_buffer;
++    // Set free_struct for cross-module memory management (DSO must free what it allocated)
++    buffer->iface.free_struct = ggml_backend_cuda_buffer_free_struct;
+ 
+     return buffer;
+ }
