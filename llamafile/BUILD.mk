@@ -103,6 +103,7 @@ LLAMAFILE_HIGHLIGHT_SRCS := \
 
 LLAMAFILE_SRCS_C := \
 	llamafile/bestline.c \
+	llamafile/cuda.c \
 	llamafile/llamafile.c \
 	llamafile/metal.c \
 	llamafile/zip.c

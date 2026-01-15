@@ -684,19 +684,10 @@ void llamafile_log_callback_null(int level, const char *text, void *user_data) {
 // GPU support
 // ==============================================================================
 // llamafile_has_metal() is defined in metal.c with full dynamic loading support
-
-bool llamafile_has_cuda(void) {
-    // TODO: Implement CUDA/ROCm dynamic loading support
-    return false;
-}
-
-bool llamafile_has_amd_gpu(void) {
-    // TODO: Implement AMD GPU support
-    return false;
-}
+// llamafile_has_cuda() and llamafile_has_amd_gpu() are defined in cuda.c
 
 bool llamafile_has_gpu(void) {
-    return llamafile_has_metal() || llamafile_has_cuda();
+    return llamafile_has_metal() || llamafile_has_cuda() || llamafile_has_amd_gpu();
 }
 
 const char *llamafile_describe_gpu(void) {
