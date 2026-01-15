@@ -16,6 +16,7 @@ include build/rules.mk
 include third_party/BUILD.mk
 include llama.cpp/BUILD.mk
 include llamafile/BUILD.mk
+include tests/BUILD.mk
 endif
 
 # the root package is `o//` by default
@@ -31,8 +32,7 @@ install: o/$(MODE)/llamafile/llamafile
 	$(INSTALL) o/$(MODE)/llamafile/llamafile $(PREFIX)/bin/llamafile
 
 .PHONY: check
-check:
-	@echo "No tests defined yet for new llamafile build"
+check: o/$(MODE)/tests
 
 .PHONY: cosmocc
 cosmocc: $(COSMOCC) # cosmocc toolchain setup

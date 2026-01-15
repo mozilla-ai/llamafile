@@ -31,6 +31,7 @@
 #include "log.h"
 #include "sampling.h"
 #include "mtmd.h"
+#include "mtmd-helper.h"
 
 #include "color.h"
 #include "compute.h"
@@ -140,6 +141,10 @@ int main(int argc, char **argv) {
     // and BEFORE model loading to suppress those logs
     if (!verbose) {
         llama_log_set((ggml_log_callback)llamafile_log_callback_null, NULL);
+        // Also suppress LOG_INF() and LOG_WRN() messages from common_log (used by LLM loader)
+        common_log_set_verbosity_thold(LOG_LEVEL_ERROR);
+        // Suppress mtmd/CLIP and mtmd-helper logging (they have their own logging systems)
+        mtmd_helper_log_set((ggml_log_callback)llamafile_log_callback_null, NULL);
     }
 
     print_ephemeral("loading model...");
