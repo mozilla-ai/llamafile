@@ -321,10 +321,11 @@ TOOL_IMATRIX_OBJS := $(TOOL_IMATRIX_SRCS:%.cpp=o/$(MODE)/%.cpp.o)
 TOOL_PERPLEXITY_OBJS := $(TOOL_PERPLEXITY_SRCS:%.cpp=o/$(MODE)/%.cpp.o)
 TOOL_BENCH_OBJS := $(TOOL_BENCH_SRCS:%.cpp=o/$(MODE)/%.cpp.o)
 TOOL_SERVER_OBJS := $(TOOL_SERVER_SRCS:%.cpp=o/$(MODE)/%.cpp.o)
-# llamafile objects are used to add dynamic metal support
+# llamafile objects are used to add dynamic GPU support (Metal, CUDA, ROCm)
 TOOL_LLAMAFILE_OBJS := \
 	o/$(MODE)/llamafile/llamafile.o \
 	o/$(MODE)/llamafile/metal.o \
+	o/$(MODE)/llamafile/cuda.o \
 	o/$(MODE)/llamafile/zip.o
 
 # Server objects depend on generated assets
