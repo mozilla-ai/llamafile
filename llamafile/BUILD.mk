@@ -121,6 +121,7 @@ LLAMAFILE_SRCS_CPP := \
 	llamafile/chatbot_repl.cpp \
 	llamafile/compute.cpp \
 	llamafile/datauri.cpp \
+	llamafile/extract_data_uris.cpp \
 	llamafile/image.cpp \
 	llamafile/llama.cpp \
 	llamafile/string.cpp \
