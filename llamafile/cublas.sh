@@ -7,17 +7,17 @@
 # provide better performance on some workloads but requires the cuBLAS library at runtime.
 #
 # Usage:
-#   ./cuda_cublas_parallel.sh              # Build with auto-detected parallelism
-#   ./cuda_cublas_parallel.sh -j16         # Build with 16 parallel jobs
-#   ./cuda_cublas_parallel.sh --clean      # Clean and rebuild
+#   ./cublas.sh              # Build with auto-detected parallelism
+#   ./cublas.sh -j16         # Build with 16 parallel jobs
+#   ./cublas.sh --clean      # Clean and rebuild
 #
-# Output: ~/ggml-cuda-cublas.so
+# Output: ~/ggml-cuda.so
 #
 
 set -e
 
 # Default settings
-OUTPUT="${HOME}/ggml-cuda-cublas.so"
+OUTPUT="${HOME}/ggml-cuda.so"
 CUDA_PATH="${CUDA_PATH:-/usr/local/cuda}"
 NVCC="${CUDA_PATH}/bin/nvcc"
 JOBS=$(nproc 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 4)
