@@ -186,7 +186,7 @@ echo ""
 # These are needed to make the DSO self-contained since cosmo_dlopen()
 # cannot resolve symbols from the parent process
 echo "Compiling core GGML sources..."
-HOST_FLAGS="-fPIC -O2 -DNDEBUG -DGGML_BUILD=1 -DGGML_SHARED=1 -DGGML_MULTIPLATFORM -DGGML_VERSION='\"0.9.4\"' -DGGML_COMMIT='\"unknown\"' -I$LLAMA_CPP_DIR/ggml/include -I$LLAMA_CPP_DIR/ggml/src"
+HOST_FLAGS="-fPIC -O2 -DNDEBUG -DGGML_BUILD=1 -DGGML_SHARED=1 -DGGML_MULTIPLATFORM -DGGML_VERSION=\\\"0.9.4\\\" -DGGML_COMMIT=\\\"unknown\\\" -I$LLAMA_CPP_DIR/ggml/include -I$LLAMA_CPP_DIR/ggml/src"
 
 for src in $GGML_CORE_SOURCES; do
     base=$(basename "$src")
