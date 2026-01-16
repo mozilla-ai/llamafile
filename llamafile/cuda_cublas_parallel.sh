@@ -1,23 +1,23 @@
 #!/bin/bash
 #
-# CUDA build script for llamafile (parallel compilation)
+# CUDA build script for llamafile with cuBLAS (parallel compilation)
 #
-# This script compiles the GGML CUDA backend with TinyBLAS into a shared library.
-# Unlike cuda.sh, this version compiles each .cu file separately in parallel,
-# which can be significantly faster on multi-core systems.
+# This script compiles the GGML CUDA backend with NVIDIA cuBLAS into a shared library.
+# Unlike the TinyBLAS version, this uses NVIDIA's optimized BLAS library which may
+# provide better performance on some workloads but requires the cuBLAS library at runtime.
 #
 # Usage:
-#   ./cuda_parallel.sh              # Build with auto-detected parallelism
-#   ./cuda_parallel.sh -j16         # Build with 16 parallel jobs
-#   ./cuda_parallel.sh --clean      # Clean and rebuild
+#   ./cuda_cublas_parallel.sh              # Build with auto-detected parallelism
+#   ./cuda_cublas_parallel.sh -j16         # Build with 16 parallel jobs
+#   ./cuda_cublas_parallel.sh --clean      # Clean and rebuild
 #
-# Output: ~/ggml-cuda.so
+# Output: ~/ggml-cuda-cublas.so
 #
 
 set -e
 
 # Default settings
-OUTPUT="${HOME}/ggml-cuda.so"
+OUTPUT="${HOME}/ggml-cuda-cublas.so"
 CUDA_PATH="${CUDA_PATH:-/usr/local/cuda}"
 NVCC="${CUDA_PATH}/bin/nvcc"
 JOBS=$(nproc 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 4)
@@ -53,6 +53,12 @@ if [ ! -x "$NVCC" ]; then
     exit 1
 fi
 
+# Check for cuBLAS
+if [ ! -f "$CUDA_PATH/lib64/libcublas.so" ] && [ ! -f "$CUDA_PATH/lib/libcublas.so" ]; then
+    echo "Warning: libcublas.so not found in $CUDA_PATH/lib64 or $CUDA_PATH/lib"
+    echo "cuBLAS is required at runtime for this build"
+fi
+
 # Get script directory (where llamafile sources are)
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 LLAMAFILE_DIR="$SCRIPT_DIR"
@@ -65,24 +71,19 @@ if [ ! -d "$GGML_CUDA_DIR" ]; then
     exit 1
 fi
 
-# Create build directory
-BUILD_DIR="${HOME}/.cache/llamafile-cuda-build"
+# Create build directory (separate from TinyBLAS build)
+BUILD_DIR="${HOME}/.cache/llamafile-cuda-cublas-build"
 if [ "$CLEAN" = "1" ] && [ -d "$BUILD_DIR" ]; then
     echo "Cleaning build directory..."
     rm -rf "$BUILD_DIR"
 fi
 mkdir -p "$BUILD_DIR"
 
-echo "Building ggml-cuda.so with TinyBLAS (parallel)..."
+echo "Building ggml-cuda.so with cuBLAS (parallel)..."
 echo "  Source: $GGML_CUDA_DIR"
 echo "  Output: $OUTPUT"
 echo "  Build:  $BUILD_DIR"
 echo "  Jobs:   $JOBS"
-
-# Copy TinyBLAS files to build directory
-cp "$LLAMAFILE_DIR/tinyblas.h" "$BUILD_DIR/"
-cp "$LLAMAFILE_DIR/tinyblas.cu" "$BUILD_DIR/"
-cp "$LLAMAFILE_DIR/tinyblas-compat.h" "$BUILD_DIR/"
 
 # Architecture flags for supported GPUs
 # sm_75: Turing (RTX 2000 series, Tesla T4)
@@ -101,7 +102,6 @@ ARCH_FLAGS="\
 COMMON_FLAGS="\
   --use_fast_math \
   --extended-lambda \
-  -I$BUILD_DIR \
   -I$LLAMA_CPP_DIR/ggml/include \
   -I$LLAMA_CPP_DIR/ggml/src \
   -I$GGML_CUDA_DIR \
@@ -111,11 +111,10 @@ COMMON_FLAGS="\
   -DGGML_BUILD=1 \
   -DGGML_SHARED=1 \
   -DGGML_MULTIPLATFORM \
-  -DGGML_USE_TINYBLAS"
+  -DGGML_USE_CUBLAS"
 
-# Collect all CUDA source files
-# Start with tinyblas.cu which must be compiled separately
-CUDA_SOURCES="$BUILD_DIR/tinyblas.cu"
+# Collect all CUDA source files (no TinyBLAS)
+CUDA_SOURCES=""
 
 # Add all GGML CUDA files
 for f in "$GGML_CUDA_DIR"/*.cu "$GGML_CUDA_DIR/template-instances"/*.cu; do
@@ -225,12 +224,13 @@ OBJ_FILES=$(find "$BUILD_DIR" -name "*.o" -type f | tr '\n' ' ')
 NUM_OBJS=$(find "$BUILD_DIR" -name "*.o" -type f | wc -l)
 echo "  Linking $NUM_OBJS object files..."
 
-# Link into shared library
-$NVCC --shared $ARCH_FLAGS -o "$OUTPUT" $OBJ_FILES -lcuda
+# Link into shared library (with cuBLAS)
+$NVCC --shared $ARCH_FLAGS -o "$OUTPUT" $OBJ_FILES -lcuda -lcublas
 
 END_TIME=$(date +%s)
 echo ""
 echo "Total time: $((END_TIME - START_TIME)) seconds"
 echo ""
 echo "Successfully built: $OUTPUT"
+echo "Note: This library requires libcublas.so at runtime"
 ls -lh "$OUTPUT"
