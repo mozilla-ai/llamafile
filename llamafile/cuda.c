@@ -85,35 +85,27 @@ static bool FileExists(const char *path) {
 }
 
 static bool LinkCuda(const char *dso) {
-    fprintf(stderr, "cuda: attempting to load %s\n", dso);
-
     // Load dynamic shared object using Cosmopolitan's dlopen
     void *lib = cosmo_dlopen(dso, RTLD_LAZY);
     if (!lib) {
         char *err = cosmo_dlerror();
-        fprintf(stderr, "cuda: %s: failed to load library: %s\n", dso, err ? err : "unknown error");
+        fprintf(stderr, "cuda: %s: failed to load library\n", err ? err : "unknown error");
         return false;
     }
-    fprintf(stderr, "cuda: %s: library loaded successfully\n", dso);
 
-    // Try to import CUDA backend functions
+    // Import functions
     bool ok = true;
 
-    // Core functions
     *(void **)(&g_cuda.backend_init) = cosmo_dlsym(lib, "ggml_backend_cuda_init");
-    fprintf(stderr, "cuda: ggml_backend_cuda_init: %s\n", g_cuda.backend_init ? "found" : "NOT FOUND");
     ok &= (g_cuda.backend_init != NULL);
 
     *(void **)(&g_cuda.backend_reg) = cosmo_dlsym(lib, "ggml_backend_cuda_reg");
-    fprintf(stderr, "cuda: ggml_backend_cuda_reg: %s\n", g_cuda.backend_reg ? "found" : "NOT FOUND");
     ok &= (g_cuda.backend_reg != NULL);
 
     *(void **)(&g_cuda.get_device_count) = cosmo_dlsym(lib, "ggml_backend_cuda_get_device_count");
-    fprintf(stderr, "cuda: ggml_backend_cuda_get_device_count: %s\n", g_cuda.get_device_count ? "found" : "NOT FOUND");
     // Optional - don't fail if not found
 
     *(void **)(&g_cuda.get_device_description) = cosmo_dlsym(lib, "ggml_backend_cuda_get_device_description");
-    fprintf(stderr, "cuda: ggml_backend_cuda_get_device_description: %s\n", g_cuda.get_device_description ? "found" : "NOT FOUND");
     // Optional - don't fail if not found
 
     // Import logging control (optional)
@@ -121,13 +113,11 @@ static bool LinkCuda(const char *dso) {
 
     if (!ok) {
         char *err = cosmo_dlerror();
-        fprintf(stderr, "cuda: %s: not all required symbols could be imported: %s\n",
-                dso, err ? err : "unknown error");
+        fprintf(stderr, "cuda: %s: not all symbols could be imported\n", err ? err : "unknown error");
         cosmo_dlclose(lib);
         return false;
     }
 
-    fprintf(stderr, "cuda: %s: all required symbols imported successfully\n", dso);
     g_cuda.lib_handle = lib;
     return true;
 }
@@ -193,28 +183,20 @@ static bool TryLoadPrebuiltDso(const char *name) {
 }
 
 static bool ImportCudaImpl(void) {
-    fprintf(stderr, "cuda: ImportCudaImpl() called, FLAG_gpu=%d\n", FLAG_gpu);
-
     // Skip on Apple Silicon (use Metal instead)
     if (IsXnuSilicon()) {
-        fprintf(stderr, "cuda: skipping on Apple Silicon\n");
         return false;
     }
 
     // Check if we're allowed to even try
     switch (FLAG_gpu) {
     case LLAMAFILE_GPU_AUTO:
-        fprintf(stderr, "cuda: FLAG_gpu=AUTO, will try both NVIDIA and AMD\n");
-        break;
     case LLAMAFILE_GPU_NVIDIA:
-        fprintf(stderr, "cuda: FLAG_gpu=NVIDIA\n");
         break;
     case LLAMAFILE_GPU_AMD:
-        fprintf(stderr, "cuda: FLAG_gpu=AMD\n");
         g_cuda.is_amd = true;
         break;
     default:
-        fprintf(stderr, "cuda: FLAG_gpu=%d not supported, returning false\n", FLAG_gpu);
         return false;
     }
 
@@ -250,28 +232,15 @@ static bool ImportCudaImpl(void) {
     return false;
 
 RegisterBackend:
-    fprintf(stderr, "cuda: DSO loaded, attempting backend registration\n");
-
     // Register the CUDA backend with GGML
     if (g_cuda.backend_reg) {
-        fprintf(stderr, "cuda: calling backend_reg()\n");
         ggml_backend_reg_t reg = g_cuda.backend_reg();
-        fprintf(stderr, "cuda: backend_reg() returned %p\n", (void*)reg);
         if (reg) {
             ggml_backend_register(reg);
-            fprintf(stderr, "cuda: %s backend registered with GGML\n",
-                    g_cuda.is_amd ? "ROCm" : "CUDA");
-        } else {
-            fprintf(stderr, "cuda: backend_reg() returned NULL!\n");
+            if (FLAG_verbose)
+                fprintf(stderr, "cuda: %s backend registered with GGML\n",
+                        g_cuda.is_amd ? "ROCm" : "CUDA");
         }
-    } else {
-        fprintf(stderr, "cuda: backend_reg function pointer is NULL!\n");
-    }
-
-    // Check device count
-    if (g_cuda.get_device_count) {
-        int count = g_cuda.get_device_count();
-        fprintf(stderr, "cuda: get_device_count() returned %d\n", count);
     }
 
     return true;
