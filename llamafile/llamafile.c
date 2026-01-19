@@ -721,7 +721,7 @@ int llamafile_gpu_parse(const char *s) {
     return LLAMAFILE_GPU_ERROR;
 }
 
-int parseNGL(const char* str) {
+int parse_ngl(const char* str) {
     if (!str || !*str) return 0;
 
     char* end;
@@ -769,7 +769,7 @@ void llamafile_early_gpu_init(char **argv) {
         if ((!strcmp(argv[i], "-ngl") ||
              !strcmp(argv[i], "--gpu-layers") ||
              !strcmp(argv[i], "--n-gpu-layers")) && argv[i + 1]) {
-            int n_gpu_layers = parseNGL(argv[i + 1]);
+            int n_gpu_layers = parse_ngl(argv[i + 1]);
 
             // Only disable if explicitly set to 0
             if (n_gpu_layers == 0) {

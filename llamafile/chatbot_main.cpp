@@ -20,6 +20,7 @@
 #include <cosmo.h>
 #include <cstdio>
 #include <cstdlib>
+#include <limits.h>
 #include <signal.h>
 #include <string>
 #include <unistd.h>

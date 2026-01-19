@@ -32,7 +32,6 @@
 #include <errno.h>
 #include <limits.h>
 #include <pthread.h>
-#include <spawn.h>
 #include <stdatomic.h>
 #include <stdbool.h>
 #include <stdio.h>
@@ -41,9 +40,6 @@
 #include <sys/stat.h>
 #include <sys/wait.h>
 #include <unistd.h>
-
-// Declare environ for posix_spawn
-extern char **environ;
 
 // Forward declarations for ggml backend types
 typedef struct ggml_backend * ggml_backend_t;
@@ -132,8 +128,10 @@ static bool TryLoadPrebuiltDso(const char *name) {
         // Extract to app dir first (cosmo_dlopen can't load from /zip/)
         llamafile_get_app_dir(app_dir, PATH_MAX);
         char extracted[PATH_MAX];
-        snprintf(extracted, PATH_MAX, "%s%s", app_dir, name);
-
+        if (snprintf(extracted, PATH_MAX, "%s%s", app_dir, name) >= PATH_MAX) {
+            fprintf(stderr, "cuda: path too long: %s%s\n", app_dir, name);
+            return false;
+        }
         // Check if extraction needed
         switch (llamafile_is_file_newer_than(dso, extracted)) {
         case -1:
