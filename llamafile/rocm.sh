@@ -17,35 +17,20 @@
 
 set -e
 
-# Default settings
+# Source shared build functions
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+source "$SCRIPT_DIR/build-functions.sh"
+
+# Parse arguments (sets JOBS, CLEAN)
+parse_build_args "$@"
+
+#
+# ROCm/HIP specific configuration
+#
+
 OUTPUT="${HOME}/ggml-rocm.so"
 ROCM_PATH="${ROCM_PATH:-/opt/rocm}"
 HIPCC="${ROCM_PATH}/bin/hipcc"
-JOBS=$(nproc 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 4)
-CLEAN=0
-
-# Parse arguments
-while [ $# -gt 0 ]; do
-    case "$1" in
-        -j*)
-            JOBS="${1#-j}"
-            ;;
-        --clean)
-            CLEAN=1
-            ;;
-        --help)
-            echo "Usage: $0 [-jN] [--clean]"
-            echo "  -jN      Use N parallel jobs (default: auto-detect)"
-            echo "  --clean  Clean build directory before building"
-            exit 0
-            ;;
-        *)
-            echo "Unknown option: $1"
-            exit 1
-            ;;
-    esac
-    shift
-done
 
 # Check for hipcc
 if [ ! -x "$HIPCC" ]; then
@@ -54,36 +39,22 @@ if [ ! -x "$HIPCC" ]; then
     exit 1
 fi
 
-# Get script directory (where llamafile sources are)
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+# Directory setup
 LLAMAFILE_DIR="$SCRIPT_DIR"
 LLAMA_CPP_DIR="$SCRIPT_DIR/../llama.cpp"
 GGML_CUDA_DIR="$LLAMA_CPP_DIR/ggml/src/ggml-cuda"
 
-# Version information (from environment or extracted from CMakeLists.txt)
-if [ -z "$GGML_VERSION" ]; then
-    GGML_VERSION_MAJOR=$(grep 'set(GGML_VERSION_MAJOR' "$LLAMA_CPP_DIR/ggml/CMakeLists.txt" 2>/dev/null | sed 's/[^0-9]*//g')
-    GGML_VERSION_MINOR=$(grep 'set(GGML_VERSION_MINOR' "$LLAMA_CPP_DIR/ggml/CMakeLists.txt" 2>/dev/null | sed 's/[^0-9]*//g')
-    GGML_VERSION_PATCH=$(grep 'set(GGML_VERSION_PATCH' "$LLAMA_CPP_DIR/ggml/CMakeLists.txt" 2>/dev/null | sed 's/[^0-9]*//g')
-    GGML_VERSION="${GGML_VERSION_MAJOR}.${GGML_VERSION_MINOR}.${GGML_VERSION_PATCH}"
-fi
-if [ -z "$GGML_COMMIT" ]; then
-    GGML_COMMIT=$(cd "$LLAMA_CPP_DIR/ggml" 2>/dev/null && git rev-parse --short HEAD 2>/dev/null || echo "unknown")
-fi
-
-# Check that source directories exist
 if [ ! -d "$GGML_CUDA_DIR" ]; then
     echo "Error: CUDA source directory not found: $GGML_CUDA_DIR"
     exit 1
 fi
 
-# Create build directory
+# Get version info (sets GGML_VERSION, GGML_COMMIT)
+get_ggml_version "$LLAMA_CPP_DIR"
+
+# Build directory
 BUILD_DIR="${HOME}/.cache/llamafile-rocm-build"
-if [ "$CLEAN" = "1" ] && [ -d "$BUILD_DIR" ]; then
-    echo "Cleaning build directory..."
-    rm -rf "$BUILD_DIR"
-fi
-mkdir -p "$BUILD_DIR"
+setup_build_dir "$BUILD_DIR" "$CLEAN"
 
 echo "Building ggml-rocm.so with TinyBLAS (parallel)..."
 echo "  Version: $GGML_VERSION (commit: $GGML_COMMIT)"
@@ -116,7 +87,7 @@ ARCH_FLAGS="\
   --offload-arch=gfx1102 \
   --offload-arch=gfx1103"
 
-# Common HIP compiler flags
+# HIP compiler flags
 COMMON_FLAGS="\
   -O2 \
   -fPIC \
@@ -134,124 +105,25 @@ COMMON_FLAGS="\
   -Wno-unused-result \
   $ARCH_FLAGS"
 
-# Collect all CUDA source files
-# Start with tinyblas.cu which must be compiled separately
-CUDA_SOURCES="$BUILD_DIR/tinyblas.cu"
-
-# Add all GGML CUDA files
-for f in "$GGML_CUDA_DIR"/*.cu "$GGML_CUDA_DIR/template-instances"/*.cu; do
-    if [ -f "$f" ]; then
-        CUDA_SOURCES="$CUDA_SOURCES $f"
-    fi
-done
-
-# Core GGML source files (make DSO self-contained)
-# These are needed because cosmo_dlopen() cannot resolve symbols from the parent process
-GGML_CORE_SOURCES="\
-  $LLAMA_CPP_DIR/ggml/src/ggml.c \
-  $LLAMA_CPP_DIR/ggml/src/ggml-alloc.c \
-  $LLAMA_CPP_DIR/ggml/src/ggml-backend.cpp \
-  $LLAMA_CPP_DIR/ggml/src/ggml-quants.c \
-  $LLAMA_CPP_DIR/ggml/src/ggml-threading.cpp"
-
-NUM_SOURCES=$(echo $CUDA_SOURCES | wc -w)
+# Collect sources (TinyBLAS + GGML CUDA)
+collect_gpu_sources "$GGML_CUDA_DIR" "$BUILD_DIR/tinyblas.cu"
 echo "  Sources: $NUM_SOURCES .cu files"
-echo ""
-
-echo "Compiling $NUM_SOURCES files with $JOBS parallel jobs..."
 echo ""
 
 START_TIME=$(date +%s)
 
-# Compile all files in parallel using background jobs
-count=0
-total=$NUM_SOURCES
-for src in $CUDA_SOURCES; do
-    count=$((count + 1))
-    base=$(basename "$src" .cu)
-
-    # Create unique name to avoid collisions between main files and template-instances
-    if echo "$src" | grep -q "template-instances"; then
-        obj="$BUILD_DIR/ti-${base}.o"
-    else
-        obj="$BUILD_DIR/${base}.o"
-    fi
-
-    # Skip if object file is newer than source
-    if [ -f "$obj" ] && [ "$obj" -nt "$src" ]; then
-        echo "[$count/$total] Skipping: $base.cu (up to date)"
-        continue
-    fi
-
-    echo "[$count/$total] Compiling: $base.cu"
-    $HIPCC -c $COMMON_FLAGS -o "$obj" "$src" &
-
-    # Limit parallel jobs by waiting when we hit the limit
-    running=$(jobs -r | wc -l)
-    while [ "$running" -ge "$JOBS" ]; do
-        sleep 0.1
-        running=$(jobs -r | wc -l)
-    done
-done
-
-# Wait for all remaining jobs to complete
-echo ""
-echo "Waiting for remaining compilations to finish..."
-wait
+# Compile GPU sources
+compile_gpu_sources_parallel "$HIPCC" "" "$COMMON_FLAGS" "$BUILD_DIR" "$JOBS"
 
 COMPILE_TIME=$(date +%s)
 echo "Compilation took $((COMPILE_TIME - START_TIME)) seconds"
 echo ""
 
-# Compile core GGML sources (C/C++ files, not HIP)
-# These are needed to make the DSO self-contained since cosmo_dlopen()
-# cannot resolve symbols from the parent process
-echo "Compiling core GGML sources..."
-HOST_FLAGS=(
-    -fPIC -O2 -DNDEBUG
-    -DGGML_BUILD=1
-    -DGGML_SHARED=1
-    -DGGML_MULTIPLATFORM
-    "-DGGML_VERSION=\"$GGML_VERSION\""
-    "-DGGML_COMMIT=\"$GGML_COMMIT\""
-    -I"$LLAMA_CPP_DIR/ggml/include"
-    -I"$LLAMA_CPP_DIR/ggml/src"
-)
+# Compile core GGML sources
+compile_ggml_core "$LLAMA_CPP_DIR" "$BUILD_DIR"
 
-for src in $GGML_CORE_SOURCES; do
-    base=$(basename "$src")
-    ext="${base##*.}"
-    name="${base%.*}"
-    obj="$BUILD_DIR/ggml-core-${name}.o"
+# Link
+link_shared_library "$HIPCC" "-shared -fPIC" "$ARCH_FLAGS" "$BUILD_DIR" "$OUTPUT" ""
 
-    # Skip if object file is newer than source
-    if [ -f "$obj" ] && [ "$obj" -nt "$src" ]; then
-        echo "  Skipping: $base (up to date)"
-        continue
-    fi
-
-    echo "  Compiling: $base"
-    if [ "$ext" = "c" ]; then
-        gcc -c "${HOST_FLAGS[@]}" -o "$obj" "$src"
-    else
-        g++ -c "${HOST_FLAGS[@]}" -std=c++17 -o "$obj" "$src"
-    fi
-done
-echo ""
-
-echo "Linking..."
-
-# Collect all object files
-OBJ_FILES=$(find "$BUILD_DIR" -name "*.o" -type f | tr '\n' ' ')
-NUM_OBJS=$(find "$BUILD_DIR" -name "*.o" -type f | wc -l)
-echo "  Linking $NUM_OBJS object files..."
-
-# Link into shared library
-$HIPCC -shared -fPIC $ARCH_FLAGS -o "$OUTPUT" $OBJ_FILES
-
-END_TIME=$(date +%s)
-echo ""
-echo "Total time: $((END_TIME - START_TIME)) seconds"
-echo ""
-echo "Successfully built: $OUTPUT"
-ls -lh "$OUTPUT"
+# Done
+print_build_summary "$OUTPUT" "$START_TIME"
