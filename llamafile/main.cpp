@@ -108,9 +108,7 @@ int main(int argc, char **argv) {
     // Initialize GPU support early (must happen BEFORE llama_backend_init())
     // This triggers dynamic loading of GPU backends (CUDA, ROCm, Metal)
     // The llamafile_has_* functions use lazy initialization via cosmo_once()
-    llamafile_has_metal();
-    llamafile_has_cuda();
-    llamafile_has_amd_gpu();
+    llamafile_has_gpu();
 
     enum Program prog = determine_program(argv);
 

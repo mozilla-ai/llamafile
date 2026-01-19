@@ -64,14 +64,14 @@ diff --git a/tools/server/server.cpp b/tools/server/server.cpp
 +
 +    // Initialize GPU support early (must happen BEFORE llama_backend_init())
 +    // This triggers dynamic loading of GPU backends (CUDA, ROCm, Metal)
++    // The llamafile_has_* functions use lazy initialization via cosmo_once()
++    llamafile_has_gpu();
 +    if (llamafile_has_metal()) {
 +        // Metal dylib loaded - disable logging in it too (it has its own copy of ggml)
 +        if (!verbose) {
 +            llamafile_metal_log_set(llamafile_log_callback_null, NULL);
 +        }
 +    }
-+    llamafile_has_cuda();
-+    llamafile_has_amd_gpu();
 +#endif
 +    return server_main(argc, argv);
  }
