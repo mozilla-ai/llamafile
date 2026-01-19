@@ -132,6 +132,7 @@ bool llamafile_has_amd_gpu(void);         // Defined in llamafile.c (stub)
 int llamafile_gpu_layers(int);            // Defined in llamafile.c
 int llamafile_gpu_parse(const char *);    // Defined in llamafile.c
 const char *llamafile_describe_gpu(void); // Defined in llamafile.c
+void llamafile_early_gpu_init(char **);   // Defined in llamafile.c
 
 // Log callback type for Metal backend (matches ggml_log_callback)
 typedef void (*llamafile_log_callback)(int level, const char *text, void *user_data);

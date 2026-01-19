@@ -60,20 +60,29 @@ static enum Program determine_program(char *argv[]) {
     return prog;
 }
 
-int removeArgs(int argc, char* argv[], const std::set<std::string>& args_to_remove) {
+int removeArgs(int argc, char* argv[],
+               const std::set<std::string>& flags_to_remove,
+               const std::set<std::string>& args_with_param_to_remove) {
 
     int write_idx = 0;
     for (int read_idx = 0; read_idx < argc; ++read_idx) {
         std::string current_arg = argv[read_idx];
 
-        // Check if the current argument should be removed.
-        // .count() is a clean way to check for existence in a set.
-        if (args_to_remove.count(current_arg)) {
-            continue; // Skip the current argument (and its value if applicable).
+        // Check if it's a simple flag to remove
+        if (flags_to_remove.count(current_arg)) {
+            continue;
         }
 
-        // Keep this argument.
-        // If the write position is different from the read position, copy the pointer.
+        // Check if it's an argument with a parameter to remove
+        if (args_with_param_to_remove.count(current_arg)) {
+            // Skip the parameter too (if present)
+            if (read_idx + 1 < argc) {
+                ++read_idx;
+            }
+            continue;
+        }
+
+        // Keep this argument
         if (write_idx != read_idx) {
             argv[write_idx] = argv[read_idx];
         }
@@ -89,10 +98,12 @@ int removeArgs(int argc, char* argv[], const std::set<std::string>& args_to_remo
 
 
 int main(int argc, char **argv) {
-#ifdef COSMOCC
     // Load arguments from zip file if present (for bundled llamafiles)
     argc = cosmo_args("/zip/.args", &argv);
-#endif
+
+    // Check GPU flags early to determine if we should load GPU support
+    // This must be called BEFORE llamafile_has_metal() etc.
+    llamafile_early_gpu_init(argv);
 
     // Initialize GPU support early (must happen BEFORE llama_backend_init())
     // This triggers dynamic loading of GPU backends (CUDA, ROCm, Metal)
@@ -103,11 +114,15 @@ int main(int argc, char **argv) {
 
     enum Program prog = determine_program(argv);
 
+    // remove arguments which llama.cpp does not support
+    // (first set: flags, second set: arguments with params)
+    argc = removeArgs(argc, argv, 
+                    {"--server"},
+                    {"--gpu"}
+                    );
+
     // Server mode: run HTTP server
     if (prog == PROG_SERVER) {
-        // remove arguments which llama.cpp does not support
-        std::set<std::string> args_to_remove = {"--server"};
-        argc = removeArgs(argc, argv, args_to_remove);
         return server_main(argc, argv);
     }
 

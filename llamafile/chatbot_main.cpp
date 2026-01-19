@@ -134,6 +134,11 @@ int main(int argc, char **argv) {
         fprintf(stderr, "error: failed to parse flags\n");
         exit(1);
     }
+
+    if (llamafile_has_metal() && g_params->n_gpu_layers < 0) {
+        // if Metal and no ngl was specified, default to INT_MAX
+        g_params->n_gpu_layers = INT_MAX;
+    }
     clear_ephemeral();
 
     // Suppress logging for model loading unless --verbose was specified
