@@ -59,6 +59,17 @@ LLAMAFILE_DIR="$SCRIPT_DIR"
 LLAMA_CPP_DIR="$SCRIPT_DIR/../llama.cpp"
 GGML_CUDA_DIR="$LLAMA_CPP_DIR/ggml/src/ggml-cuda"
 
+# Version information (from environment or extracted from CMakeLists.txt)
+if [ -z "$GGML_VERSION" ]; then
+    GGML_VERSION_MAJOR=$(grep 'set(GGML_VERSION_MAJOR' "$LLAMA_CPP_DIR/ggml/CMakeLists.txt" 2>/dev/null | sed 's/[^0-9]*//g')
+    GGML_VERSION_MINOR=$(grep 'set(GGML_VERSION_MINOR' "$LLAMA_CPP_DIR/ggml/CMakeLists.txt" 2>/dev/null | sed 's/[^0-9]*//g')
+    GGML_VERSION_PATCH=$(grep 'set(GGML_VERSION_PATCH' "$LLAMA_CPP_DIR/ggml/CMakeLists.txt" 2>/dev/null | sed 's/[^0-9]*//g')
+    GGML_VERSION="${GGML_VERSION_MAJOR}.${GGML_VERSION_MINOR}.${GGML_VERSION_PATCH}"
+fi
+if [ -z "$GGML_COMMIT" ]; then
+    GGML_COMMIT=$(cd "$LLAMA_CPP_DIR/ggml" 2>/dev/null && git rev-parse --short HEAD 2>/dev/null || echo "unknown")
+fi
+
 # Check that source directories exist
 if [ ! -d "$GGML_CUDA_DIR" ]; then
     echo "Error: CUDA source directory not found: $GGML_CUDA_DIR"
@@ -74,6 +85,7 @@ fi
 mkdir -p "$BUILD_DIR"
 
 echo "Building ggml-cuda.so with TinyBLAS (parallel)..."
+echo "  Version: $GGML_VERSION (commit: $GGML_COMMIT)"
 echo "  Source: $GGML_CUDA_DIR"
 echo "  Output: $OUTPUT"
 echo "  Build:  $BUILD_DIR"
@@ -191,8 +203,8 @@ HOST_FLAGS=(
     -DGGML_BUILD=1
     -DGGML_SHARED=1
     -DGGML_MULTIPLATFORM
-    '-DGGML_VERSION="0.9.4"'
-    '-DGGML_COMMIT="unknown"'
+    "-DGGML_VERSION=\"$GGML_VERSION\""
+    "-DGGML_COMMIT=\"$GGML_COMMIT\""
     -I"$LLAMA_CPP_DIR/ggml/include"
     -I"$LLAMA_CPP_DIR/ggml/src"
 )

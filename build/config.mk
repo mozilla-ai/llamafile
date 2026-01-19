@@ -1,6 +1,20 @@
 #-*-mode:makefile-gmake;indent-tabs-mode:t;tab-width:8;coding:utf-8-*-┐
 #── vi: set noet ft=make ts=8 sw=8 fenc=utf-8 :vi ────────────────────┘
 
+# ==============================================================================
+# GGML Version (extracted from llama.cpp/ggml/CMakeLists.txt)
+# ==============================================================================
+
+GGML_VERSION_MAJOR := $(shell grep -E 'GGML_VERSION_MAJOR [0-9]+' llama.cpp/ggml/CMakeLists.txt | sed 's/[^0-9]*//g')
+GGML_VERSION_MINOR := $(shell grep -E 'GGML_VERSION_MINOR [0-9]+' llama.cpp/ggml/CMakeLists.txt | sed 's/[^0-9]*//g')
+GGML_VERSION_PATCH := $(shell grep -E 'GGML_VERSION_PATCH [0-9]+' llama.cpp/ggml/CMakeLists.txt | sed 's/[^0-9]*//g')
+GGML_VERSION := $(GGML_VERSION_MAJOR).$(GGML_VERSION_MINOR).$(GGML_VERSION_PATCH)
+GGML_COMMIT := $(shell cd llama.cpp/ggml 2>/dev/null && git rev-parse --short HEAD 2>/dev/null || echo "unknown")
+
+# ==============================================================================
+# Build Configuration
+# ==============================================================================
+
 PREFIX = /usr/local
 COSMOCC = .cosmocc/4.0.2
 TOOLCHAIN = $(COSMOCC)/bin/cosmo
