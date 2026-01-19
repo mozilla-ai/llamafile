@@ -97,7 +97,15 @@
 
 #define CUDA_R_16F                TINYBLAS_R_16F
 #define CUDA_R_32F                TINYBLAS_R_32F
-#define CUDA_R_16BF               TINYBLAS_R_16F  // Map bfloat16 to fp16 for TinyBLAS
+
+// WARNING: BF16 (bfloat16) is mapped to FP16 (half) for TinyBLAS.
+// TinyBLAS does not natively support BF16 arithmetic. This mapping allows
+// BF16 models to run, but may cause precision differences because:
+// - BF16 has 8 exponent bits / 7 mantissa bits (same range as FP32)
+// - FP16 has 5 exponent bits / 10 mantissa bits (reduced range, more precision)
+// Models trained with BF16 may exhibit different numerical behavior when run
+// with FP16 computation.
+#define CUDA_R_16BF               TINYBLAS_R_16F
 
 // ============================================================================
 // GEMM algorithm constant mappings
