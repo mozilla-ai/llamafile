@@ -46,7 +46,7 @@ cuda: # Build CUDA backend with TinyBLAS (NVIDIA GPUs)
 
 .PHONY: cublas
 cublas: # Build CUDA backend with cuBLAS (NVIDIA GPUs, requires cuBLAS at runtime)
-	GGML_VERSION=$(GGML_VERSION) GGML_COMMIT=$(GGML_COMMIT) llamafile/cublas.sh
+	GGML_VERSION=$(GGML_VERSION) GGML_COMMIT=$(GGML_COMMIT) llamafile/cuda.sh --cublas
 
 .PHONY: rocm
 rocm: # Build ROCm backend with TinyBLAS (AMD GPUs)

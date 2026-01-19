@@ -4,8 +4,6 @@
 #
 # This script compiles the GGML CUDA/HIP backend with TinyBLAS into a shared library
 # for AMD GPUs using ROCm/HIP.
-# Unlike rocm.sh, this version compiles each .cu file separately in parallel,
-# which can be significantly faster on multi-core systems.
 #
 # Usage:
 #   ./rocm.sh              # Build with auto-detected parallelism
