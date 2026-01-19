@@ -2,7 +2,7 @@
 #
 # Shared build functions for llamafile GPU backends
 #
-# This file contains common functions used by cuda.sh, cublas.sh, and rocm.sh
+# This file contains common functions used by cuda.sh and rocm.sh
 # to reduce code duplication while keeping each script's toolchain-specific
 # configuration clear and readable.
 #
