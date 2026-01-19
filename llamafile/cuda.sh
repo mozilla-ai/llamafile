@@ -10,8 +10,9 @@
 #   ./cuda.sh --cublas     # Build with NVIDIA cuBLAS
 #   ./cuda.sh -j16         # Build with 16 parallel jobs
 #   ./cuda.sh --clean      # Clean and rebuild
+#   ./cuda.sh --output /path/to/output.so
 #
-# Output: ~/ggml-cuda.so
+# Output: ~/ggml-cuda.so (default)
 #
 
 set -e
@@ -33,10 +34,11 @@ for arg in "$@"; do
             USE_CUBLAS=1
             ;;
         --help)
-            echo "Usage: $0 [-jN] [--clean] [--cublas]"
+            echo "Usage: $0 [-jN] [--clean] [--cublas] [--output PATH]"
             echo "  -jN       Use N parallel jobs (default: auto-detect)"
             echo "  --clean   Clean build directory before building"
             echo "  --cublas  Use NVIDIA cuBLAS instead of TinyBLAS"
+            echo "  --output  Output path for shared library"
             exit 0
             ;;
         *)
@@ -52,7 +54,7 @@ parse_build_args "${ARGS[@]}"
 # CUDA-specific configuration
 #
 
-OUTPUT="${HOME}/ggml-cuda.so"
+OUTPUT="${OUTPUT:-${HOME}/ggml-cuda.so}"
 CUDA_PATH="${CUDA_PATH:-/usr/local/cuda}"
 NVCC="${CUDA_PATH}/bin/nvcc"
 

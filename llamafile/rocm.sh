@@ -9,8 +9,9 @@
 #   ./rocm.sh              # Build with auto-detected parallelism
 #   ./rocm.sh -j16         # Build with 16 parallel jobs
 #   ./rocm.sh --clean      # Clean and rebuild
+#   ./rocm.sh --output /path/to/output.so
 #
-# Output: ~/ggml-rocm.so
+# Output: ~/ggml-rocm.so (default)
 #
 
 set -e
@@ -26,7 +27,7 @@ parse_build_args "$@"
 # ROCm/HIP specific configuration
 #
 
-OUTPUT="${HOME}/ggml-rocm.so"
+OUTPUT="${OUTPUT:-${HOME}/ggml-rocm.so}"
 ROCM_PATH="${ROCM_PATH:-/opt/rocm}"
 HIPCC="${ROCM_PATH}/bin/hipcc"
 
@@ -100,8 +101,7 @@ COMMON_FLAGS="\
   -DGGML_USE_HIP=1 \
   -DGGML_USE_TINYBLAS=1 \
   -Wno-return-type \
-  -Wno-unused-result \
-  $ARCH_FLAGS"
+  -Wno-unused-result"
 
 # Collect sources (TinyBLAS + GGML CUDA)
 collect_gpu_sources "$GGML_CUDA_DIR" "$BUILD_DIR/tinyblas.cu"
@@ -111,7 +111,7 @@ echo ""
 START_TIME=$(date +%s)
 
 # Compile GPU sources
-compile_gpu_sources_parallel "$HIPCC" "" "$COMMON_FLAGS" "$BUILD_DIR" "$JOBS"
+compile_gpu_sources_parallel "$HIPCC" "$ARCH_FLAGS" "$COMMON_FLAGS" "$BUILD_DIR" "$JOBS"
 
 COMPILE_TIME=$(date +%s)
 echo "Compilation took $((COMPILE_TIME - START_TIME)) seconds"

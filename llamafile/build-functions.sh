@@ -10,7 +10,7 @@
 #
 
 # Parse common command-line arguments
-# Sets: JOBS, CLEAN
+# Sets: JOBS, CLEAN, OUTPUT (if --output provided)
 # Args: all script arguments ($@)
 parse_build_args() {
     JOBS=$(nproc 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 4)
@@ -24,10 +24,18 @@ parse_build_args() {
             --clean)
                 CLEAN=1
                 ;;
+            --output)
+                shift
+                OUTPUT="$1"
+                ;;
+            --output=*)
+                OUTPUT="${1#--output=}"
+                ;;
             --help)
-                echo "Usage: $0 [-jN] [--clean]"
-                echo "  -jN      Use N parallel jobs (default: auto-detect)"
-                echo "  --clean  Clean build directory before building"
+                echo "Usage: $0 [-jN] [--clean] [--output PATH]"
+                echo "  -jN       Use N parallel jobs (default: auto-detect)"
+                echo "  --clean   Clean build directory before building"
+                echo "  --output  Output path for shared library"
                 exit 0
                 ;;
             *)
