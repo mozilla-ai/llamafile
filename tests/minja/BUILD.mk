@@ -3,61 +3,71 @@
 #
 # SYNOPSIS
 #
-#   Minja Regex Stack Overflow Test
+#   Minja Comment Parsing Tests
 #
 # OVERVIEW
 #
-#   This builds test programs demonstrating a regex stack overflow bug
-#   in Jinja comment parsing. The bug manifests when using Cosmopolitan
-#   Libc's C++ standard library implementation with recursive regex engines.
+#   This builds tests for minja comment parsing. The main test verifies that
+#   the manual string-scanning approach (used to fix regex stack overflow)
+#   correctly parses Jinja comments.
 #
-#   The test builds two versions:
-#   - Native: Uses system g++ (works correctly)
-#   - Cosmo: Uses cosmopolitan compiler (crashes on regex approach)
+#   Tests:
+#   - minja_comment_test: CI test for comment parsing (runs during make check)
+#
+#   Examples (not run in CI):
+#   - test_comment_parsing: Demo comparing regex vs manual approaches
+#   - test_comment_parsing_native: Native build of demo (for comparison)
 #
 # USAGE
 #
-#   # Build tests
-#   make -j8 o/tests/minja/test_comment_parsing
-#   make -j8 o/tests/minja/test_comment_parsing_native
+#   # Run CI tests
+#   make check
 #
-#   # Run native version (should pass both tests)
-#   ./o/tests/minja/test_comment_parsing_native
-#
-#   # Run cosmo version (crashes on regex test with default 15KB comment)
-#   ./o/tests/minja/test_comment_parsing
-#
+#   # Build and run examples manually
+#   make o/$(MODE)/tests/minja/test_comment_parsing
+#   ./o/$(MODE)/tests/minja/test_comment_parsing
 
-TESTS_MINJA_SRCS = \
-	tests/minja/test_comment_parsing.cpp
+# ==============================================================================
+# CI Test: minja_comment_test
+# ==============================================================================
 
-TESTS_MINJA_OBJS = \
-	$(TESTS_MINJA_SRCS:%.cpp=o/$(MODE)/%.o)
+o/$(MODE)/tests/minja/minja_comment_test.o:				\
+		tests/minja/minja_comment_test.cpp
+	@mkdir -p $(@D)
+	$(CXX) $(CXXFLAGS) -std=c++17 -c -o $@ $<
 
-# Cosmopolitan build (default)
-o/$(MODE)/tests/minja/test_comment_parsing:				\
-		o/$(MODE)/tests/minja/test_comment_parsing.o
+o/$(MODE)/tests/minja/minja_comment_test:				\
+		o/$(MODE)/tests/minja/minja_comment_test.o
 	$(CXX) $(LDFLAGS) -o $@ $<
 
+# ==============================================================================
+# Example Programs (not in CI)
+# ==============================================================================
+
+# Cosmo build of demo showing regex vs manual parsing
 o/$(MODE)/tests/minja/test_comment_parsing.o:				\
 		tests/minja/test_comment_parsing.cpp
 	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) -std=c++17 -c -o $@ $<
 
-# Native build (for comparison)
+o/$(MODE)/tests/minja/test_comment_parsing:				\
+		o/$(MODE)/tests/minja/test_comment_parsing.o
+	$(CXX) $(LDFLAGS) -o $@ $<
+
+# Native build of demo (for comparison with cosmo build)
 o/tests/minja/test_comment_parsing_native:				\
 		tests/minja/test_comment_parsing.cpp
 	@mkdir -p $(@D)
 	g++ -O2 -std=c++17 -o $@ $<
 
-# Convenience targets
+# ==============================================================================
+# Phony targets
+# ==============================================================================
+
 .PHONY: tests/minja
-tests/minja:								\
+tests/minja: o/$(MODE)/tests/minja/minja_comment_test.runs
+
+.PHONY: tests/minja/examples
+tests/minja/examples:							\
 		o/$(MODE)/tests/minja/test_comment_parsing		\
 		o/tests/minja/test_comment_parsing_native
-
-.PHONY: tests/minja/native
-tests/minja/native: o/tests/minja/test_comment_parsing_native
-
-.PHONY: tests/minja/cosmo
-tests/minja/cosmo: o/$(MODE)/tests/minja/test_comment_parsing
