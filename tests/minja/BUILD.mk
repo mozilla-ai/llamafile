@@ -7,12 +7,12 @@
 #
 # OVERVIEW
 #
-#   This builds tests for minja comment parsing. The main test verifies that
+#   This builds tests for minja comment parsing. The tests verify that
 #   the manual string-scanning approach (used to fix regex stack overflow)
 #   correctly parses Jinja comments.
 #
 #   Tests:
-#   - minja_comment_test: CI test for comment parsing (runs during make check)
+#   - minja_integration_test: Integration test using actual patched minja.hpp (runs during make check)
 #
 #   Examples (not run in CI):
 #   - test_comment_parsing: Demo comparing regex vs manual approaches
@@ -28,16 +28,22 @@
 #   ./o/$(MODE)/tests/minja/test_comment_parsing
 
 # ==============================================================================
-# CI Test: minja_comment_test
+# CI Test: minja_integration_test (uses actual patched minja.hpp)
 # ==============================================================================
+# This test includes the real minja.hpp to verify the patch works end-to-end.
 
-o/$(MODE)/tests/minja/minja_comment_test.o:				\
-		tests/minja/minja_comment_test.cpp
+MINJA_INTEGRATION_TEST_CPPFLAGS := \
+	-isystem llama.cpp/vendor \
+	-std=c++17
+
+o/$(MODE)/tests/minja/minja_integration_test.o:				\
+		tests/minja/minja_integration_test.cpp			\
+		llama.cpp/vendor/minja/minja.hpp
 	@mkdir -p $(@D)
-	$(CXX) $(CXXFLAGS) -std=c++17 -c -o $@ $<
+	$(CXX) $(CXXFLAGS) $(MINJA_INTEGRATION_TEST_CPPFLAGS) -c -o $@ $<
 
-o/$(MODE)/tests/minja/minja_comment_test:				\
-		o/$(MODE)/tests/minja/minja_comment_test.o
+o/$(MODE)/tests/minja/minja_integration_test:				\
+		o/$(MODE)/tests/minja/minja_integration_test.o
 	$(CXX) $(LDFLAGS) -o $@ $<
 
 # ==============================================================================
@@ -65,7 +71,7 @@ o/tests/minja/test_comment_parsing_native:				\
 # ==============================================================================
 
 .PHONY: tests/minja
-tests/minja: o/$(MODE)/tests/minja/minja_comment_test.runs
+tests/minja: o/$(MODE)/tests/minja/minja_integration_test.runs
 
 .PHONY: tests/minja/examples
 tests/minja/examples:							\

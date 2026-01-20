@@ -48,4 +48,4 @@ o/$(MODE)/tests/extract_data_uris_test: \
 .PHONY: o/$(MODE)/tests
 o/$(MODE)/tests: \
 	o/$(MODE)/tests/extract_data_uris_test.runs \
-	o/$(MODE)/tests/minja/minja_comment_test.runs
+	o/$(MODE)/tests/minja/minja_integration_test.runs
