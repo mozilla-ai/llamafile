@@ -7,40 +7,40 @@ diff --git a/vendor/minja/minja.hpp b/vendor/minja/minja.hpp
  
 +    // Helper function to manually parse Jinja comments to avoid regex stack overflow
 +    // on large templates. Returns empty vector if no comment found, or [full_match, pre_space_flag, content, post_space_flag].
++    // Uses a local iterator for scanning, only committing position change on success.
 +    std::vector<std::string> tryParseComment() {
-+        auto start_pos = it;
++        auto pos = it;
 +        // Check for {#
-+        if (std::distance(it, end) < 4) return {};  // Need at least {##}
-+        if (*it != '{' || *(it + 1) != '#') return {};
++        if (std::distance(pos, end) < 4) return {};  // Need at least {##}
++        if (*pos != '{' || *(pos + 1) != '#') return {};
 +
 +        // Parse optional pre-space flag (- or ~)
 +        std::string pre_flag;
-+        it += 2;
-+        if (it != end && (*it == '-' || *it == '~')) {
-+            pre_flag = std::string(1, *it);
-+            ++it;
++        pos += 2;
++        if (pos != end && (*pos == '-' || *pos == '~')) {
++            pre_flag = std::string(1, *pos);
++            ++pos;
 +        }
 +
 +        // Find the closing #}
-+        auto content_start = it;
-+        while (it != end) {
-+            if (*it == '#' && (it + 1) != end && *(it + 1) == '}') {
++        auto content_start = pos;
++        while (pos != end) {
++            if (*pos == '#' && (pos + 1) != end && *(pos + 1) == '}') {
 +                // Check for post-space flag (character before #)
 +                std::string post_flag;
-+                if (it != content_start) {
-+                    char prev = *(it - 1);
++                if (pos != content_start) {
++                    char prev = *(pos - 1);
 +                    if (prev == '-' || prev == '~') {
 +                        post_flag = std::string(1, prev);
 +                    }
 +                }
-+                std::string content(content_start, post_flag.empty() ? it : it - 1);
-+                it += 2;  // Skip #}
++                std::string content(content_start, post_flag.empty() ? pos : pos - 1);
++                it = pos + 2;  // Commit position change: skip past #}
 +                return {"", pre_flag, content, post_flag};
 +            }
-+            ++it;
++            ++pos;
 +        }
-+        // No closing #} found - restore position
-+        it = start_pos;
++        // No closing #} found - `it` unchanged
 +        return {};
 +    }
 +
