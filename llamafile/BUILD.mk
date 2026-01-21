@@ -129,6 +129,40 @@ LLAMAFILE_SRCS_CPP := \
 	$(LLAMAFILE_HIGHLIGHT_SRCS)
 
 # ==============================================================================
+# TinyBLAS CPU Optimized Kernels
+# ==============================================================================
+# These provide runtime CPU dispatch to architecture-specific SIMD implementations
+# for matrix multiplication (sgemm) and mixture-of-experts (mixmul) operations.
+
+TINYBLAS_CPU_SGEMM_SRCS := \
+	llamafile/tinyblas_cpu_sgemm_amd_avx.cpp \
+	llamafile/tinyblas_cpu_sgemm_amd_fma.cpp \
+	llamafile/tinyblas_cpu_sgemm_amd_avx2.cpp \
+	llamafile/tinyblas_cpu_sgemm_amd_avxvnni.cpp \
+	llamafile/tinyblas_cpu_sgemm_amd_avx512f.cpp \
+	llamafile/tinyblas_cpu_sgemm_amd_zen4.cpp \
+	llamafile/tinyblas_cpu_sgemm_arm80.cpp \
+	llamafile/tinyblas_cpu_sgemm_arm82.cpp \
+	llamafile/tinyblas_cpu_unsupported.cpp
+
+TINYBLAS_CPU_MIXMUL_SRCS := \
+	llamafile/tinyblas_cpu_mixmul_amd_avx.cpp \
+	llamafile/tinyblas_cpu_mixmul_amd_fma.cpp \
+	llamafile/tinyblas_cpu_mixmul_amd_avx2.cpp \
+	llamafile/tinyblas_cpu_mixmul_amd_avxvnni.cpp \
+	llamafile/tinyblas_cpu_mixmul_amd_avx512f.cpp \
+	llamafile/tinyblas_cpu_mixmul_amd_zen4.cpp \
+	llamafile/tinyblas_cpu_mixmul_arm80.cpp \
+	llamafile/tinyblas_cpu_mixmul_arm82.cpp
+
+TINYBLAS_CPU_SRCS := \
+	llamafile/sgemm.cpp \
+	$(TINYBLAS_CPU_SGEMM_SRCS) \
+	$(TINYBLAS_CPU_MIXMUL_SRCS)
+
+TINYBLAS_CPU_OBJS := $(TINYBLAS_CPU_SRCS:%.cpp=o/$(MODE)/%.o)
+
+# ==============================================================================
 # Object files
 # ==============================================================================
 
@@ -195,7 +229,8 @@ LLAMAFILE_METAL_SOURCES := \
 	o/$(MODE)/llama.cpp/ggml/src/ggml-metal/ggml-metal-ops.h.zip.o \
 	o/$(MODE)/llama.cpp/ggml/src/ggml-metal/ggml-metal-ops.cpp.zip.o
 
-LLAMAFILE_DEPS := \
+# Use deferred expansion (=) since this depends on variables from llama.cpp/BUILD.mk
+LLAMAFILE_DEPS = \
 	$(GGML_OBJS) \
 	$(LLAMA_OBJS) \
 	$(COMMON_OBJS) \
@@ -204,6 +239,7 @@ LLAMAFILE_DEPS := \
 	$(LLAMAFILE_SERVER_SUPPORT_OBJS) \
 	$(LLAMAFILE_HIGHLIGHT_KEYWORDS) \
 	$(LLAMAFILE_METAL_SOURCES) \
+	$(TINYBLAS_CPU_OBJS) \
 	o/$(MODE)/third_party/stb/stb_image_resize2.o
 
 # ==============================================================================
@@ -253,6 +289,61 @@ o/$(MODE)/llamafile/%.o: llamafile/%.cpp
 o/$(MODE)/llamafile/highlight/%.o: llamafile/highlight/%.cpp
 	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) $(LLAMAFILE_CPPFLAGS) -c -o $@ $<
+
+# ==============================================================================
+# TinyBLAS CPU Architecture-Specific Compilation Flags
+# ==============================================================================
+# Each variant is compiled with flags specific to its target CPU architecture.
+# The -Xx86_64 and -Xaarch64 prefixes are cosmocc conventions for arch-specific flags.
+# The -mgcc flag is critical for enabling GCC SIMD intrinsics with cosmocc.
+
+# Static pattern rule for tinyblas CPU files
+# This ensures these targets use the specialized recipe with SIMD flags
+$(TINYBLAS_CPU_OBJS): o/$(MODE)/%.o: %.cpp
+	@mkdir -p $(@D)
+	$(CXX) $(CXXFLAGS) $(CPPFLAGS) $(CCFLAGS) $(TARGET_ARCH) -c -o $@ $<
+
+# Base flags for all tinyblas CPU files
+# -mgcc enables GCC intrinsics (__m128, __m256, etc.) with cosmocc
+$(TINYBLAS_CPU_OBJS): private CCFLAGS += -O3 -fopenmp -mgcc
+$(TINYBLAS_CPU_OBJS): private CPPFLAGS += $(LLAMAFILE_INCLUDES) -DCOSMOCC=1 -DGGML_USE_LLAMAFILE
+
+# x86_64 AVX (Sandy Bridge, Ivy Bridge - 2010-2012)
+o/$(MODE)/llamafile/tinyblas_cpu_sgemm_amd_avx.o \
+o/$(MODE)/llamafile/tinyblas_cpu_mixmul_amd_avx.o: \
+	private TARGET_ARCH += -Xx86_64-mtune=sandybridge -Xx86_64-mavx -Xx86_64-mf16c
+
+# x86_64 FMA (AMD Piledriver - 2011-2014)
+o/$(MODE)/llamafile/tinyblas_cpu_sgemm_amd_fma.o \
+o/$(MODE)/llamafile/tinyblas_cpu_mixmul_amd_fma.o: \
+	private TARGET_ARCH += -Xx86_64-mtune=bdver2 -Xx86_64-mavx -Xx86_64-mf16c -Xx86_64-mfma
+
+# x86_64 AVX2 (Haswell, Broadwell, Skylake - 2013-2020)
+o/$(MODE)/llamafile/tinyblas_cpu_sgemm_amd_avx2.o \
+o/$(MODE)/llamafile/tinyblas_cpu_mixmul_amd_avx2.o: \
+	private TARGET_ARCH += -Xx86_64-mtune=skylake -Xx86_64-mavx -Xx86_64-mf16c -Xx86_64-mfma -Xx86_64-mavx2
+
+# x86_64 AVX-VNNI (Intel Alder Lake - 2021+)
+o/$(MODE)/llamafile/tinyblas_cpu_sgemm_amd_avxvnni.o \
+o/$(MODE)/llamafile/tinyblas_cpu_mixmul_amd_avxvnni.o: \
+	private TARGET_ARCH += -Xx86_64-mtune=alderlake -Xx86_64-mavx -Xx86_64-mf16c -Xx86_64-mfma -Xx86_64-mavx2 -Xx86_64-mavxvnni
+
+# x86_64 AVX-512F (Intel Skylake-X, Xeon - 2015+)
+o/$(MODE)/llamafile/tinyblas_cpu_sgemm_amd_avx512f.o \
+o/$(MODE)/llamafile/tinyblas_cpu_mixmul_amd_avx512f.o: \
+	private TARGET_ARCH += -Xx86_64-mtune=cannonlake -Xx86_64-mavx -Xx86_64-mf16c -Xx86_64-mfma -Xx86_64-mavx2 -Xx86_64-mavx512f
+
+# x86_64 Zen4 (AMD Zen 4 - 2023+, with AVX-512 BF16/VNNI)
+o/$(MODE)/llamafile/tinyblas_cpu_sgemm_amd_zen4.o \
+o/$(MODE)/llamafile/tinyblas_cpu_mixmul_amd_zen4.o: \
+	private TARGET_ARCH += -Xx86_64-mtune=znver4 -Xx86_64-mavx -Xx86_64-mf16c -Xx86_64-mfma -Xx86_64-mavx2 -Xx86_64-mavx512f -Xx86_64-mavx512vl -Xx86_64-mavx512vnni -Xx86_64-mavx512bf16
+
+# ARM64 v8.2-a (Apple M1/M2, Raspberry Pi 5 - with FP16 and dotprod)
+o/$(MODE)/llamafile/tinyblas_cpu_sgemm_arm82.o \
+o/$(MODE)/llamafile/tinyblas_cpu_mixmul_arm82.o: \
+	private TARGET_ARCH += -Xaarch64-march=armv8.2-a+dotprod+fp16
+
+# ARM64 v8.0-a baseline and unsupported have no special flags
 
 # ==============================================================================
 # Targets
