@@ -6,9 +6,8 @@ PKGS += LLAMA_CPP
 # ==============================================================================
 # Version information
 # ==============================================================================
+# GGML_VERSION and GGML_COMMIT are inherited from build/config.mk
 
-GGML_VERSION := 0.9.4
-GGML_COMMIT := $(shell cd llama.cpp/ggml 2>/dev/null && git rev-parse --short HEAD 2>/dev/null || echo "unknown")
 LLAMA_VERSION := $(shell cd llama.cpp 2>/dev/null && git describe --tags --always 2>/dev/null || echo "unknown")
 LLAMA_COMMIT := $(shell cd llama.cpp 2>/dev/null && git rev-parse --short HEAD 2>/dev/null || echo "unknown")
 
