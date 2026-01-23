@@ -449,8 +449,8 @@ static bool BuildMetal(const char *dso) {
             args[argc++] = "-ffixed-x28";  // cosmo's TLS register
             args[argc++] = "-DTARGET_OS_OSX";
             args[argc++] = "-DGGML_MULTIPLATFORM";
-            args[argc++] = "-DGGML_VERSION=\"0.9.4\"";
-            args[argc++] = "-DGGML_COMMIT=\"unknown\"";
+            args[argc++] = "-DGGML_VERSION=\"" GGML_VERSION "\"";
+            args[argc++] = "-DGGML_COMMIT=\"" GGML_COMMIT "\"";
             args[argc++] = "-w";  // Suppress compilation warnings
             args[argc++] = "-o";
             args[argc++] = obj_paths[i];
