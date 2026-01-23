@@ -146,6 +146,11 @@ static bool LinkCuda(const char *dso) {
     if (!ok) {
         char *err = cosmo_dlerror();
         fprintf(stderr, "cuda: %s: not all symbols could be imported\n", err ? err : "unknown error");
+        g_cuda.backend_init = NULL;
+        g_cuda.backend_reg = NULL;
+        g_cuda.get_device_count = NULL;
+        g_cuda.get_device_description = NULL;
+        g_cuda.log_set = NULL;
         cosmo_dlclose(lib);
         return false;
     }
