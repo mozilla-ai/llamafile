@@ -1,0 +1,61 @@
+diff --git a/vendor/minja/minja.hpp b/vendor/minja/minja.hpp
+--- a/llama.cpp/vendor/minja/minja.hpp
++++ b/llama.cpp/vendor/minja/minja.hpp
+@@ -2379,8 +2379,46 @@ private:
+         + error_location_suffix(*template_str, token.location.pos));
+     }
+ 
++    // Helper function to manually parse Jinja comments to avoid regex stack overflow
++    // on large templates. Returns empty vector if no comment found, or [full_match, pre_space_flag, content, post_space_flag].
++    // Uses a local iterator for scanning, only committing position change on success.
++    std::vector<std::string> tryParseComment() {
++        auto pos = it;
++        // Check for {#
++        if (std::distance(pos, end) < 4) return {};  // Need at least {##}
++        if (*pos != '{' || *(pos + 1) != '#') return {};
++
++        // Parse optional pre-space flag (- or ~)
++        std::string pre_flag;
++        pos += 2;
++        if (pos != end && (*pos == '-' || *pos == '~')) {
++            pre_flag = std::string(1, *pos);
++            ++pos;
++        }
++
++        // Find the closing #}
++        auto content_start = pos;
++        while (pos != end) {
++            if (*pos == '#' && (pos + 1) != end && *(pos + 1) == '}') {
++                // Check for post-space flag (character before #)
++                std::string post_flag;
++                if (pos != content_start) {
++                    char prev = *(pos - 1);
++                    if (prev == '-' || prev == '~') {
++                        post_flag = std::string(1, prev);
++                    }
++                }
++                std::string content(content_start, post_flag.empty() ? pos : pos - 1);
++                it = pos + 2;  // Commit position change: skip past #}
++                return {"", pre_flag, content, post_flag};
++            }
++            ++pos;
++        }
++        // No closing #} found - `it` unchanged
++        return {};
++    }
++
+     TemplateTokenVector tokenize() {
+-      static std::regex comment_tok(R"(\{#([-~]?)([\s\S]*?)([-~]?)#\})");
+       static std::regex expr_open_regex(R"(\{\{([-~])?)");
+       static std::regex block_open_regex(R"(^\{%([-~])?\s*)");
+       static std::regex block_keyword_tok(R"((if|else|elif|endif|for|endfor|generation|endgeneration|set|endset|block|endblock|macro|endmacro|filter|endfilter|break|continue|call|endcall)\b)");
+@@ -2397,7 +2435,8 @@ private:
+         while (it != end) {
+           auto location = get_location();
+ 
+-          if (!(group = consumeTokenGroups(comment_tok, SpaceHandling::Keep)).empty()) {
++          // Try to parse comment manually (avoids regex stack overflow on large comments)
++          if (!(group = tryParseComment()).empty()) {
+             auto pre_space = parsePreSpace(group[1]);
+             auto content = group[2];
+             auto post_space = parsePostSpace(group[3]);
