@@ -404,6 +404,7 @@ static bool BuildMetal(const char *dso) {
         snprintf(include_arg, sizeof(include_arg), "-I%s", app_dir);
 
         // Source files to compile
+#define MAX_METAL_SRCS 16
         static const char *src_basenames[] = {
             "ggml.c",
             "ggml-alloc.c",
@@ -418,15 +419,19 @@ static bool BuildMetal(const char *dso) {
             "ggml-metal-context.m",
             NULL
         };
+        _Static_assert(sizeof(src_basenames)/sizeof(src_basenames[0]) - 1 <= MAX_METAL_SRCS,
+                       "Too many Metal source files, update MAX_METAL_SRCS in llamafile/metal.c");
 
         // Count source files and prepare object paths
         int num_srcs = 0;
         while (src_basenames[num_srcs]) num_srcs++;
 
-        char obj_paths[16][PATH_MAX];
+        char obj_paths[MAX_METAL_SRCS][PATH_MAX];
 
         // Compile each source file
-        for (int i = 0; i < num_srcs; i++) {
+        bool compile_error = false;
+        int i;
+        for (i = 0; i < num_srcs; i++) {
             char src_path[PATH_MAX];
             snprintf(src_path, PATH_MAX, "%s%s", app_dir, src_basenames[i]);
             snprintf(obj_paths[i], PATH_MAX, "%s%s.o", app_dir, src_basenames[i]);
@@ -471,23 +476,32 @@ static bool BuildMetal(const char *dso) {
                 if (err == ENOENT) {
                     fprintf(stderr, "metal: PLEASE RUN: xcode-select --install\n");
                 }
-                unlink(tmpdso);
-                return false;
+                compile_error = true;
+                break;
             }
 
             while (waitpid(pid, &ws, 0) == -1) {
                 if (errno != EINTR) {
                     perror("waitpid");
-                    unlink(tmpdso);
-                    return false;
+                    compile_error = true;
+                    break;
                 }
             }
+            if (compile_error)
+                break;
 
             if (ws) {
                 fprintf(stderr, "metal: compiler returned nonzero exit status\n");
-                unlink(tmpdso);
-                return false;
+                compile_error = true;
+                break;
             }
+        }
+
+        if (compile_error) {
+            for (int j = 0; j <= i; j++)
+                unlink(obj_paths[j]);
+            unlink(tmpdso);
+            return false;
         }
 
         // Link all object files into shared library
