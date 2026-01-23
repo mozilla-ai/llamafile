@@ -127,8 +127,8 @@ int llamafile_is_file_newer_than(const char *, const char *);
 
 bool llamafile_has_gpu(void);             // Defined in llamafile.c
 bool llamafile_has_metal(void);           // Defined in metal.c (dynamic loader)
-bool llamafile_has_cuda(void);            // Defined in llamafile.c (stub)
-bool llamafile_has_amd_gpu(void);         // Defined in llamafile.c (stub)
+bool llamafile_has_cuda(void);            // Defined in cuda.c (dynamic loader)
+bool llamafile_has_amd_gpu(void);         // Defined in cuda.c (dynamic loader)
 int llamafile_gpu_parse(const char *);    // Defined in llamafile.c
 const char *llamafile_describe_gpu(void); // Defined in llamafile.c
 void llamafile_early_gpu_init(char **);   // Defined in llamafile.c
