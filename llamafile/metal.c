@@ -491,7 +491,7 @@ static bool BuildMetal(const char *dso) {
                 break;
 
             if (ws) {
-                fprintf(stderr, "metal: compiler returned nonzero exit status\n");
+                fprintf(stderr, "metal: failed to compile %s\n", src_basenames[i]);
                 compile_error = true;
                 break;
             }
