@@ -34,6 +34,24 @@ install: o/$(MODE)/llamafile/llamafile
 .PHONY: check
 check: o/$(MODE)/tests
 
+# ==============================================================================
+# GPU Backend Targets
+# ==============================================================================
+# These targets build GPU backend shared libraries that can be loaded at runtime.
+# They pass GGML_VERSION and GGML_COMMIT from build/config.mk to the build scripts.
+
+.PHONY: cuda
+cuda: # Build CUDA backend with TinyBLAS (NVIDIA GPUs)
+	GGML_VERSION=$(GGML_VERSION) GGML_COMMIT=$(GGML_COMMIT) llamafile/cuda.sh
+
+.PHONY: cublas
+cublas: # Build CUDA backend with cuBLAS (NVIDIA GPUs, requires cuBLAS at runtime)
+	GGML_VERSION=$(GGML_VERSION) GGML_COMMIT=$(GGML_COMMIT) llamafile/cuda.sh --cublas
+
+.PHONY: rocm
+rocm: # Build ROCm backend with TinyBLAS (AMD GPUs)
+	GGML_VERSION=$(GGML_VERSION) GGML_COMMIT=$(GGML_COMMIT) llamafile/rocm.sh
+
 .PHONY: cosmocc
 cosmocc: $(COSMOCC) # cosmocc toolchain setup
 

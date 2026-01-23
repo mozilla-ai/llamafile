@@ -684,19 +684,10 @@ void llamafile_log_callback_null(int level, const char *text, void *user_data) {
 // GPU support
 // ==============================================================================
 // llamafile_has_metal() is defined in metal.c with full dynamic loading support
-
-bool llamafile_has_cuda(void) {
-    // TODO: Implement CUDA/ROCm dynamic loading support
-    return false;
-}
-
-bool llamafile_has_amd_gpu(void) {
-    // TODO: Implement AMD GPU support
-    return false;
-}
+// llamafile_has_cuda() and llamafile_has_amd_gpu() are defined in cuda.c
 
 bool llamafile_has_gpu(void) {
-    return llamafile_has_metal() || llamafile_has_cuda();
+    return llamafile_has_metal() || llamafile_has_cuda() || llamafile_has_amd_gpu();
 }
 
 const char *llamafile_describe_gpu(void) {
@@ -730,19 +721,63 @@ int llamafile_gpu_parse(const char *s) {
     return LLAMAFILE_GPU_ERROR;
 }
 
-int llamafile_gpu_layers(int n_gpu_layers) {
-    if (FLAG_gpu == LLAMAFILE_GPU_DISABLE)
-        return 0;
-    if (n_gpu_layers < 0 && FLAG_gpu > 0)
-        n_gpu_layers = INT_MAX;
-    if (n_gpu_layers <= 0 && llamafile_has_metal())
-        n_gpu_layers = INT_MAX;
-    if (n_gpu_layers > 0 && !llamafile_has_gpu()) {
-        FLAG_gpu = LLAMAFILE_GPU_DISABLE;
-        n_gpu_layers = 0;
+int parse_ngl(const char* str) {
+    if (!str || !*str) return 0;
+
+    char* end;
+    errno = 0;
+    long val;
+
+    if (strcmp(str, "auto") == 0) {
+        val = -1;
+    } else if (strcmp(str, "all") == 0) {
+        val = -2;
+    } else {
+        val = strtol(str, &end, 10);
+        if (end == str || *end != '\0' || errno == ERANGE ||
+            val < INT_MIN || val > INT_MAX) {
+            return 0;
+        }
     }
-    if (n_gpu_layers <= 0) {
-        FLAG_gpu = LLAMAFILE_GPU_DISABLE;
+
+    return (int)(val);
+}
+
+/**
+ * Scans command-line arguments to determine if GPU should be disabled.
+ *
+ * This function must be called BEFORE any GPU initialization code runs.
+ * By default, FLAG_gpu remains AUTO (GPU auto-enabled). This function
+ * only disables GPU when explicitly requested via --gpu disable or -ngl 0.
+ *
+ * The logic:
+ * 1. If --gpu <value> is found, parse it and set FLAG_gpu accordingly
+ * 2. If -ngl 0 is found, disable GPU
+ * 3. Otherwise, keep FLAG_gpu as AUTO (default)
+ */
+void llamafile_early_gpu_init(char **argv) {
+    // Check for explicit --gpu flag first (takes precedence)
+    for (int i = 0; argv[i]; ++i) {
+        if (!strcmp(argv[i], "--gpu") && argv[i + 1]) {
+            FLAG_gpu = llamafile_gpu_parse(argv[i + 1]);
+            return;
+        }
     }
-    return n_gpu_layers;
+
+    // Check for -ngl 0 which explicitly disables GPU
+    for (int i = 0; argv[i]; ++i) {
+        if ((!strcmp(argv[i], "-ngl") ||
+             !strcmp(argv[i], "--gpu-layers") ||
+             !strcmp(argv[i], "--n-gpu-layers")) && argv[i + 1]) {
+            int n_gpu_layers = parse_ngl(argv[i + 1]);
+
+            // Only disable if explicitly set to 0
+            if (n_gpu_layers == 0) {
+                FLAG_gpu = LLAMAFILE_GPU_DISABLE;
+                return;
+            }
+        }
+    }
+
+    // Default: keep FLAG_gpu as AUTO (GPU auto-enabled)
 }
