@@ -16,14 +16,19 @@
 // limitations under the License.
 
 #include "sgemm.h"
+#include "ggml-cpu-impl.h"
 #include <cassert>
 #include <cosmo.h>
 #include <cpuid.h>
 #include <libc/sysv/consts/hwcap.h>
 #include <sys/auxv.h>
 
+// Internal sgemm function signature (used by arch-specific implementations)
+typedef bool (*sgemm_func_t)(long, long, long, const void *, long, const void *, long, void *,
+                             long, int, int, int, int, int);
+
 static const struct GemmFuncs {
-    typeof(llamafile_sgemm) *sgemm;
+    sgemm_func_t sgemm;
     typeof(llamafile_mixmul) *mixmul;
     GemmFuncs() {
 #ifdef __x86_64__
@@ -99,6 +104,7 @@ static const struct GemmFuncs {
  * only performed when a handwritten kernel is written and available.
  * Otherwise the caller should fall back to a general matmul routine.
  *
+ * @param params contains thread id (ith) and thread count (nth)
  * @param m is rows in `A` and `C`
  * @param n is cols in `B` and `C`
  * @param k is cols in `A` and rows in `B`
@@ -108,15 +114,16 @@ static const struct GemmFuncs {
  * @param ldb is row stride of `B`
  * @param C is input/output array of output matrices
  * @param ldc is row stride of `C`
- * @param ith is thread id (must be less than `nth`)
- * @param nth is number of threads (must be greater than zero)
  * @param Atype is GGML data type of `A`
  * @param Btype is GGML data type of `B`
  * @param Ctype is GGML data type of `C`
  * @return true if this function was able to service the matmul request
  */
-bool llamafile_sgemm(long m, long n, long k, const void *A, long lda, const void *B, long ldb,
-                     void *C, long ldc, int ith, int nth, int Atype, int Btype, int Ctype) {
+bool llamafile_sgemm(const ggml_compute_params *params, int64_t m, int64_t n, int64_t k,
+                     const void *A, int64_t lda, const void *B, int64_t ldb,
+                     void *C, int64_t ldc, int Atype, int Btype, int Ctype) {
+    int ith = params->ith;
+    int nth = params->nth;
     return funcs.sgemm(m, n, k, A, lda, B, ldb, C, ldc, ith, nth, Atype, Btype, Ctype);
 }
 

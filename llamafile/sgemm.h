@@ -1,5 +1,6 @@
 #pragma once
 #include <stdbool.h>
+#include <stdint.h>
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -20,13 +21,19 @@ bool iqk_mul_mat_moe_arm82(long, long, long, int, int, const void *, const void 
 bool iqk_mul_mat_moe_unsupported(long, long, long, int, int, const void *, const void *, float *,
                                  long, long, const void *, int, int);
 
-bool llamafile_sgemm(long, long, long, const void *, long, const void *, long, void *, long, int,
-                     int, int, int, int);
+// Public API - matches upstream llama.cpp signature
+// Guarded to prevent macro expansion in internal arch-specific implementations
+#ifndef llamafile_sgemm
+bool llamafile_sgemm(const struct ggml_compute_params *, int64_t, int64_t, int64_t,
+                     const void *, int64_t, const void *, int64_t, void *, int64_t,
+                     int, int, int);
+#endif
 bool llamafile_mixmul(const struct ggml_compute_params *, const struct ggml_tensor *,
                       const struct ggml_tensor *, const struct ggml_tensor *, struct ggml_tensor *);
 size_t llamafile_mixmul_needs(const struct ggml_tensor *, const struct ggml_tensor *,
                               const struct ggml_tensor *);
 
+// Internal arch-specific implementations (called by dispatcher)
 bool llamafile_sgemm_unsupported(long, long, long, const void *, long, const void *, long, void *,
                                  long, int, int, int, int, int);
 bool llamafile_sgemm_amd_avx(long, long, long, const void *, long, const void *, long, void *, long,
