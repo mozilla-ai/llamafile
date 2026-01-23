@@ -143,6 +143,10 @@ void llamafile_log_callback_null(int level, const char *text, void *user_data);
 // Pass a no-op callback to disable logging
 void llamafile_metal_log_set(llamafile_log_callback log_callback, void *user_data);
 
+// Set logging callback for CUDA/ROCm dylib (defined in cuda.c)
+// Pass a no-op callback to disable logging
+void llamafile_cuda_log_set(llamafile_log_callback log_callback, void *user_data);
+
 #ifdef __cplusplus
 }
 #endif
