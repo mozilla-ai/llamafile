@@ -1,0 +1,32 @@
+diff --git a/ggml/src/ggml-cuda/vendors/cuda.h b/ggml/src/ggml-cuda/vendors/cuda.h
+--- a/llama.cpp/ggml/src/ggml-cuda/vendors/cuda.h
++++ b/llama.cpp/ggml/src/ggml-cuda/vendors/cuda.h
+@@ -2,7 +2,17 @@
+ 
+ #include <cuda_runtime.h>
+ #include <cuda.h>
++
++#ifdef GGML_USE_TINYBLAS
++// Use TinyBLAS instead of cuBLAS for llamafile
++// TinyBLAS is a lightweight BLAS implementation that provides
++// API-compatible replacements for cuBLAS GEMM functions
++#include "tinyblas.h"
++#include "tinyblas-compat.h"
++#else
+ #include <cublas_v2.h>
++#endif // GGML_USE_TINYBLAS
++
+ #include <cuda_bf16.h>
+ #include <cuda_fp16.h>
+ 
+@@ -16,8 +26,10 @@
+ 
+ #if CUDART_VERSION < 11020
+ #define CU_DEVICE_ATTRIBUTE_VIRTUAL_MEMORY_MANAGEMENT_SUPPORTED CU_DEVICE_ATTRIBUTE_VIRTUAL_ADDRESS_MANAGEMENT_SUPPORTED
++#ifndef GGML_USE_TINYBLAS
+ #define CUBLAS_TF32_TENSOR_OP_MATH CUBLAS_TENSOR_OP_MATH
+ #define CUBLAS_COMPUTE_16F CUDA_R_16F
+ #define CUBLAS_COMPUTE_32F CUDA_R_32F
+ #define cublasComputeType_t cudaDataType_t
++#endif // GGML_USE_TINYBLAS
+ #endif // CUDART_VERSION < 11020

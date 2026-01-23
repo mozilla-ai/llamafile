@@ -1,0 +1,19 @@
+diff --git a/ggml/src/ggml-cuda/common.cuh b/ggml/src/ggml-cuda/common.cuh
+--- a/llama.cpp/ggml/src/ggml-cuda/common.cuh
++++ b/llama.cpp/ggml/src/ggml-cuda/common.cuh
+@@ -287,9 +287,15 @@ static bool fp16_mma_hardware_available(const int cc) {
+ }
+ 
+ static bool bf16_mma_hardware_available(const int cc) {
++#ifdef GGML_USE_TINYBLAS
++    // TinyBLAS does not support BF16 - it would incorrectly interpret BF16 bits as FP16
++    GGML_UNUSED(cc);
++    return false;
++#else
+     return (GGML_CUDA_CC_IS_NVIDIA(cc) && cc >= GGML_CUDA_CC_AMPERE) ||
+         GGML_CUDA_CC_IS_CDNA(cc) || cc >= GGML_CUDA_CC_RDNA3 ||
+         (GGML_CUDA_CC_IS_MTHREADS(cc) && cc >= GGML_CUDA_CC_PH1);
++#endif
+ }
+ 
+ static bool fp32_mma_hardware_available(const int cc) {

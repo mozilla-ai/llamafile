@@ -34,7 +34,7 @@ diff --git a/tools/server/server.cpp b/tools/server/server.cpp
      common_init();
  
      // struct that contains llama context and inference
-@@ -316,5 +326,37 @@ int main(int argc, char ** argv) {
+@@ -316,5 +326,43 @@ int main(int argc, char ** argv) {
          }
      }
  
@@ -58,14 +58,20 @@ diff --git a/tools/server/server.cpp b/tools/server/server.cpp
 +#ifdef COSMOCC
 +    argc = cosmo_args("/zip/.args", &argv);
 +
-+    // Check if verbose mode is requested (must be set before Metal init)
++    // Check if verbose mode is requested (must be set before GPU init)
 +    bool verbose = llamafile_has(argv, "--verbose");
 +    FLAG_verbose = verbose ? 1 : 0;
 +
-+    if (llamafile_has_metal()) {
-+        // Metal dylib loaded - disable logging in it too (it has its own copy of ggml)
-+        if (!verbose) {
++    // Initialize GPU support early (must happen BEFORE llama_backend_init())
++    // This triggers dynamic loading of GPU backends (CUDA, ROCm, Metal)
++    // The llamafile_has_* functions use lazy initialization via cosmo_once()
++    llamafile_has_gpu();
++    if (!verbose) {
++        // disable ggml verbose logging
++        if (llamafile_has_metal()) {
 +            llamafile_metal_log_set(llamafile_log_callback_null, NULL);
++        } else if (llamafile_has_cuda() || llamafile_has_amd_gpu()) {
++            llamafile_cuda_log_set(llamafile_log_callback_null, NULL);
 +        }
 +    }
 +#endif

@@ -20,6 +20,7 @@
 #include <cosmo.h>
 #include <cstdio>
 #include <cstdlib>
+#include <limits.h>
 #include <signal.h>
 #include <string>
 #include <unistd.h>
@@ -112,14 +113,16 @@ int main(int argc, char **argv) {
     // Initialize GPU support (must happen BEFORE llama_backend_init())
     // This triggers dynamic compilation and loading of GPU backends
     print_ephemeral("initializing gpu...");
-    if (llamafile_has_metal()) {
-        // Metal dylib loaded - disable logging in it too (it has its own copy of ggml)
-        if (!verbose) {
+    if (!verbose) {
+        // disable ggml verbose logging
+        if (llamafile_has_metal()) {
             llamafile_metal_log_set(llamafile_log_callback_null, NULL);
+        } else if (llamafile_has_cuda() || llamafile_has_amd_gpu()) {
+            llamafile_cuda_log_set(llamafile_log_callback_null, NULL);
         }
-    }
-    if (verbose)
+    } else {
         clear_ephemeral();
+    }
 
     // parse flags
     print_ephemeral("loading backend...");
@@ -133,6 +136,11 @@ int main(int argc, char **argv) {
     if (!common_params_parse(argc, argv, *g_params, LLAMA_EXAMPLE_CLI)) {
         fprintf(stderr, "error: failed to parse flags\n");
         exit(1);
+    }
+
+    if (llamafile_has_metal() && g_params->n_gpu_layers < 0) {
+        // if Metal and no ngl was specified, default to INT_MAX
+        g_params->n_gpu_layers = INT_MAX;
     }
     clear_ephemeral();
 
