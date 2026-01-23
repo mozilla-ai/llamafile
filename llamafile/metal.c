@@ -399,104 +399,152 @@ static bool BuildMetal(const char *dso) {
         }
         close(fd);
 
-        // Build paths to source files
-        char src_ggml_c[PATH_MAX];
-        char src_ggml_alloc_c[PATH_MAX];
-        char src_ggml_backend_cpp[PATH_MAX];
-        char src_threading_cpp[PATH_MAX];
-        char src_quants_c[PATH_MAX];
-        char src_metal_cpp[PATH_MAX];
-        char src_metal_device_cpp[PATH_MAX];
-        char src_metal_device_m[PATH_MAX];
-        char src_metal_context_m[PATH_MAX];
-        char src_metal_common_cpp[PATH_MAX];
-        char src_metal_ops_cpp[PATH_MAX];
-
-        snprintf(src_ggml_c, PATH_MAX, "%sggml.c", app_dir);
-        snprintf(src_ggml_alloc_c, PATH_MAX, "%sggml-alloc.c", app_dir);
-        snprintf(src_ggml_backend_cpp, PATH_MAX, "%sggml-backend.cpp", app_dir);
-        snprintf(src_threading_cpp, PATH_MAX, "%sggml-threading.cpp", app_dir);
-        snprintf(src_quants_c, PATH_MAX, "%sggml-quants.c", app_dir);
-        snprintf(src_metal_cpp, PATH_MAX, "%sggml-metal.cpp", app_dir);
-        snprintf(src_metal_device_cpp, PATH_MAX, "%sggml-metal-device.cpp", app_dir);
-        snprintf(src_metal_device_m, PATH_MAX, "%sggml-metal-device.m", app_dir);
-        snprintf(src_metal_context_m, PATH_MAX, "%sggml-metal-context.m", app_dir);
-        snprintf(src_metal_common_cpp, PATH_MAX, "%sggml-metal-common.cpp", app_dir);
-        snprintf(src_metal_ops_cpp, PATH_MAX, "%sggml-metal-ops.cpp", app_dir);
-
         // Build include path
         char include_arg[PATH_MAX + 2];
         snprintf(include_arg, sizeof(include_arg), "-I%s", app_dir);
 
-        // Build args array dynamically (to support optional quiet compilation)
-        char *args[64];
-        int argc = 0;
-        args[argc++] = "cc";
-        args[argc++] = include_arg;
-        args[argc++] = "-O3";
-        args[argc++] = "-fPIC";
-        args[argc++] = "-shared";
-        args[argc++] = "-pthread";
-        args[argc++] = "-DNDEBUG";
-        args[argc++] = "-ffixed-x28";  // cosmo's TLS register
-        args[argc++] = "-DTARGET_OS_OSX";
-        args[argc++] = "-DGGML_MULTIPLATFORM";
-        args[argc++] = "-DGGML_VERSION=\"0.9.4\"";
-        args[argc++] = "-DGGML_COMMIT=\"unknown\"";
-        args[argc++] = "-w";  // Suppress compilation warnings
-        args[argc++] = src_ggml_c;
-        args[argc++] = src_ggml_alloc_c;
-        args[argc++] = src_ggml_backend_cpp;
-        args[argc++] = src_threading_cpp;
-        args[argc++] = src_quants_c;
-        args[argc++] = src_metal_cpp;
-        args[argc++] = src_metal_device_cpp;
-        args[argc++] = src_metal_device_m;
-        args[argc++] = src_metal_context_m;
-        args[argc++] = src_metal_common_cpp;
-        args[argc++] = src_metal_ops_cpp;
-        args[argc++] = "-o";
-        args[argc++] = tmpdso;
-        args[argc++] = "-framework";
-        args[argc++] = "Foundation";
-        args[argc++] = "-framework";
-        args[argc++] = "Metal";
-        args[argc++] = "-framework";
-        args[argc++] = "MetalKit";
-        args[argc++] = "-lc++";
-        args[argc] = NULL;
+        // Source files to compile
+        static const char *src_basenames[] = {
+            "ggml.c",
+            "ggml-alloc.c",
+            "ggml-quants.c",
+            "ggml-backend.cpp",
+            "ggml-threading.cpp",
+            "ggml-metal.cpp",
+            "ggml-metal-device.cpp",
+            "ggml-metal-common.cpp",
+            "ggml-metal-ops.cpp",
+            "ggml-metal-device.m",
+            "ggml-metal-context.m",
+            NULL
+        };
 
-        if (FLAG_verbose) {
-            fprintf(stderr, "metal: executing: cc");
-            for (int i = 1; args[i]; i++)
-                fprintf(stderr, " %s", args[i]);
-            fprintf(stderr, "\n");
-        }
+        // Count source files and prepare object paths
+        int num_srcs = 0;
+        while (src_basenames[num_srcs]) num_srcs++;
 
-        int pid, ws;
-        errno_t err = posix_spawnp(&pid, "cc", NULL, NULL, args, environ);
-        if (err) {
-            perror("cc");
-            if (err == ENOENT) {
-                fprintf(stderr, "metal: PLEASE RUN: xcode-select --install\n");
+        char obj_paths[16][PATH_MAX];
+
+        // Compile each source file
+        for (int i = 0; i < num_srcs; i++) {
+            char src_path[PATH_MAX];
+            snprintf(src_path, PATH_MAX, "%s%s", app_dir, src_basenames[i]);
+            snprintf(obj_paths[i], PATH_MAX, "%s%s.o", app_dir, src_basenames[i]);
+
+            // Check if file is C++ (.cpp extension)
+            const char *ext = strrchr(src_basenames[i], '.');
+            bool is_cpp = ext && strcmp(ext, ".cpp") == 0;
+
+            char *args[32];
+            int argc = 0;
+            args[argc++] = "cc";
+            args[argc++] = "-c";
+            args[argc++] = include_arg;
+            if (is_cpp)
+                args[argc++] = "-std=c++17";
+            args[argc++] = "-O3";
+            args[argc++] = "-fPIC";
+            args[argc++] = "-pthread";
+            args[argc++] = "-DNDEBUG";
+            args[argc++] = "-ffixed-x28";  // cosmo's TLS register
+            args[argc++] = "-DTARGET_OS_OSX";
+            args[argc++] = "-DGGML_MULTIPLATFORM";
+            args[argc++] = "-DGGML_VERSION=\"0.9.4\"";
+            args[argc++] = "-DGGML_COMMIT=\"unknown\"";
+            args[argc++] = "-w";  // Suppress compilation warnings
+            args[argc++] = "-o";
+            args[argc++] = obj_paths[i];
+            args[argc++] = src_path;
+            args[argc] = NULL;
+
+            if (FLAG_verbose) {
+                fprintf(stderr, "metal: executing: cc");
+                for (int j = 1; args[j]; j++)
+                    fprintf(stderr, " %s", args[j]);
+                fprintf(stderr, "\n");
             }
-            unlink(tmpdso);
-            return false;
-        }
 
-        while (waitpid(pid, &ws, 0) == -1) {
-            if (errno != EINTR) {
-                perror("waitpid");
+            int pid, ws;
+            errno_t err = posix_spawnp(&pid, "cc", NULL, NULL, args, environ);
+            if (err) {
+                perror("cc");
+                if (err == ENOENT) {
+                    fprintf(stderr, "metal: PLEASE RUN: xcode-select --install\n");
+                }
+                unlink(tmpdso);
+                return false;
+            }
+
+            while (waitpid(pid, &ws, 0) == -1) {
+                if (errno != EINTR) {
+                    perror("waitpid");
+                    unlink(tmpdso);
+                    return false;
+                }
+            }
+
+            if (ws) {
+                fprintf(stderr, "metal: compiler returned nonzero exit status\n");
                 unlink(tmpdso);
                 return false;
             }
         }
 
-        if (ws) {
-            fprintf(stderr, "metal: compiler returned nonzero exit status\n");
-            unlink(tmpdso);
-            return false;
+        // Link all object files into shared library
+        {
+            char *args[64];
+            int argc = 0;
+            args[argc++] = "cc";
+            args[argc++] = "-shared";
+            args[argc++] = "-fPIC";
+            args[argc++] = "-pthread";
+            args[argc++] = "-ffixed-x28";
+            args[argc++] = "-o";
+            args[argc++] = tmpdso;
+            for (int i = 0; i < num_srcs; i++)
+                args[argc++] = obj_paths[i];
+            args[argc++] = "-framework";
+            args[argc++] = "Foundation";
+            args[argc++] = "-framework";
+            args[argc++] = "Metal";
+            args[argc++] = "-framework";
+            args[argc++] = "MetalKit";
+            args[argc++] = "-lc++";
+            args[argc] = NULL;
+
+            if (FLAG_verbose) {
+                fprintf(stderr, "metal: executing: cc");
+                for (int j = 1; args[j]; j++)
+                    fprintf(stderr, " %s", args[j]);
+                fprintf(stderr, "\n");
+            }
+
+            int pid, ws;
+            errno_t err = posix_spawnp(&pid, "cc", NULL, NULL, args, environ);
+            if (err) {
+                perror("cc");
+                unlink(tmpdso);
+                return false;
+            }
+
+            while (waitpid(pid, &ws, 0) == -1) {
+                if (errno != EINTR) {
+                    perror("waitpid");
+                    unlink(tmpdso);
+                    return false;
+                }
+            }
+
+            if (ws) {
+                fprintf(stderr, "metal: linker returned nonzero exit status\n");
+                unlink(tmpdso);
+                return false;
+            }
         }
+
+        // Clean up object files
+        for (int i = 0; i < num_srcs; i++)
+            unlink(obj_paths[i]);
 
         if (rename(tmpdso, dso)) {
             perror(dso);
