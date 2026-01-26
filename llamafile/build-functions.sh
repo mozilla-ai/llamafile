@@ -58,6 +58,10 @@ get_ggml_version() {
         GGML_VERSION_MINOR=$(grep 'set(GGML_VERSION_MINOR' "$llama_cpp_dir/ggml/CMakeLists.txt" 2>/dev/null | sed 's/[^0-9]*//g')
         GGML_VERSION_PATCH=$(grep 'set(GGML_VERSION_PATCH' "$llama_cpp_dir/ggml/CMakeLists.txt" 2>/dev/null | sed 's/[^0-9]*//g')
         GGML_VERSION="${GGML_VERSION_MAJOR}.${GGML_VERSION_MINOR}.${GGML_VERSION_PATCH}"
+        if ! echo "$GGML_VERSION" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "Error: Invalid GGML version format: '$GGML_VERSION'"
+            exit 1
+        fi
     fi
     if [ -z "$GGML_COMMIT" ]; then
         GGML_COMMIT=$(cd "$llama_cpp_dir/ggml" 2>/dev/null && git rev-parse --short HEAD 2>/dev/null || echo "unknown")

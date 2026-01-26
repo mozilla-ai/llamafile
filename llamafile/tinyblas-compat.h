@@ -98,13 +98,17 @@
 #define CUDA_R_16F                TINYBLAS_R_16F
 #define CUDA_R_32F                TINYBLAS_R_32F
 
-// WARNING: BF16 (bfloat16) is mapped to FP16 (half) for TinyBLAS.
-// TinyBLAS does not natively support BF16 arithmetic. This mapping allows
-// BF16 models to run, but may cause precision differences because:
-// - BF16 has 8 exponent bits / 7 mantissa bits (same range as FP32)
-// - FP16 has 5 exponent bits / 10 mantissa bits (reduced range, more precision)
-// Models trained with BF16 may exhibit different numerical behavior when run
-// with FP16 computation.
+// WARNING: BF16 (bfloat16) is NOT supported by TinyBLAS.
+// This mapping to FP16 is INCORRECT and will produce garbage/NaN values because
+// BF16 and FP16 have incompatible bit layouts:
+// - BF16: 1 sign + 8 exponent + 7 mantissa (same exponent range as FP32)
+// - FP16: 1 sign + 5 exponent + 10 mantissa (smaller range, more precision)
+// Interpreting BF16 bits as FP16 causes exponent bit misalignment resulting in
+// completely wrong values (often infinity or NaN).
+//
+// The CUDA backend (ggml-cuda.cu and common.cuh) should check GGML_USE_TINYBLAS
+// and disable BF16 code paths, falling back to FP16 or FP32 conversion instead.
+// If this mapping is ever reached, it indicates a bug in the fallback logic.
 #define CUDA_R_16BF               TINYBLAS_R_16F
 
 // ============================================================================

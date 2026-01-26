@@ -80,6 +80,42 @@ static bool FileExists(const char *path) {
     return !stat(path, &st);
 }
 
+static int makedirs(const char *path, mode_t mode) {
+    char tmp[PATH_MAX];
+    char *p = NULL;
+    size_t len;
+
+    snprintf(tmp, sizeof(tmp), "%s", path);
+    len = strlen(tmp);
+
+    if (tmp[len - 1] == '/')
+        tmp[len - 1] = '\0';
+
+    if (mkdir(tmp, mode) == 0)
+        return 0;
+
+    if (errno == EEXIST) {
+        struct stat st;
+        if (stat(tmp, &st) == 0 && S_ISDIR(st.st_mode))
+            return 0;
+        return -1;
+    }
+
+    if (errno != ENOENT)
+        return -1;
+
+    for (p = tmp + 1; *p; p++) {
+        if (*p == '/') {
+            *p = '\0';
+            if (mkdir(tmp, mode) != 0 && errno != EEXIST)
+                return -1;
+            *p = '/';
+        }
+    }
+
+    return mkdir(tmp, mode);
+}
+
 static bool LinkCuda(const char *dso) {
     // Load dynamic shared object using Cosmopolitan's dlopen
     void *lib = cosmo_dlopen(dso, RTLD_LAZY);
@@ -110,6 +146,11 @@ static bool LinkCuda(const char *dso) {
     if (!ok) {
         char *err = cosmo_dlerror();
         fprintf(stderr, "cuda: %s: not all symbols could be imported\n", err ? err : "unknown error");
+        g_cuda.backend_init = NULL;
+        g_cuda.backend_reg = NULL;
+        g_cuda.get_device_count = NULL;
+        g_cuda.get_device_description = NULL;
+        g_cuda.log_set = NULL;
         cosmo_dlclose(lib);
         return false;
     }
@@ -127,6 +168,10 @@ static bool TryLoadPrebuiltDso(const char *name) {
     if (FileExists(dso)) {
         // Extract to app dir first (cosmo_dlopen can't load from /zip/)
         llamafile_get_app_dir(app_dir, PATH_MAX);
+        if (makedirs(app_dir, 0755) != 0) {
+            perror(app_dir);
+            return false;
+        }
         char extracted[PATH_MAX];
         if (snprintf(extracted, PATH_MAX, "%s%s", app_dir, name) >= PATH_MAX) {
             fprintf(stderr, "cuda: path too long: %s%s\n", app_dir, name);

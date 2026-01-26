@@ -286,6 +286,15 @@ o/$(MODE)/llamafile/llamafile: \
 # Pattern rules for llamafile sources
 # ==============================================================================
 
+# metal.c needs GGML_VERSION and GGML_COMMIT for runtime Metal compilation
+# GGML_VERSION and GGML_COMMIT are inherited from build/config.mk
+o/$(MODE)/llamafile/metal.o: llamafile/metal.c
+	@mkdir -p $(@D)
+	$(CC) $(CFLAGS) $(LLAMAFILE_CPPFLAGS) \
+		-DGGML_VERSION=\"$(GGML_VERSION)\" \
+		-DGGML_COMMIT=\"$(GGML_COMMIT)\" \
+		-c -o $@ $<
+
 o/$(MODE)/llamafile/%.o: llamafile/%.c
 	@mkdir -p $(@D)
 	$(CC) $(CFLAGS) $(LLAMAFILE_CPPFLAGS) -c -o $@ $<
