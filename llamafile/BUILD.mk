@@ -155,10 +155,18 @@ TINYBLAS_CPU_MIXMUL_SRCS := \
 	llamafile/tinyblas_cpu_mixmul_arm80.cpp \
 	llamafile/tinyblas_cpu_mixmul_arm82.cpp
 
+# IQK (Integer Quantized Kernels) for optimized k-quant/i-quant matmul
+# Provides 150-400% speedup for Q4_K, Q5_K, Q6_K quantized models
+TINYBLAS_CPU_IQK_SRCS := \
+	llamafile/iqk_mul_mat_amd_avx2.cpp \
+	llamafile/iqk_mul_mat_amd_zen4.cpp \
+	llamafile/iqk_mul_mat_arm82.cpp
+
 TINYBLAS_CPU_SRCS := \
 	llamafile/sgemm.cpp \
 	$(TINYBLAS_CPU_SGEMM_SRCS) \
-	$(TINYBLAS_CPU_MIXMUL_SRCS)
+	$(TINYBLAS_CPU_MIXMUL_SRCS) \
+	$(TINYBLAS_CPU_IQK_SRCS)
 
 TINYBLAS_CPU_OBJS := $(TINYBLAS_CPU_SRCS:%.cpp=o/$(MODE)/%.o)
 
@@ -344,6 +352,19 @@ o/$(MODE)/llamafile/tinyblas_cpu_mixmul_arm82.o: \
 	private TARGET_ARCH += -Xaarch64-march=armv8.2-a+dotprod+fp16
 
 # ARM64 v8.0-a baseline and unsupported have no special flags
+
+# IQK (Integer Quantized Kernels) architecture-specific flags
+# AVX2 variant (Haswell+)
+o/$(MODE)/llamafile/iqk_mul_mat_amd_avx2.o: \
+	private TARGET_ARCH += -Xx86_64-mtune=skylake -Xx86_64-mavx -Xx86_64-mavx2 -Xx86_64-mfma -Xx86_64-mf16c
+
+# Zen4 variant (AMD Zen 4+ with AVX-512)
+o/$(MODE)/llamafile/iqk_mul_mat_amd_zen4.o: \
+	private TARGET_ARCH += -Xx86_64-mtune=skylake -Xx86_64-mavx -Xx86_64-mavx2 -Xx86_64-mfma -Xx86_64-mf16c -Xx86_64-mavx512f -Xx86_64-mavx512vl -Xx86_64-mavx512vnni -Xx86_64-mavx512bw -Xx86_64-mavx512dq
+
+# ARM82 variant (Apple M1+, Raspberry Pi 5)
+o/$(MODE)/llamafile/iqk_mul_mat_arm82.o: \
+	private TARGET_ARCH += -Xaarch64-march=armv8.2-a+dotprod+fp16
 
 # ==============================================================================
 # Targets

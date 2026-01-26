@@ -37,16 +37,5 @@ bool iqk_mul_mat_moe_unsupported(long, long, long, int, int, const void *, const
     return false;
 }
 
-// IQK kernels are optional (Phase 7) - provide stub implementations that return false
-// to indicate the operation is not supported, causing fallback to the generic path.
-bool iqk_mul_mat(long, long, long, int, const void *, const void *, float *, long, int, int) {
-    return false;
-}
-
-bool iqk_mul_mat_zen4(long, long, long, int, const void *, const void *, float *, long, int, int) {
-    return false;
-}
-
-bool iqk_mul_mat_arm82(long, long, long, int, const void *, const void *, float *, long, int, int) {
-    return false;
-}
+// Note: iqk_mul_mat, iqk_mul_mat_zen4, iqk_mul_mat_arm82 and their MoE variants
+// are provided by the IQK kernel files (iqk_mul_mat_amd_avx2.cpp, etc.)

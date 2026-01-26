@@ -65,6 +65,20 @@ o/$(MODE)/tests/sgemm/sgemm_vecdot_test: \
 	$(CXX) $(LDFLAGS) -fopenmp -o $@ $^ $(LDLIBS)
 
 # ==============================================================================
+# Test: iqk_test (Integer Quantized Kernels benchmark)
+# ==============================================================================
+
+o/$(MODE)/tests/sgemm/iqk_test.o: tests/sgemm/iqk_test.cpp
+	@mkdir -p $(@D)
+	$(CXX) $(CXXFLAGS) $(SGEMM_TEST_CPPFLAGS) -fopenmp -c -o $@ $<
+
+o/$(MODE)/tests/sgemm/iqk_test: \
+		o/$(MODE)/tests/sgemm/iqk_test.o \
+		$(SGEMM_TEST_DEPS)
+	@mkdir -p $(@D)
+	$(CXX) $(LDFLAGS) -fopenmp -o $@ $^ $(LDLIBS)
+
+# ==============================================================================
 # Phony target to build all sgemm tests
 # ==============================================================================
 
@@ -72,4 +86,5 @@ o/$(MODE)/tests/sgemm/sgemm_vecdot_test: \
 o/$(MODE)/tests/sgemm: \
 	o/$(MODE)/tests/sgemm/sgemm_sss_test \
 	o/$(MODE)/tests/sgemm/sgemm_matmul_test \
-	o/$(MODE)/tests/sgemm/sgemm_vecdot_test
+	o/$(MODE)/tests/sgemm/sgemm_vecdot_test \
+	o/$(MODE)/tests/sgemm/iqk_test
