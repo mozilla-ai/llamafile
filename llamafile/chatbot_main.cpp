@@ -33,6 +33,7 @@
 #include "sampling.h"
 #include "mtmd.h"
 #include "mtmd-helper.h"
+#include "ggml.h"
 
 #include "color.h"
 #include "compute.h"
@@ -138,10 +139,6 @@ int main(int argc, char **argv) {
         exit(1);
     }
 
-    if (llamafile_has_metal() && g_params->n_gpu_layers < 0) {
-        // if Metal and no ngl was specified, default to INT_MAX
-        g_params->n_gpu_layers = INT_MAX;
-    }
     clear_ephemeral();
 
     // Suppress logging for model loading unless --verbose was specified
@@ -157,6 +154,57 @@ int main(int argc, char **argv) {
 
     print_ephemeral("loading model...");
     llama_model_params model_params = common_model_params_to_llama(*g_params);
+    llama_context_params ctx_params = common_context_params_to_llama(*g_params);
+
+    // Save original values to detect changes
+    const int32_t orig_n_gpu_layers = model_params.n_gpu_layers;
+    const uint32_t orig_n_ctx = ctx_params.n_ctx;
+
+    // Use llama_params_fit to adjust parameters to available GPU memory
+    // This prevents Metal memory corruption when models exceed available VRAM
+    if (g_params->fit_params && llamafile_has_gpu()) {
+        llama_params_fit_status status = llama_params_fit(
+            g_params->model.path.c_str(),
+            &model_params,
+            &ctx_params,
+            g_params->tensor_split,
+            g_params->tensor_buft_overrides.data(),
+            g_params->fit_params_target,
+            g_params->fit_params_min_ctx,
+            verbose ? GGML_LOG_LEVEL_INFO : GGML_LOG_LEVEL_ERROR
+        );
+
+        if (status == LLAMA_PARAMS_FIT_STATUS_FAILURE) {
+            fprintf(stderr, "warning: could not fit model to GPU memory, using default parameters\n");
+        } else if (status == LLAMA_PARAMS_FIT_STATUS_ERROR) {
+            fprintf(stderr, "warning: error during memory fitting, using default parameters\n");
+        } else if (status == LLAMA_PARAMS_FIT_STATUS_SUCCESS) {
+            // Notify user of any adjustments made to fit GPU memory
+            bool adjusted = false;
+            if (model_params.n_gpu_layers != orig_n_gpu_layers) {
+                fprintf(stderr, "note: GPU layers adjusted to %d to fit in GPU memory",
+                        model_params.n_gpu_layers);
+                adjusted = true;
+            }
+            if (ctx_params.n_ctx != orig_n_ctx && orig_n_ctx != 0) {
+                if (adjusted) {
+                    fprintf(stderr, ", context size reduced to %u", ctx_params.n_ctx);
+                } else {
+                    fprintf(stderr, "note: context size reduced to %u to fit in GPU memory",
+                            ctx_params.n_ctx);
+                    adjusted = true;
+                }
+            }
+            if (adjusted) {
+                fprintf(stderr, " (use --fit off to disable)\n");
+            }
+        }
+    } else if (llamafile_has_metal() && g_params->n_gpu_layers < 0) {
+        // If fit_params is disabled but Metal is available and no ngl was specified,
+        // default to INT_MAX (original behavior)
+        model_params.n_gpu_layers = INT_MAX;
+    }
+
     g_model = llama_model_load_from_file(g_params->model.path.c_str(), model_params);
     clear_ephemeral();
     if (g_model == NULL) {
@@ -182,7 +230,11 @@ int main(int argc, char **argv) {
     }
 
     print_ephemeral("initializing context...");
-    llama_context_params ctx_params = common_context_params_to_llama(*g_params);
+    // Update ctx_params with adjusted n_ctx if not using fit_params
+    // (fit_params already handles context size adjustments)
+    if (!g_params->fit_params || !llamafile_has_gpu()) {
+        ctx_params = common_context_params_to_llama(*g_params);
+    }
     g_ctx = llama_init_from_model(g_model, ctx_params);
     clear_ephemeral();
     if (!g_ctx) {
