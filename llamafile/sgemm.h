@@ -33,6 +33,9 @@ bool llamafile_mixmul(const struct ggml_compute_params *, const struct ggml_tens
 size_t llamafile_mixmul_needs(const struct ggml_tensor *, const struct ggml_tensor *,
                               const struct ggml_tensor *);
 
+// Returns the name of the selected sgemm kernel for diagnostics
+const char *llamafile_sgemm_name(void);
+
 // Internal arch-specific implementations (called by dispatcher)
 bool llamafile_sgemm_unsupported(long, long, long, const void *, long, const void *, long, void *,
                                  long, int, int, int, int, int);

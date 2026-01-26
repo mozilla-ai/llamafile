@@ -20,6 +20,7 @@
 #include <cassert>
 #include <cosmo.h>
 #include <cpuid.h>
+#include <cstdlib>
 #include <libc/sysv/consts/hwcap.h>
 #include <sys/auxv.h>
 
@@ -27,10 +28,21 @@
 typedef bool (*sgemm_func_t)(long, long, long, const void *, long, const void *, long, void *,
                              long, int, int, int, int, int);
 
+// Check if sgemm is disabled via environment variable (for testing/benchmarking)
+static bool sgemm_disabled() {
+    const char *env = getenv("LLAMAFILE_DISABLE_SGEMM");
+    return env && (env[0] == '1' || env[0] == 'y' || env[0] == 'Y');
+}
+
 static const struct GemmFuncs {
     sgemm_func_t sgemm;
     typeof(llamafile_mixmul) *mixmul;
     GemmFuncs() {
+        if (sgemm_disabled()) {
+            sgemm = llamafile_sgemm_unsupported;
+            mixmul = llamafile_mixmul_unsupported;
+            return;
+        }
 #ifdef __x86_64__
         if (X86_HAVE(AVX)) {
             if (X86_HAVE(FMA)) {
@@ -136,3 +148,22 @@ bool llamafile_mixmul(const ggml_compute_params *params, const ggml_tensor *weig
 }
 
 // llamafile_mixmul_needs is defined in tinyblas_cpu_mixmul_*.cpp files
+
+/**
+ * Returns the name of the selected sgemm kernel for diagnostics.
+ */
+const char *llamafile_sgemm_name(void) {
+#ifdef __x86_64__
+    if (funcs.sgemm == llamafile_sgemm_amd_zen4) return "amd_zen4: AVX-512 BF16/VNNI";
+    if (funcs.sgemm == llamafile_sgemm_amd_avx512f) return "amd_avx512f: AVX-512F";
+    if (funcs.sgemm == llamafile_sgemm_amd_avxvnni) return "amd_avxvnni: AVX-VNNI";
+    if (funcs.sgemm == llamafile_sgemm_amd_avx2) return "amd_avx2: AVX2+FMA";
+    if (funcs.sgemm == llamafile_sgemm_amd_fma) return "amd_fma: AVX+FMA";
+    if (funcs.sgemm == llamafile_sgemm_amd_avx) return "amd_avx: AVX";
+#elif defined(__aarch64__)
+    if (funcs.sgemm == llamafile_sgemm_arm82) return "arm82: ARMv8.2 FP16+dotprod";
+    if (funcs.sgemm == llamafile_sgemm_arm80) return "arm80: ARMv8.0 baseline";
+#endif
+    if (funcs.sgemm == llamafile_sgemm_unsupported) return "unsupported";
+    return "unknown";
+}
