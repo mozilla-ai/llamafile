@@ -2571,22 +2571,45 @@ inline int32x4_t sum_4_blocks(const int8x16_t * b, const int8_t * qs) {
     return vpaddq_s32(p1234, vpaddq_s32(p56, p78));
 }
 
+// Strided version for unpacked block_q8_0 data where qs arrays are not contiguous
+// stride = sizeof(block_q8_0) = 34 bytes between consecutive blocks
+inline int32x4_t sum_4_blocks_strided(const int8x16_t * b, const int8_t * qs, size_t stride) {
+    auto q8b = vld1q_s8_x2(qs);
+    auto p12 = ggml_vdotq_s32(ggml_vdotq_s32(vdupq_n_s32(0), b[0], q8b.val[0]), b[1], q8b.val[1]);
+    q8b = vld1q_s8_x2(qs + stride);
+    auto p34 = ggml_vdotq_s32(ggml_vdotq_s32(vdupq_n_s32(0), b[2], q8b.val[0]), b[3], q8b.val[1]);
+    auto p1234 = vpaddq_s32(p12, p34);
+    q8b = vld1q_s8_x2(qs + 2*stride);
+    auto p56 = ggml_vdotq_s32(ggml_vdotq_s32(vdupq_n_s32(0), b[4], q8b.val[0]), b[5], q8b.val[1]);
+    q8b = vld1q_s8_x2(qs + 3*stride);
+    auto p78 = ggml_vdotq_s32(ggml_vdotq_s32(vdupq_n_s32(0), b[6], q8b.val[0]), b[7], q8b.val[1]);
+    return vpaddq_s32(p1234, vpaddq_s32(p56, p78));
+}
+
 template <int nrc> struct Q80 {
 
     constexpr static int nrc_y = nrc;
+    // block_q8_0 is NOT packed - each block has [d, qs[32]] layout
+    // so we need strided access when processing 4 blocks at a time
+    constexpr static bool needs_strided = true;
+    constexpr static size_t block_stride = sizeof(block_q8_0);
 
     Q80(const DataInfo& info) {
         for (int iy = 0; iy < nrc_y; ++iy) y[iy] = (const block_q8_0 *)info.src1_row(iy);
     }
 
+    // Returns pointer to qs of the first block in group of 4
     inline const int8_t * quant_data(int iy, int i) const {
-        const block_q8_0_x4 * y4 = (const block_q8_0_x4 *)y[iy] + i;
-        return y4->qs;
+        return y[iy][4*i].qs;
     }
 
+    // Gather d values from 4 individual blocks into a float16x4_t
     inline float16x4_t load_scales(int iy, int i) const {
-        const block_q8_0_x4 * y4 = (const block_q8_0_x4 *)y[iy] + i;
-        return vld1_f16((const float16_t *)y4->d);
+        ggml_half d_vals[4];
+        for (int k = 0; k < 4; ++k) {
+            d_vals[k] = y[iy][4*i + k].d;
+        }
+        return vld1_f16((const float16_t *)d_vals);
     }
 
     template <typename Dequantizer>
@@ -2615,19 +2638,29 @@ template <int nrc> struct Q80 {
 template <int nrc> struct Q81 {
 
     constexpr static int nrc_y = nrc;
+    // block_q8_1 is NOT packed - each block has [d, s, qs[32]] layout
+    // so we need strided access when processing 4 blocks at a time
+    constexpr static bool needs_strided = true;
+    constexpr static size_t block_stride = sizeof(block_q8_1);
 
     Q81(const DataInfo& info) {
         for (int iy = 0; iy < nrc_y; ++iy) y[iy] = (const block_q8_1 *)info.src1_row(iy);
     }
 
+    // Returns pointer to qs of the first block in group of 4
     inline const int8_t * quant_data(int iy, int i) const {
-        const block_q8_1_x4 * y4 = (const block_q8_1_x4 *)y[iy] + i;
-        return y4->qs;
+        return y[iy][4*i].qs;
     }
 
+    // Gather d,s pairs from 4 individual blocks into a float16x8_t
+    // Layout: [d0, s0, d1, s1, d2, s2, d3, s3]
     inline float16x8_t load_scales(int iy, int i) const {
-        const block_q8_1_x4 * y4 = (const block_q8_1_x4 *)y[iy] + i;
-        return vld1q_f16((const float16_t *)y4->d);
+        ggml_half ds_vals[8];
+        for (int k = 0; k < 4; ++k) {
+            ds_vals[2*k + 0] = y[iy][4*i + k].d;
+            ds_vals[2*k + 1] = y[iy][4*i + k].s;
+        }
+        return vld1q_f16((const float16_t *)ds_vals);
     }
 
     template <typename Dequantizer>
@@ -2830,7 +2863,12 @@ struct DequantizerQ51 final : public BaseLegacyDequantizer<block_q5_1> {
 template <typename Dequantizer, typename Q8>
 inline void sum_4(int i, Dequantizer& deq, const Q8& q8, const float16x4_t * sc16, float32x4_t * acc) {
     for (int iy = 0; iy < Q8::nrc_y; ++iy) {
-        auto pall = sum_4_blocks(deq.bits.b, q8.quant_data(iy, i));
+        int32x4_t pall;
+        if constexpr (Q8::needs_strided) {
+            pall = sum_4_blocks_strided(deq.bits.b, q8.quant_data(iy, i), Q8::block_stride);
+        } else {
+            pall = sum_4_blocks(deq.bits.b, q8.quant_data(iy, i));
+        }
         auto scale = vcvt_f32_f16(sc16[iy]);
         acc[iy] = vmlaq_f32(acc[iy], scale, vcvtq_f32_s32(pall));
     }
