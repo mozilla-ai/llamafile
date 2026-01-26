@@ -17,6 +17,8 @@
 
 #include "sgemm.h"
 
+// Returns false to indicate sgemm is not supported.
+// When this happens, llama.cpp falls back to its generic matmul implementation.
 bool llamafile_sgemm_unsupported(long m, long n, long k, const void *A, long lda, const void *B,
                                  long ldb, void *C, long ldc, int ith, int nth, int Atype,
                                  int Btype, int Ctype) {
