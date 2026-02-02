@@ -1,8 +1,17 @@
-// Test to verify block_q8_0 vs block_q8_0_x4 memory layout
+// q8_0_layout_test: Diagnostic for block_q8_0 vs block_q8_0_x4 memory layout
 //
-// Hypothesis: The IQK code uses block_q8_0_x4 which expects a packed layout
-// [d0,d1,d2,d3,qs0,qs1,qs2,qs3] but actual block_q8_0 data is interleaved
-// [d0,qs0,d1,qs1,d2,qs2,d3,qs3]
+// This is a standalone diagnostic test, NOT part of the regular test suite.
+// It documents why the IQK code in iqk_mul_mat.inc gathers scale values
+// individually rather than casting block_q8_0* to block_q8_0_x4*.
+//
+// The issue: block_q8_0_x4 expects a packed layout [d0,d1,d2,d3,qs0,qs1,qs2,qs3]
+// but actual block_q8_0 arrays have interleaved layout [d0,qs0,d1,qs1,d2,qs2,d3,qs3].
+// Casting would read qs bytes as scale values, producing garbage/inf/nan.
+//
+// See commit 474c8b6 for the related fix to iqk_mul_mat.inc.
+//
+// To build: make o/$(MODE)/tests/sgemm/q8_0_layout_test
+// To run:   ./o//tests/sgemm/q8_0_layout_test
 
 #include <cstdio>
 #include <cstdint>

@@ -79,6 +79,23 @@ o/$(MODE)/tests/sgemm/iqk_test: \
 	$(CXX) $(LDFLAGS) -fopenmp -o $@ $^ $(LDLIBS)
 
 # ==============================================================================
+# Test: q8_0_layout_test (standalone diagnostic)
+# ==============================================================================
+# This is a standalone diagnostic that demonstrates why IQK code gathers
+# scale values individually rather than casting to block_q8_0_x4.
+# NOT included in the main test target - run manually when needed.
+# See commit 474c8b6 for context.
+
+o/$(MODE)/tests/sgemm/q8_0_layout_test.o: tests/sgemm/q8_0_layout_test.cpp
+	@mkdir -p $(@D)
+	$(CXX) $(CXXFLAGS) $(SGEMM_TEST_CPPFLAGS) -c -o $@ $<
+
+o/$(MODE)/tests/sgemm/q8_0_layout_test: \
+		o/$(MODE)/tests/sgemm/q8_0_layout_test.o
+	@mkdir -p $(@D)
+	$(CXX) $(LDFLAGS) -o $@ $^ $(LDLIBS)
+
+# ==============================================================================
 # Phony target to build all sgemm tests
 # ==============================================================================
 
