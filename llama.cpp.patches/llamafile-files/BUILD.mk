@@ -37,7 +37,6 @@ GGML_SRCS_CPP := \
 	llama.cpp/ggml/src/ggml-cpu/traits.cpp \
 	llama.cpp/ggml/src/ggml-cpu/unary-ops.cpp \
 	llama.cpp/ggml/src/ggml-cpu/vec.cpp \
-	llama.cpp/ggml/src/ggml-cpu/llamafile/sgemm.cpp \
 	llama.cpp/ggml/src/ggml-cpu/amx/amx.cpp \
 	llama.cpp/ggml/src/ggml-cpu/amx/mmq.cpp
 
@@ -426,18 +425,22 @@ o/$(MODE)/llama.cpp/server/llama-server: \
 
 o/$(MODE)/llama.cpp/quantize/quantize: \
 	$(TOOL_QUANTIZE_OBJS) \
+	$(TINYBLAS_CPU_OBJS) \
 	o/$(MODE)/llama.cpp/llama.cpp.a
 
 o/$(MODE)/llama.cpp/imatrix/imatrix: \
 	$(TOOL_IMATRIX_OBJS) \
+	$(TINYBLAS_CPU_OBJS) \
 	o/$(MODE)/llama.cpp/llama.cpp.a
 
 o/$(MODE)/llama.cpp/perplexity/perplexity: \
 	$(TOOL_PERPLEXITY_OBJS) \
+	$(TINYBLAS_CPU_OBJS) \
 	o/$(MODE)/llama.cpp/llama.cpp.a
 
 o/$(MODE)/llama.cpp/llama-bench/llama-bench: \
 	$(TOOL_BENCH_OBJS) \
+	$(TINYBLAS_CPU_OBJS) \
 	o/$(MODE)/llama.cpp/llama.cpp.a
 
 o/$(MODE)/llama.cpp/server/llama-server: \
@@ -445,10 +448,11 @@ o/$(MODE)/llama.cpp/server/llama-server: \
 	$(MTMD_OBJS) \
 	$(HTTPLIB_OBJS) \
 	$(TOOL_LLAMAFILE_OBJS) \
+	$(TINYBLAS_CPU_OBJS) \
 	o/$(MODE)/llama.cpp/llama.cpp.a \
 	$(SERVER_ASSETS)
 	@mkdir -p $(dir $@)
-	$(LINK.o) $(TOOL_SERVER_OBJS) $(MTMD_OBJS) $(HTTPLIB_OBJS) $(TOOL_LLAMAFILE_OBJS) o/$(MODE)/llama.cpp/llama.cpp.a $(LOADLIBES) $(LDLIBS) -o $@
+	$(LINK.o) $(TOOL_SERVER_OBJS) $(MTMD_OBJS) $(HTTPLIB_OBJS) $(TOOL_LLAMAFILE_OBJS) $(TINYBLAS_CPU_OBJS) o/$(MODE)/llama.cpp/llama.cpp.a $(LOADLIBES) $(LDLIBS) -o $@
 
 # ==============================================================================
 # Dependencies
