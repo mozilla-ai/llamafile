@@ -4,6 +4,7 @@
 PKGS += TESTS
 
 include tests/minja/BUILD.mk
+include tests/sgemm/BUILD.mk
 
 # ==============================================================================
 # Include paths (reuse llamafile includes)

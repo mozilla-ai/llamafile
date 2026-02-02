@@ -23,6 +23,7 @@
 #include <sys/auxv.h>
 
 #include "common.h"
+#include "sgemm.h"
 
 static bool starts_with_str(const char *str, const char *prefix) {
     return strncmp(str, prefix, strlen(prefix)) == 0;
@@ -79,33 +80,44 @@ std::string llamafile_describe_cpu() {
             fclose(f);
         }
     }
-    // Note: macOS CPU detection removed for cosmopolitan cross-compilation
-    // compatibility. The CPU brand string will come from /proc/cpuinfo
-    // or x86 CPUID on x86_64.
 #endif
     string_replace_all(id, " 96-Cores", "");
     string_replace_all(id, "(TM)", "");
     string_replace_all(id, "(R)", "");
 
-    std::string march;
+    // Add sgemm kernel info (this describes the CPU capabilities used)
+    const char *sgemm = llamafile_sgemm_name();
+    if (sgemm && strcmp(sgemm, "unsupported") != 0) {
+        if (!id.empty())
+            id += " ";
+        id += "(";
+        id += sgemm;
+        id += ")";
+    } else {
+        // Fallback: show march info if no sgemm kernel
 #ifdef __x86_64__
-    if (__cpu_march(__cpu_model.__cpu_subtype))
-        march = __cpu_march(__cpu_model.__cpu_subtype);
-#else
-    long hwcap = getauxval(AT_HWCAP);
-    if (hwcap & HWCAP_ASIMDHP)
-        march += "+fp16";
-    if (hwcap & HWCAP_ASIMDDP)
-        march += "+dotprod";
-#endif
-
-    if (!march.empty()) {
-        bool empty = id.empty();
-        if (!empty)
-            id += " (";
-        id += march;
-        if (!empty)
+        if (__cpu_march(__cpu_model.__cpu_subtype)) {
+            if (!id.empty())
+                id += " ";
+            id += "(";
+            id += __cpu_march(__cpu_model.__cpu_subtype);
             id += ")";
+        }
+#else
+        std::string march;
+        long hwcap = getauxval(AT_HWCAP);
+        if (hwcap & HWCAP_ASIMDHP)
+            march += "+fp16";
+        if (hwcap & HWCAP_ASIMDDP)
+            march += "+dotprod";
+        if (!march.empty()) {
+            if (!id.empty())
+                id += " ";
+            id += "(";
+            id += march;
+            id += ")";
+        }
+#endif
     }
 
     return id;
