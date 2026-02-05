@@ -11,7 +11,24 @@ diff --git a/tools/server/server-queue.cpp b/tools/server/server-queue.cpp
  
  #define QUE_INF(fmt, ...) LOG_INF("que  %12.*s: " fmt, 12, __func__, __VA_ARGS__)
  #define QUE_WRN(fmt, ...) LOG_WRN("que  %12.*s: " fmt, 12, __func__, __VA_ARGS__)
-@@ -108,6 +111,18 @@ void server_queue::terminate() {
+@@ -95,9 +98,13 @@ void server_queue::wait_until_no_sleep() {
+             condition_tasks.notify_one(); // only main thread is waiting on this
+         }
+         QUE_DBG("%s", "waiting until no sleep\n");
+-        condition_tasks.wait(lock, [&]{
+-            return !sleeping;
+-        });
++        // Use wait_for() instead of wait() to work around a
++        // Cosmopolitan libc bug where untimed futex waits on XNU
++        // (macOS) expire after ~72 minutes, causing
++        // condition_variable::wait() to throw ETIMEDOUT.
++        while (sleeping) {
++            condition_tasks.wait_for(lock, std::chrono::seconds(30));
++        }
+     }
+ }
+ 
+@@ -108,6 +115,18 @@ void server_queue::terminate() {
  }
  
  void server_queue::start_loop(int64_t idle_sleep_ms) {
@@ -30,3 +47,41 @@ diff --git a/tools/server/server-queue.cpp b/tools/server/server-queue.cpp
      running = true;
      time_last_task = ggml_time_ms();
  
+@@ -166,9 +185,13 @@ void server_queue::start_loop(int64_t idle_sleep_ms) {
+                 callback_sleeping_state(true);
+                 req_stop_sleeping = false;
+                 // wait until we are requested to exit sleeping state
+-                condition_tasks.wait(lock, [&]{
+-                    return (!running || req_stop_sleeping);
+-                });
++                // Use wait_for() instead of wait() to work around a
++                // Cosmopolitan libc bug where untimed futex waits on
++                // XNU (macOS) expire after ~72 minutes, causing
++                // condition_variable::wait() to throw ETIMEDOUT.
++                while (running && !req_stop_sleeping) {
++                    condition_tasks.wait_for(lock, std::chrono::seconds(30));
++                }
+                 if (!running) { // may changed during sleep
+                     break; // terminate
+                 }
+@@ -251,13 +274,17 @@ void server_response::remove_waiting_task_ids(const std::unordered_set<int> & id
+ server_task_result_ptr server_response::recv(const std::unordered_set<int> & id_tasks) {
+     while (true) {
+         std::unique_lock<std::mutex> lock(mutex_results);
+-        condition_results.wait(lock, [&]{
++        // Use wait_for() instead of wait() to work around a
++        // Cosmopolitan libc bug where untimed futex waits on XNU
++        // (macOS) expire after ~72 minutes, causing
++        // condition_variable::wait() to throw ETIMEDOUT.
++        while (queue_results.empty()) {
++            condition_results.wait_for(lock, std::chrono::seconds(30));
+             if (!running) {
+                 RES_DBG("%s : queue result stop\n", "recv");
+                 std::terminate(); // we cannot return here since the caller is HTTP code
+             }
+-            return !queue_results.empty();
+-        });
++        }
+ 
+         for (size_t i = 0; i < queue_results.size(); i++) {
+             if (id_tasks.find(queue_results[i]->id) != id_tasks.end()) {
