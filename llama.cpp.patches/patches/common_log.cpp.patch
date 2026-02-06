@@ -9,7 +9,7 @@ diff --git a/common/log.cpp b/common/log.cpp
  #endif // defined(_WIN32)
  
  int common_log_verbosity_thold = LOG_DEFAULT_LLAMA;
-@@ -257,6 +258,17 @@ public:
+@@ -257,10 +258,27 @@ public:
          running = true;
  
          thrd = std::thread([this]() {
@@ -27,3 +27,14 @@ diff --git a/common/log.cpp b/common/log.cpp
              while (true) {
                  {
                      std::unique_lock<std::mutex> lock(mtx);
+-                    cv.wait(lock, [this]() { return head != tail; });
++                    // Use wait_for() instead of wait() to work around a
++                    // Cosmopolitan libc bug where untimed futex waits on
++                    // XNU (macOS) expire after ~72 minutes, causing
++                    // condition_variable::wait() to throw ETIMEDOUT.
++                    while (head == tail) {
++                        cv.wait_for(lock, std::chrono::seconds(30));
++                    }
+ 
+                     cur = entries[head];
+ 

@@ -1,0 +1,19 @@
+diff --git a/vendor/cpp-httplib/httplib.h b/vendor/cpp-httplib/httplib.h
+--- a/llama.cpp/vendor/cpp-httplib/httplib.h
++++ b/llama.cpp/vendor/cpp-httplib/httplib.h
+@@ -920,8 +920,13 @@ private:
+         {
+           std::unique_lock<std::mutex> lock(pool_.mutex_);
+ 
+-          pool_.cond_.wait(
+-              lock, [&] { return !pool_.jobs_.empty() || pool_.shutdown_; });
++          // Use wait_for() instead of wait() to work around a
++          // Cosmopolitan libc bug where untimed futex waits on XNU
++          // (macOS) expire after ~72 minutes, causing
++          // condition_variable::wait() to throw ETIMEDOUT.
++          while (pool_.jobs_.empty() && !pool_.shutdown_) {
++            pool_.cond_.wait_for(lock, std::chrono::seconds(30));
++          }
+ 
+           if (pool_.shutdown_ && pool_.jobs_.empty()) { break; }
+ 
