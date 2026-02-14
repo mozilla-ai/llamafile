@@ -15,6 +15,7 @@ include build/rules.mk
 
 include third_party/BUILD.mk
 include llama.cpp/BUILD.mk
+include whisper.cpp/BUILD.mk
 include llamafile/BUILD.mk
 include tests/BUILD.mk
 endif
