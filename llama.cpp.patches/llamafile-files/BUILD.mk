@@ -409,6 +409,12 @@ o/$(MODE)/llama.cpp/ggml/src/ggml-cpu/quants.c.o: \
 # Tool executables
 # ==============================================================================
 
+# Enable secondary expansion for prerequisites that reference variables defined
+# in other BUILD.mk files (e.g., TINYBLAS_CPU_OBJS from llamafile/BUILD.mk).
+# Without this, $(TINYBLAS_CPU_OBJS) would expand to empty since llamafile/BUILD.mk
+# is included after this file.
+.SECONDEXPANSION:
+
 # All llama.cpp tools need pthread and OpenMP for threading
 o/$(MODE)/llama.cpp/quantize/quantize \
 o/$(MODE)/llama.cpp/imatrix/imatrix \
@@ -425,22 +431,22 @@ o/$(MODE)/llama.cpp/server/llama-server: \
 
 o/$(MODE)/llama.cpp/quantize/quantize: \
 	$(TOOL_QUANTIZE_OBJS) \
-	$(TINYBLAS_CPU_OBJS) \
+	$$(TINYBLAS_CPU_OBJS) \
 	o/$(MODE)/llama.cpp/llama.cpp.a
 
 o/$(MODE)/llama.cpp/imatrix/imatrix: \
 	$(TOOL_IMATRIX_OBJS) \
-	$(TINYBLAS_CPU_OBJS) \
+	$$(TINYBLAS_CPU_OBJS) \
 	o/$(MODE)/llama.cpp/llama.cpp.a
 
 o/$(MODE)/llama.cpp/perplexity/perplexity: \
 	$(TOOL_PERPLEXITY_OBJS) \
-	$(TINYBLAS_CPU_OBJS) \
+	$$(TINYBLAS_CPU_OBJS) \
 	o/$(MODE)/llama.cpp/llama.cpp.a
 
 o/$(MODE)/llama.cpp/llama-bench/llama-bench: \
 	$(TOOL_BENCH_OBJS) \
-	$(TINYBLAS_CPU_OBJS) \
+	$$(TINYBLAS_CPU_OBJS) \
 	o/$(MODE)/llama.cpp/llama.cpp.a
 
 o/$(MODE)/llama.cpp/server/llama-server: \
@@ -448,7 +454,7 @@ o/$(MODE)/llama.cpp/server/llama-server: \
 	$(MTMD_OBJS) \
 	$(HTTPLIB_OBJS) \
 	$(TOOL_LLAMAFILE_OBJS) \
-	$(TINYBLAS_CPU_OBJS) \
+	$$(TINYBLAS_CPU_OBJS) \
 	o/$(MODE)/llama.cpp/llama.cpp.a \
 	$(SERVER_ASSETS)
 	@mkdir -p $(dir $@)
