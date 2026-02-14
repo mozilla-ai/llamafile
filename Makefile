@@ -25,6 +25,7 @@ endif
 .PHONY: o/$(MODE)/
 o/$(MODE)/:	o/$(MODE)/llamafile	\
 		o/$(MODE)/llama.cpp \
+		o/$(MODE)/whisper.cpp \
 		o/$(MODE)/third_party/zipalign
 
 .PHONY: install
