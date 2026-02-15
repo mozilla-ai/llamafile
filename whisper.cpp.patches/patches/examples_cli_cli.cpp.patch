@@ -1,0 +1,27 @@
+diff --git a/examples/cli/cli.cpp b/examples/cli/cli.cpp
+--- a/whisper.cpp/examples/cli/cli.cpp
++++ b/whisper.cpp/examples/cli/cli.cpp
+@@ -918,7 +918,9 @@ static void output_lrc(struct whisper_context * ctx, std::ofstream & fout, const
+ 
+ static void cb_log_disable(enum ggml_log_level , const char * , void * ) { }
+ 
+-int main(int argc, char ** argv) {
++// Core whisper-cli logic - can be called from whisperfile main or standalone main()
++// When building whisperfile, its main() calls this function directly
++int whisper_cli_main(int argc, char ** argv) {
+     ggml_backend_load_all();
+ 
+ #if defined(_WIN32)
+@@ -1304,3 +1306,12 @@ int main(int argc, char ** argv) {
+ 
+     return 0;
+ }
++
++// Standalone entry point for whisper-cli executable
++// Not compiled when building as part of whisperfile (which has its own main)
++// Having this allows us to build a vanilla whisper-cli without llamafile features
++#ifndef WHISPERFILE
++int main(int argc, char ** argv) {
++    return whisper_cli_main(argc, argv);
++}
++#endif
