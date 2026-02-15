@@ -5,6 +5,7 @@
 #
 # whisperfile provides llamafile-integrated whisper tools:
 #   - whisperfile: CLI transcription with llamafile features
+#   - whisper-server: HTTP API server for transcription
 #   - stream: Real-time microphone transcription
 #   - mic2txt: Record-then-transcribe
 #   - mic2raw: Debug tool with raw token output
@@ -33,6 +34,10 @@ WHISPERFILE_MIC2RAW_SRCS := \
 	whisperfile/mic2raw.cpp \
 	whisperfile/color.cpp
 
+WHISPERFILE_SERVER_SRCS := \
+	whisperfile/whisper-server.cpp \
+	whisperfile/slurp.cpp
+
 # ==============================================================================
 # Object files
 # ==============================================================================
@@ -41,6 +46,7 @@ WHISPERFILE_OBJS := $(WHISPERFILE_SRCS:%.cpp=o/$(MODE)/%.o)
 WHISPERFILE_STREAM_OBJS := $(WHISPERFILE_STREAM_SRCS:%.cpp=o/$(MODE)/%.o)
 WHISPERFILE_MIC2TXT_OBJS := $(WHISPERFILE_MIC2TXT_SRCS:%.cpp=o/$(MODE)/%.o)
 WHISPERFILE_MIC2RAW_OBJS := $(WHISPERFILE_MIC2RAW_SRCS:%.cpp=o/$(MODE)/%.o)
+WHISPERFILE_SERVER_OBJS := $(WHISPERFILE_SERVER_SRCS:%.cpp=o/$(MODE)/%.o)
 
 # ==============================================================================
 # Include paths
@@ -129,12 +135,25 @@ o/$(MODE)/whisperfile/mic2raw: \
 	$(LINK.o) $^ $(LOADLIBES) $(LDLIBS) -o $@
 
 # ==============================================================================
+# Executable - whisper-server (HTTP API server)
+# ==============================================================================
+
+o/$(MODE)/whisperfile/whisper-server: \
+		$(WHISPERFILE_SERVER_OBJS) \
+		o/$(MODE)/whisper.cpp/examples/server/server.whisperfile.cpp.o \
+		o/$(MODE)/whisper.cpp/whisper.cpp.a \
+		$(WHISPERFILE_LLAMAFILE_OBJS)
+	@mkdir -p $(@D)
+	$(LINK.o) $^ $(LOADLIBES) $(LDLIBS) -o $@
+
+# ==============================================================================
 # Main target
 # ==============================================================================
 
 .PHONY: o/$(MODE)/whisperfile
 o/$(MODE)/whisperfile: \
 	o/$(MODE)/whisperfile/whisperfile \
+	o/$(MODE)/whisperfile/whisper-server \
 	o/$(MODE)/whisperfile/stream \
 	o/$(MODE)/whisperfile/mic2txt \
 	o/$(MODE)/whisperfile/mic2raw

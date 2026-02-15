@@ -268,6 +268,22 @@ o/$(MODE)/whisper.cpp/examples/cli/cli.whisperfile.cpp.o: \
 	$(COMPILE.cc) $(WHISPER_INCS) $(WHISPER_CPPFLAGS) -DWHISPERFILE -frtti -o $@ $<
 
 # ==============================================================================
+# server.cpp for whisper-server build (with WHISPERFILE defined)
+# ==============================================================================
+# This object is used by whisperfile/BUILD.mk to build the whisper-server executable.
+# The -DWHISPERFILE flag excludes server.cpp's main() so whisper-server can provide its own.
+
+WHISPER_SERVER_INCS := \
+	$(WHISPER_INCS) \
+	-iquote . \
+	-iquote whisper.cpp/examples/server
+
+o/$(MODE)/whisper.cpp/examples/server/server.whisperfile.cpp.o: \
+		whisper.cpp/examples/server/server.cpp whisper.cpp/BUILD.mk $(COSMOCC)
+	@mkdir -p $(@D)
+	$(COMPILE.cc) $(WHISPER_SERVER_INCS) $(WHISPER_CPPFLAGS) -DWHISPERFILE -frtti -o $@ $<
+
+# ==============================================================================
 # Main Target
 # ==============================================================================
 
