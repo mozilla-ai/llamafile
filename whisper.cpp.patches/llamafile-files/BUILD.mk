@@ -257,42 +257,15 @@ o/$(MODE)/whisper.cpp/whisper-cli: \
 		$(LOADLIBES) $(LDLIBS) -o $@
 
 # ==============================================================================
-# Executable - whisperfile (llamafile-integrated)
+# cli.cpp for whisperfile build (with WHISPERFILE defined)
 # ==============================================================================
-# whisperfile links against llamafile.a for GPU support, version info, etc.
-# cli.cpp is compiled with -DWHISPERFILE to exclude its main() function.
+# This object is used by whisperfile/BUILD.mk to build the whisperfile executable.
+# The -DWHISPERFILE flag excludes cli.cpp's main() so whisperfile can provide its own.
 
-# Include paths for whisperfile (needs llamafile headers)
-WHISPERFILE_INCS := \
-	$(WHISPER_INCS) \
-	-iquote .
-
-# cli.cpp object for whisperfile build (with WHISPERFILE defined)
 o/$(MODE)/whisper.cpp/examples/cli/cli.whisperfile.cpp.o: \
 		whisper.cpp/examples/cli/cli.cpp whisper.cpp/BUILD.mk $(COSMOCC)
 	@mkdir -p $(@D)
 	$(COMPILE.cc) $(WHISPER_INCS) $(WHISPER_CPPFLAGS) -DWHISPERFILE -frtti -o $@ $<
-
-# whisperfile entry point
-o/$(MODE)/llamafile/whisperfile.cpp.o: \
-		llamafile/whisperfile.cpp llamafile/BUILD.mk $(COSMOCC)
-	@mkdir -p $(@D)
-	$(COMPILE.cc) $(WHISPERFILE_INCS) $(WHISPER_CPPFLAGS) \
-		-DLLAMAFILE_VERSION_STRING=\"$(LLAMAFILE_VERSION_STRING)\" \
-		-frtti -o $@ $<
-
-o/$(MODE)/whisper.cpp/whisperfile: \
-		o/$(MODE)/llamafile/whisperfile.cpp.o \
-		o/$(MODE)/whisper.cpp/examples/cli/cli.whisperfile.cpp.o \
-		o/$(MODE)/whisper.cpp/whisper.cpp.a \
-		o/$(MODE)/llamafile/llamafile.a
-	@mkdir -p $(@D)
-	$(LINK.o) \
-		o/$(MODE)/llamafile/whisperfile.cpp.o \
-		o/$(MODE)/whisper.cpp/examples/cli/cli.whisperfile.cpp.o \
-		o/$(MODE)/whisper.cpp/whisper.cpp.a \
-		o/$(MODE)/llamafile/llamafile.a \
-		$(LOADLIBES) $(LDLIBS) -o $@
 
 # ==============================================================================
 # Main Target
@@ -301,5 +274,4 @@ o/$(MODE)/whisper.cpp/whisperfile: \
 .PHONY: o/$(MODE)/whisper.cpp
 o/$(MODE)/whisper.cpp: \
 	o/$(MODE)/whisper.cpp/whisper.cpp.a \
-	o/$(MODE)/whisper.cpp/whisper-cli \
-	o/$(MODE)/whisper.cpp/whisperfile
+	o/$(MODE)/whisper.cpp/whisper-cli
