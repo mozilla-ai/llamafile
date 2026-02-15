@@ -376,24 +376,8 @@ o/$(MODE)/llamafile/iqk_mul_mat_arm82.o: \
 	private TARGET_ARCH += -Xaarch64-march=armv8.2-a+dotprod+fp16
 
 # ==============================================================================
-# Static library for whisperfile and other tools
-# ==============================================================================
-# This library provides core llamafile functionality (GPU detection, helpers)
-# without the full TUI/chatbot code. Used by whisperfile.
-
-LLAMAFILE_LIB_SRCS_C := \
-	llamafile/llamafile.c \
-	llamafile/zip.c \
-	llamafile/cuda.c \
-	llamafile/metal.c
-
-LLAMAFILE_LIB_OBJS := $(LLAMAFILE_LIB_SRCS_C:%.c=o/$(MODE)/%.o)
-
-o/$(MODE)/llamafile/llamafile.a: $(LLAMAFILE_LIB_OBJS)
-
-# ==============================================================================
 # Targets
 # ==============================================================================
 
 .PHONY: o/$(MODE)/llamafile
-o/$(MODE)/llamafile: o/$(MODE)/llamafile/llamafile o/$(MODE)/llamafile/llamafile.a
+o/$(MODE)/llamafile: o/$(MODE)/llamafile/llamafile
