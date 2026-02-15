@@ -18,6 +18,7 @@ PKGS += WHISPERFILE
 
 WHISPERFILE_SRCS := \
 	whisperfile/whisperfile.cpp \
+	whisperfile/slurp.cpp \
 	whisperfile/color.cpp
 
 WHISPERFILE_STREAM_SRCS := \
@@ -87,7 +88,7 @@ o/$(MODE)/whisperfile/%.o: whisperfile/%.cpp whisperfile/BUILD.mk
 # Links cli.cpp compiled with -DWHISPERFILE to exclude its main()
 
 o/$(MODE)/whisperfile/whisperfile: \
-		o/$(MODE)/whisperfile/whisperfile.o \
+		$(WHISPERFILE_OBJS) \
 		o/$(MODE)/whisper.cpp/examples/cli/cli.whisperfile.cpp.o \
 		o/$(MODE)/whisper.cpp/whisper.cpp.a \
 		$(WHISPERFILE_LLAMAFILE_OBJS)
