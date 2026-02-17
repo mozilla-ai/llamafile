@@ -272,6 +272,11 @@ struct llamafile *llamafile_open_gguf(const char *fname, const char *mode) {
     if ((p = strchr(fname, '@')))
         return llamafile_open_zip(gc(strndup(fname, p - fname)), p + 1, mode);
 
+    // support Cosmopolitan /zip/ paths by routing through llamafile_open_zip
+    // this is necessary because mmap() doesn't work on Cosmopolitan's /zip/ fds
+    if (startswith(fname, "/zip/"))
+        return llamafile_open_zip(GetProgramExecutableName(), fname + 5, mode);
+
     // open from file or from our own executable if it doesn't exist
     struct llamafile *file;
     if (!(file = llamafile_open_file(fname, mode))) {
