@@ -13,6 +13,13 @@ nav:
   - Technical details: technical_details.md
   - Security: security.md
   - Troubleshooting: troubleshooting.md
+  - Whisperfile:
+    - Overview: whisperfile/index.md
+    - Getting Started: whisperfile/getting-started.md
+    - Packaging: whisperfile/packaging.md
+    - Using GPUs: whisperfile/gpu.md
+    - Translation: whisperfile/translate.md
+    - Server: whisperfile/server.md
 
 theme:
   name: material
