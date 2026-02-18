@@ -20,6 +20,8 @@
 #include <cosmo.h>
 #include <cstdio>
 #include <cstdlib>
+#include <cstring>
+#include <exception>
 #include <limits.h>
 #include <signal.h>
 #include <string>
@@ -27,6 +29,7 @@
 #include <vector>
 
 #include "arg.h"
+#include "chat.h"
 #include "common.h"
 #include "llama.h"
 #include "log.h"
@@ -53,6 +56,8 @@ common_sampler *g_sampler = nullptr;    // sampler context
 mtmd_context *g_mtmd = nullptr;         // multimodal context
 llama_model *g_model = nullptr;
 llama_context *g_ctx = nullptr;
+common_chat_templates_ptr g_chat_templates;  // chat template handler
+common_chat_syntax g_chat_syntax;            // chat syntax for parsing
 
 // Static storage for params
 static common_params s_params;
@@ -170,7 +175,7 @@ int main(int argc, char **argv) {
     if (g_params->n_ctx < g_params->n_batch)
         g_params->n_batch = g_params->n_ctx;
 
-    // Print info
+    // Print info (format line is added later after template detection)
     if (!FLAG_nologo) {
         printf(BOLD "software" UNBOLD ": llamafile " LLAMAFILE_VERSION_STRING "\n"
                BOLD "model" UNBOLD ":    %s\n",
@@ -178,7 +183,6 @@ int main(int argc, char **argv) {
         if (is_base_model())
             printf(BOLD "mode" UNBOLD ":     RAW TEXT COMPLETION (base model)\n");
         printf(BOLD "compute" UNBOLD ":  %s\n", describe_compute().c_str());
-        printf("\n");
     }
 
     print_ephemeral("initializing context...");
@@ -214,6 +218,47 @@ int main(int argc, char **argv) {
                     g_params->mmproj.path.c_str(), tip());
             exit(5);
         }
+    }
+
+    // Initialize chat templates for output parsing (e.g., gpt-oss think mode)
+    // Use the same approach as common_chat_verify_template() - provide a dummy message
+    if (!is_base_model()) {
+        g_chat_templates = common_chat_templates_init(g_model, g_params->chat_template);
+        if (g_chat_templates) {
+            // Provide a minimal dummy message (same approach as common_chat_verify_template)
+            common_chat_msg dummy_msg;
+            dummy_msg.role = "user";
+            dummy_msg.content = "test";
+
+            common_chat_templates_inputs inputs;
+            inputs.messages = {dummy_msg};
+            inputs.use_jinja = true;
+
+            try {
+                auto chat_params = common_chat_templates_apply(g_chat_templates.get(), inputs);
+                g_chat_syntax.format = chat_params.format;
+                g_chat_syntax.thinking_forced_open = chat_params.thinking_forced_open;
+
+                // Enable reasoning extraction for all chat models, like llama.cpp CLI/server does.
+                // Parsers handle models without think mode gracefully - if there's no <think> or
+                // similar tags in the output, no reasoning gets extracted.
+                g_chat_syntax.reasoning_format = COMMON_REASONING_FORMAT_DEEPSEEK;
+                g_chat_syntax.reasoning_in_content = false;
+
+                // Print detected format
+                if (!FLAG_nologo && g_chat_syntax.format != COMMON_CHAT_FORMAT_CONTENT_ONLY) {
+                    printf(BOLD "format" UNBOLD ":   %s\n", common_chat_format_name(g_chat_syntax.format));
+                }
+            } catch (const std::exception &e) {
+                // Template application failed, fall back to content-only parsing
+                LOG_DBG("chat template application failed: %s\n", e.what());
+            }
+        }
+    }
+
+    // Ensure there's a blank line after info block
+    if (!FLAG_nologo) {
+        printf("\n");
     }
 
     // Run the REPL

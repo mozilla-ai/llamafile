@@ -22,6 +22,7 @@
 #include <cstdio>
 #include <string_view>
 
+#include "chat.h"
 #include "common.h"
 #include "llama.h"
 #include "sampling.h"
@@ -213,8 +214,18 @@ void repl() {
             free(line);
             continue;
         }
+        // Check if we should use chat parsing (for think mode models like gpt-oss)
+        const bool use_chat_parser = g_chat_syntax.format != COMMON_CHAT_FORMAT_CONTENT_ONLY;
+        std::string raw_output;           // Accumulates raw token output
+        common_chat_msg prev_msg;         // Previous parse result for diff computation
+        bool in_reasoning = false;        // Track if we're currently in reasoning mode
+
         for (;;) {
             if (g_got_sigint) {
+                if (in_reasoning) {
+                    print(UNBOLD);
+                    in_reasoning = false;
+                }
                 eval_token(llamafile_token_eot(g_model));
                 break;
             }
@@ -224,11 +235,61 @@ void repl() {
                 break;
             if (llama_vocab_is_eog(llama_model_get_vocab(g_model), id))
                 break;
-            std::string s;
-            bleeder.feed(&s, token_to_piece(g_ctx, id, g_params->special));
-            print(s);
-            fflush(stdout);
+
+            if (use_chat_parser) {
+                // For chat parsing, we need special tokens to detect patterns like <|channel|>
+                std::string token_str = token_to_piece(g_ctx, id, /*special=*/true);
+
+                // Accumulate raw output for parsing
+                raw_output += token_str;
+
+                // Parse incrementally
+                auto msg = common_chat_parse(raw_output, /*is_partial=*/true, g_chat_syntax);
+
+                // Compute diffs to find new content
+                auto diffs = common_chat_msg_diff::compute_diffs(prev_msg, msg);
+
+                for (const auto &diff : diffs) {
+                    // Display reasoning content in dim style
+                    if (!diff.reasoning_content_delta.empty()) {
+                        if (!in_reasoning) {
+                            print(FAINT);
+                            in_reasoning = true;
+                        }
+                        std::string s;
+                        bleeder.feed(&s, diff.reasoning_content_delta);
+                        print(s);
+                    }
+                    // Display final content normally
+                    if (!diff.content_delta.empty()) {
+                        if (in_reasoning) {
+                            print(UNBOLD);
+                            print("\n\n");  // Add newline between reasoning and content
+                            in_reasoning = false;
+                        }
+                        std::string s;
+                        bleeder.feed(&s, diff.content_delta);
+                        print(s);
+                    }
+                }
+
+                prev_msg = msg;
+                fflush(stdout);
+            } else {
+                // No chat parsing - direct output
+                std::string token_str = token_to_piece(g_ctx, id, g_params->special);
+                std::string s;
+                bleeder.feed(&s, token_str);
+                print(s);
+                fflush(stdout);
+            }
         }
+
+        // End reasoning mode if still active
+        if (in_reasoning) {
+            print(UNBOLD);
+        }
+
         g_got_sigint = 0;
         free(line);
         std::string s;

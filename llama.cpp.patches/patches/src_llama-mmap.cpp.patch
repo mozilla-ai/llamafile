@@ -1,0 +1,227 @@
+diff --git a/src/llama-mmap.cpp b/src/llama-mmap.cpp
+--- a/llama.cpp/src/llama-mmap.cpp
++++ b/llama.cpp/src/llama-mmap.cpp
+@@ -4,6 +4,10 @@
+ 
+ #include "ggml.h"
+ 
++#ifdef COSMOCC
++#include "llamafile/llamafile.h"
++#endif
++
+ #include <cstring>
+ #include <climits>
+ #include <stdexcept>
+@@ -165,6 +169,19 @@ struct llama_file::impl {
+     }
+ #else
+     impl(const char * fname, const char * mode, [[maybe_unused]] const bool use_direct_io = false) {
++#ifdef COSMOCC
++        // [llamafile] Use llamafile_open_gguf for all file opening. This handles:
++        // - Plain GGUF files (opened normally with fopen)
++        // - /zip/ paths (memory-mapped from executable's zip)
++        // - foo.zip@weights.gguf syntax
++        // - .llamafile containers
++        lfile = llamafile_open_gguf(fname, mode);
++        if (lfile == NULL) {
++            throw std::runtime_error(format("failed to open %s: %s", fname, strerror(errno)));
++        }
++        size = llamafile_size(lfile);
++        return;
++#endif
+ #ifdef __linux__
+         // Try unbuffered I/O for read only
+         if (use_direct_io && std::strcmp(mode, "rb") == 0) {
+@@ -198,6 +215,9 @@ struct llama_file::impl {
+     }
+ 
+     size_t tell() const {
++#ifdef COSMOCC
++        return llamafile_tell(lfile);
++#endif
+         if (fd == -1) {
+             long ret = std::ftell(fp);
+             if (ret == -1) {
+@@ -215,6 +235,11 @@ struct llama_file::impl {
+     }
+ 
+     void seek(size_t offset, int whence) const {
++#ifdef COSMOCC
++        if (!llamafile_seek(lfile, offset, whence)) {
++            throw std::runtime_error(format("seek error: %s", strerror(errno)));
++        }
++#else
+         off_t ret = 0;
+         if (fd == -1) {
+             ret = std::fseek(fp, (long) offset, whence);
+@@ -224,12 +249,22 @@ struct llama_file::impl {
+         if (ret == -1) {
+             throw std::runtime_error(format("seek error: %s", strerror(errno)));
+         }
++#endif
+     }
+ 
+     void read_raw(void * ptr, size_t len) const {
+         if (len == 0) {
+             return;
+         }
++#ifdef COSMOCC
++        long rc = llamafile_read(lfile, ptr, len);
++        if (rc == -1) {
++            throw std::runtime_error(format("read error: %s", strerror(errno)));
++        }
++        if ((size_t)rc != len) {
++            throw std::runtime_error(format("short read: expected %zu bytes, got %ld", len, rc));
++        }
++#else
+         errno = 0;
+         if (fd == -1) {
+             std::size_t ret = std::fread(ptr, len, 1, fp);
+@@ -264,6 +299,7 @@ struct llama_file::impl {
+                 bytes_read += (size_t) ret;
+             }
+         }
++#endif
+     }
+ 
+     void read_aligned_chunk(size_t offset, void * dest, size_t size) const {
+@@ -311,13 +347,20 @@ struct llama_file::impl {
+     }
+ 
+     ~impl() {
++#ifdef COSMOCC
++        llamafile_close(lfile);
++#else
+         if (fd != -1) {
+             close(fd);
+-        } else {
++        } else if (fp) {
+             std::fclose(fp);
+         }
++#endif
+     }
+     int fd = -1;
++#ifdef COSMOCC
++    llamafile * lfile = nullptr;
++#endif
+ #endif
+ 
+     void read_raw_at(void * ptr, size_t len, size_t offset) const {
+@@ -349,13 +392,21 @@ size_t llama_file::size() const { return pimpl->size; }
+ size_t llama_file::read_alignment() const { return pimpl->read_alignment(); }
+ 
+ int llama_file::file_id() const {
++#ifdef COSMOCC
++    // [llamafile] For pre-mapped files (bundled /zip/ assets), there's no fd.
++    // Callers that need mmap should check has_premapped_content() first and use
++    // premapped_content() instead of calling file_id() + mmap().
++    FILE * fp = llamafile_fp(pimpl->lfile);
++    return fp ? fileno(fp) : -1;
++#else
+ #ifdef _WIN32
+     return _fileno(pimpl->fp);
+ #else
+ #if defined(fileno)
+-    return fileno(pimpl->fp);
++    return pimpl->fp ? fileno(pimpl->fp) : -1;
+ #else
+-    return ::fileno(pimpl->fp);
++    return pimpl->fp ? ::fileno(pimpl->fp) : -1;
++#endif
+ #endif
+ #endif
+ }
+@@ -369,14 +420,64 @@ uint32_t llama_file::read_u32() const { return pimpl->read_u32(); }
+ void llama_file::write_raw(const void * ptr, size_t len) const { pimpl->write_raw(ptr, len); }
+ void llama_file::write_u32(uint32_t val) const { pimpl->write_u32(val); }
+ 
++// [llamafile] Check if file has pre-mapped content (for bundled zip assets)
++bool llama_file::has_premapped_content() const {
++#ifdef COSMOCC
++    return !llamafile_fp(pimpl->lfile);
++#else
++    return false;
++#endif
++}
++
++void * llama_file::premapped_content() const {
++#ifdef COSMOCC
++    if (!llamafile_fp(pimpl->lfile)) {
++        return llamafile_content(pimpl->lfile);
++    }
++#endif
++    return nullptr;
++}
++
++void * llama_file::get_llamafile() const {
++#ifdef COSMOCC
++    return pimpl->lfile;
++#else
++    return nullptr;
++#endif
++}
++
+ // llama_mmap
+ 
+ struct llama_mmap::impl {
+ #ifdef _POSIX_MAPPED_FILES
+     std::vector<std::pair<size_t, size_t>> mapped_fragments;
++    bool is_owned = true; // [llamafile] false if using pre-mapped content
++#ifdef COSMOCC
++    llamafile * lfile = nullptr; // [llamafile] for reference counting
++#endif
+ 
+     impl(struct llama_file * file, size_t prefetch, bool numa) {
+         size = file->size();
++
++        // [llamafile] Check if file already has pre-mapped content (bundled zip assets).
++        // For /zip/ paths, the content is already memory-mapped by llamafile_open_zip().
++        // We use reference counting to keep the mapping alive: llamafile_ref() here and
++        // llamafile_unref() in the destructor. The llama_file also calls llamafile_close()
++        // (which internally calls llamafile_unref()) in its destructor. Either destruction
++        // order is safe: the memory is only freed when the last reference is released.
++        if (file->has_premapped_content()) {
++            addr = file->premapped_content();
++            is_owned = false;
++#ifdef COSMOCC
++            // Keep the llamafile alive by incrementing reference count
++            lfile = (llamafile *)file->get_llamafile();
++            if (lfile) {
++                llamafile_ref(lfile);
++            }
++#endif
++            return;
++        }
++
+         int fd = file->file_id();
+         int flags = MAP_SHARED;
+         if (numa) { prefetch = 0; }
+@@ -421,6 +522,11 @@ struct llama_mmap::impl {
+     }
+ 
+     void unmap_fragment(size_t first, size_t last) {
++        // [llamafile] Don't unmap if we're using pre-mapped content
++        if (!is_owned) {
++            return;
++        }
++
+         int page_size = sysconf(_SC_PAGESIZE);
+         align_range(&first, &last, page_size);
+         size_t len = last - first;
+@@ -457,6 +563,16 @@ struct llama_mmap::impl {
+     }
+ 
+     ~impl() {
++        // [llamafile] Don't munmap if we're using pre-mapped content
++        if (!is_owned) {
++#ifdef COSMOCC
++            // Decrement reference count on the llamafile
++            if (lfile) {
++                llamafile_unref(lfile);
++            }
++#endif
++            return;
++        }
+         for (const auto & frag : mapped_fragments) {
+             if (munmap((char *) addr + frag.first, frag.second - frag.first)) {
+                 LLAMA_LOG_WARN("warning: munmap failed: %s\n", strerror(errno));
