@@ -175,7 +175,7 @@ int main(int argc, char **argv) {
     if (g_params->n_ctx < g_params->n_batch)
         g_params->n_batch = g_params->n_ctx;
 
-    // Print info
+    // Print info (format line is added later after template detection)
     if (!FLAG_nologo) {
         printf(BOLD "software" UNBOLD ": llamafile " LLAMAFILE_VERSION_STRING "\n"
                BOLD "model" UNBOLD ":    %s\n",
@@ -183,7 +183,6 @@ int main(int argc, char **argv) {
         if (is_base_model())
             printf(BOLD "mode" UNBOLD ":     RAW TEXT COMPLETION (base model)\n");
         printf(BOLD "compute" UNBOLD ":  %s\n", describe_compute().c_str());
-        printf("\n");
     }
 
     print_ephemeral("initializing context...");
@@ -246,15 +245,18 @@ int main(int argc, char **argv) {
                 g_chat_syntax.reasoning_format = COMMON_REASONING_FORMAT_DEEPSEEK;
                 g_chat_syntax.reasoning_in_content = false;
 
-                // Print detected format for debugging
+                // Print detected format
                 if (!FLAG_nologo && g_chat_syntax.format != COMMON_CHAT_FORMAT_CONTENT_ONLY) {
-                    printf(BOLD "format" UNBOLD ":   %s\n\n", common_chat_format_name(g_chat_syntax.format));
+                    printf(BOLD "format" UNBOLD ":   %s\n", common_chat_format_name(g_chat_syntax.format));
                 }
             } catch (const std::exception &) {
                 // Template application failed, fall back to content-only parsing
             }
         }
     }
+
+    // Ensure there's a blank line after info block
+    printf("\n");
 
     // Run the REPL
     repl();
