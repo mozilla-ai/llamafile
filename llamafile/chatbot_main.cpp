@@ -20,6 +20,7 @@
 #include <cosmo.h>
 #include <cstdio>
 #include <cstdlib>
+#include <exception>
 #include <limits.h>
 #include <signal.h>
 #include <string>
@@ -27,6 +28,7 @@
 #include <vector>
 
 #include "arg.h"
+#include "chat.h"
 #include "common.h"
 #include "llama.h"
 #include "log.h"
@@ -53,6 +55,8 @@ common_sampler *g_sampler = nullptr;    // sampler context
 mtmd_context *g_mtmd = nullptr;         // multimodal context
 llama_model *g_model = nullptr;
 llama_context *g_ctx = nullptr;
+common_chat_templates_ptr g_chat_templates;  // chat template handler
+common_chat_syntax g_chat_syntax;            // chat syntax for parsing
 
 // Static storage for params
 static common_params s_params;
@@ -213,6 +217,46 @@ int main(int argc, char **argv) {
             fprintf(stderr, "%s: failed to initialize multimodal model%s\n",
                     g_params->mmproj.path.c_str(), tip());
             exit(5);
+        }
+    }
+
+    // Initialize chat templates for output parsing (e.g., gpt-oss think mode)
+    // Use the same approach as common_chat_verify_template() - provide a dummy message
+    if (!is_base_model()) {
+        g_chat_templates = common_chat_templates_init(g_model, g_params->chat_template);
+        if (g_chat_templates) {
+            // Provide a minimal dummy message (same approach as common_chat_verify_template)
+            common_chat_msg dummy_msg;
+            dummy_msg.role = "user";
+            dummy_msg.content = "test";
+
+            common_chat_templates_inputs inputs;
+            inputs.messages = {dummy_msg};
+            inputs.use_jinja = true;
+
+            try {
+                auto chat_params = common_chat_templates_apply(g_chat_templates.get(), inputs);
+                g_chat_syntax.format = chat_params.format;
+                g_chat_syntax.thinking_forced_open = chat_params.thinking_forced_open;
+
+                // Enable reasoning extraction for think mode formats
+                if (g_chat_syntax.format == COMMON_CHAT_FORMAT_GPT_OSS ||
+                    g_chat_syntax.format == COMMON_CHAT_FORMAT_DEEPSEEK_R1 ||
+                    g_chat_syntax.format == COMMON_CHAT_FORMAT_DEEPSEEK_V3_1 ||
+                    g_chat_syntax.format == COMMON_CHAT_FORMAT_GRANITE ||
+                    g_chat_syntax.format == COMMON_CHAT_FORMAT_COMMAND_R7B) {
+                    g_chat_syntax.reasoning_format = COMMON_REASONING_FORMAT_DEEPSEEK;
+                    // Extract reasoning separately (not merged into content)
+                    g_chat_syntax.reasoning_in_content = false;
+                }
+
+                // Print detected format for debugging
+                if (!FLAG_nologo && g_chat_syntax.format != COMMON_CHAT_FORMAT_CONTENT_ONLY) {
+                    printf(BOLD "format" UNBOLD ":   %s\n\n", common_chat_format_name(g_chat_syntax.format));
+                }
+            } catch (const std::exception &) {
+                // Template application failed, fall back to content-only parsing
+            }
         }
     }
 

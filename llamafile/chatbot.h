@@ -21,6 +21,8 @@
 #include <vector>
 #include <signal.h>
 
+#include "chat.h"
+
 #define DEFAULT_SYSTEM_PROMPT \
     "A chat between a curious human and an artificial intelligence assistant. " \
     "The assistant gives helpful, detailed, and polite answers to the " \
@@ -66,6 +68,8 @@ extern llama_model *g_model;
 extern std::vector<int> g_history;
 extern volatile sig_atomic_t g_got_sigint;
 extern bool g_interrupted_exit;
+extern common_chat_templates_ptr g_chat_templates;
+extern common_chat_syntax g_chat_syntax;
 
 int main(int, char **);
 
