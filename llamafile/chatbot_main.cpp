@@ -249,14 +249,17 @@ int main(int argc, char **argv) {
                 if (!FLAG_nologo && g_chat_syntax.format != COMMON_CHAT_FORMAT_CONTENT_ONLY) {
                     printf(BOLD "format" UNBOLD ":   %s\n", common_chat_format_name(g_chat_syntax.format));
                 }
-            } catch (const std::exception &) {
+            } catch (const std::exception &e) {
                 // Template application failed, fall back to content-only parsing
+                LOG_DBG("chat template application failed: %s\n", e.what());
             }
         }
     }
 
     // Ensure there's a blank line after info block
-    printf("\n");
+    if (!FLAG_nologo) {
+        printf("\n");
+    }
 
     // Run the REPL
     repl();

@@ -215,13 +215,17 @@ void repl() {
             continue;
         }
         // Check if we should use chat parsing (for think mode models like gpt-oss)
-        bool use_chat_parser = g_chat_syntax.format != COMMON_CHAT_FORMAT_CONTENT_ONLY;
+        const bool use_chat_parser = g_chat_syntax.format != COMMON_CHAT_FORMAT_CONTENT_ONLY;
         std::string raw_output;           // Accumulates raw token output
         common_chat_msg prev_msg;         // Previous parse result for diff computation
         bool in_reasoning = false;        // Track if we're currently in reasoning mode
 
         for (;;) {
             if (g_got_sigint) {
+                if (in_reasoning) {
+                    print(UNBOLD);
+                    in_reasoning = false;
+                }
                 eval_token(llamafile_token_eot(g_model));
                 break;
             }
