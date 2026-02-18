@@ -1,0 +1,66 @@
+diff --git a/ggml/src/gguf.cpp b/ggml/src/gguf.cpp
+--- a/llama.cpp/ggml/src/gguf.cpp
++++ b/llama.cpp/ggml/src/gguf.cpp
+@@ -3,6 +3,10 @@
+ #include "ggml-impl.h"
+ #include "gguf.h"
+ 
++#ifdef COSMOCC
++#include "llamafile/llamafile.h"
++#endif
++
+ #include <cinttypes>
+ #include <cstddef>
+ #include <cstdint>
+@@ -731,6 +735,43 @@ struct gguf_context * gguf_init_from_file_impl(FILE * file, struct gguf_init_par
+ }
+ 
+ struct gguf_context * gguf_init_from_file(const char * fname, struct gguf_init_params params) {
++#ifdef COSMOCC
++    // [llamafile] Use llamafile_open_gguf to handle all llamafile formats:
++    // plain GGUF, /zip/ paths, foo.zip@weights.gguf, .llamafile containers
++    struct llamafile * lfile = llamafile_open_gguf(fname, "rb");
++    if (!lfile) {
++        GGML_LOG_ERROR("%s: failed to open GGUF file '%s': %s\n", __func__, fname, strerror(errno));
++        return nullptr;
++    }
++
++    FILE * file = llamafile_fp(lfile);
++    struct gguf_context * result;
++    if (file) {
++        // Regular file - use the FILE*
++        result = gguf_init_from_file_impl(file, params);
++    } else {
++        // Pre-mapped content (zip asset) - create FILE* from memory using fmemopen
++        void * content = llamafile_content(lfile);
++        size_t size = llamafile_size(lfile);
++        if (!content || size == 0) {
++            GGML_LOG_ERROR("%s: invalid pre-mapped content for '%s' (content=%p, size=%zu)\n",
++                          __func__, fname, content, size);
++            llamafile_close(lfile);
++            return nullptr;
++        }
++        file = fmemopen(content, size, "rb");
++        if (!file) {
++            GGML_LOG_ERROR("%s: fmemopen failed for '%s': %s\n", __func__, fname, strerror(errno));
++            llamafile_close(lfile);
++            return nullptr;
++        }
++        result = gguf_init_from_file_impl(file, params);
++        // [llamafile] Don't fclose the fmemopen FILE* - it causes SIGBUS on Cosmopolitan Libc.
++        // The underlying memory is owned by the llamafile and will be unmapped by llamafile_close().
++    }
++    llamafile_close(lfile);
++    return result;
++#else
+     FILE * file = ggml_fopen(fname, "rb");
+ 
+     if (!file) {
+@@ -741,6 +782,7 @@ struct gguf_context * gguf_init_from_file(const char * fname, struct gguf_init_p
+     struct gguf_context * result = gguf_init_from_file_impl(file, params);
+     fclose(file);
+     return result;
++#endif
+ }
+ 
+ void gguf_free(struct gguf_context * ctx) {
