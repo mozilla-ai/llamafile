@@ -20,6 +20,7 @@
 #include <cosmo.h>
 #include <cstdio>
 #include <cstdlib>
+#include <cstring>
 #include <exception>
 #include <limits.h>
 #include <signal.h>
@@ -239,16 +240,11 @@ int main(int argc, char **argv) {
                 g_chat_syntax.format = chat_params.format;
                 g_chat_syntax.thinking_forced_open = chat_params.thinking_forced_open;
 
-                // Enable reasoning extraction for think mode formats
-                if (g_chat_syntax.format == COMMON_CHAT_FORMAT_GPT_OSS ||
-                    g_chat_syntax.format == COMMON_CHAT_FORMAT_DEEPSEEK_R1 ||
-                    g_chat_syntax.format == COMMON_CHAT_FORMAT_DEEPSEEK_V3_1 ||
-                    g_chat_syntax.format == COMMON_CHAT_FORMAT_GRANITE ||
-                    g_chat_syntax.format == COMMON_CHAT_FORMAT_COMMAND_R7B) {
-                    g_chat_syntax.reasoning_format = COMMON_REASONING_FORMAT_DEEPSEEK;
-                    // Extract reasoning separately (not merged into content)
-                    g_chat_syntax.reasoning_in_content = false;
-                }
+                // Enable reasoning extraction for all chat models, like llama.cpp CLI/server does.
+                // Parsers handle models without think mode gracefully - if there's no <think> or
+                // similar tags in the output, no reasoning gets extracted.
+                g_chat_syntax.reasoning_format = COMMON_REASONING_FORMAT_DEEPSEEK;
+                g_chat_syntax.reasoning_in_content = false;
 
                 // Print detected format for debugging
                 if (!FLAG_nologo && g_chat_syntax.format != COMMON_CHAT_FORMAT_CONTENT_ONLY) {
