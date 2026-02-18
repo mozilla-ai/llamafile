@@ -12,51 +12,169 @@ diff --git a/ggml/src/gguf.cpp b/ggml/src/gguf.cpp
  #include <cinttypes>
  #include <cstddef>
  #include <cstdint>
-@@ -731,6 +735,43 @@ struct gguf_context * gguf_init_from_file_impl(FILE * file, struct gguf_init_par
+@@ -284,14 +288,103 @@ struct gguf_reader {
+     bool read(void * dst, const size_t size) const {
+         return fread(dst, 1, size, file) == size;
+     }
++
++    size_t tell() const {
++        return ftell(file);
++    }
++
++    bool seek(size_t offset, int whence) const {
++        return fseek(file, offset, whence) == 0;
++    }
+ };
+ 
++#ifdef COSMOCC
++// [llamafile] Reader that uses llamafile API for both regular files and memory-mapped content
++struct gguf_llamafile_reader {
++    struct llamafile * lfile;
++
++    gguf_llamafile_reader(struct llamafile * lfile) : lfile(lfile) {}
++
++    template <typename T>
++    bool read(T & dst) const {
++        return llamafile_read(lfile, &dst, sizeof(dst)) == (long)sizeof(dst);
++    }
++
++    template <typename T>
++    bool read(std::vector<T> & dst, const size_t n) const {
++        dst.resize(n);
++        for (size_t i = 0; i < dst.size(); ++i) {
++            if constexpr (std::is_same<T, bool>::value) {
++                bool tmp;
++                if (!read(tmp)) {
++                    return false;
++                }
++                dst[i] = tmp;
++            } else {
++                if (!read(dst[i])) {
++                    return false;
++                }
++            }
++        }
++        return true;
++    }
++
++    bool read(bool & dst) const {
++        int8_t tmp = -1;
++        if (!read(tmp)) {
++            return false;
++        }
++        dst = tmp != 0;
++        return true;
++    }
++
++    bool read(enum ggml_type & dst) const {
++        int32_t tmp = -1;
++        if (!read(tmp)) {
++            return false;
++        }
++        dst = ggml_type(tmp);
++        return true;
++    }
++
++    bool read(enum gguf_type & dst) const {
++        int32_t tmp = -1;
++        if (!read(tmp)) {
++            return false;
++        }
++        dst = gguf_type(tmp);
++        return true;
++    }
++
++    bool read(std::string & dst) const {
++        uint64_t size = 0;
++        if (!read(size)) {
++            return false;
++        }
++        dst.resize(size);
++        return llamafile_read(lfile, dst.data(), dst.length()) == (long)dst.length();
++    }
++
++    bool read(void * dst, const size_t size) const {
++        return llamafile_read(lfile, dst, size) == (long)size;
++    }
++
++    size_t tell() const {
++        return llamafile_tell(lfile);
++    }
++
++    bool seek(size_t offset, int whence) const {
++        return llamafile_seek(lfile, offset, whence);
++    }
++};
++#endif
++
+ struct gguf_context * gguf_init_empty(void) {
+     return new gguf_context;
  }
  
+-template<typename T>
+-bool gguf_read_emplace_helper(const struct gguf_reader & gr, std::vector<struct gguf_kv> & kv, const std::string & key, const bool is_array, const size_t n) {
++template<typename T, typename Reader>
++bool gguf_read_emplace_helper(const Reader & gr, std::vector<struct gguf_kv> & kv, const std::string & key, const bool is_array, const size_t n) {
+     if (is_array) {
+         std::vector<T> value;
+         try {
+@@ -316,8 +409,8 @@ bool gguf_read_emplace_helper(const struct gguf_reader & gr, std::vector<struct
+     return true;
+ }
+ 
+-struct gguf_context * gguf_init_from_file_impl(FILE * file, struct gguf_init_params params) {
+-    const struct gguf_reader gr(file);
++template<typename Reader>
++struct gguf_context * gguf_init_from_reader_impl(const Reader & gr, struct gguf_init_params params) {
+     struct gguf_context * ctx = new gguf_context;
+ 
+     bool ok = true;
+@@ -610,14 +703,14 @@ struct gguf_context * gguf_init_from_file_impl(FILE * file, struct gguf_init_par
+     GGML_ASSERT(int64_t(ctx->info.size()) == n_tensors);
+ 
+     // we require the data section to be aligned, so take into account any padding
+-    if (fseek(file, GGML_PAD(ftell(file), ctx->alignment), SEEK_SET) != 0) {
++    if (!gr.seek(GGML_PAD(gr.tell(), ctx->alignment), SEEK_SET)) {
+         GGML_LOG_ERROR("%s: failed to seek to beginning of data section\n", __func__);
+         gguf_free(ctx);
+         return nullptr;
+     }
+ 
+     // store the current file offset - this is where the data section starts
+-    ctx->offset = ftell(file);
++    ctx->offset = gr.tell();
+ 
+     // compute the total size of the data section, taking into account the alignment
+     {
+@@ -730,7 +823,27 @@ struct gguf_context * gguf_init_from_file_impl(FILE * file, struct gguf_init_par
+     return ctx;
+ }
+ 
++// Wrapper for FILE*-based reading
++struct gguf_context * gguf_init_from_file_impl(FILE * file, struct gguf_init_params params) {
++    const struct gguf_reader gr(file);
++    return gguf_init_from_reader_impl(gr, params);
++}
++
  struct gguf_context * gguf_init_from_file(const char * fname, struct gguf_init_params params) {
 +#ifdef COSMOCC
-+    // [llamafile] Use llamafile_open_gguf to handle all llamafile formats:
-+    // plain GGUF, /zip/ paths, foo.zip@weights.gguf, .llamafile containers
++    // [llamafile] Use llamafile API for all file types: plain GGUF, /zip/ paths,
++    // foo.zip@weights.gguf, .llamafile containers. The llamafile API handles both
++    // FILE*-backed and memory-mapped content transparently.
 +    struct llamafile * lfile = llamafile_open_gguf(fname, "rb");
 +    if (!lfile) {
 +        GGML_LOG_ERROR("%s: failed to open GGUF file '%s': %s\n", __func__, fname, strerror(errno));
 +        return nullptr;
 +    }
-+
-+    FILE * file = llamafile_fp(lfile);
-+    struct gguf_context * result;
-+    if (file) {
-+        // Regular file - use the FILE*
-+        result = gguf_init_from_file_impl(file, params);
-+    } else {
-+        // Pre-mapped content (zip asset) - create FILE* from memory using fmemopen
-+        void * content = llamafile_content(lfile);
-+        size_t size = llamafile_size(lfile);
-+        if (!content || size == 0) {
-+            GGML_LOG_ERROR("%s: invalid pre-mapped content for '%s' (content=%p, size=%zu)\n",
-+                          __func__, fname, content, size);
-+            llamafile_close(lfile);
-+            return nullptr;
-+        }
-+        file = fmemopen(content, size, "rb");
-+        if (!file) {
-+            GGML_LOG_ERROR("%s: fmemopen failed for '%s': %s\n", __func__, fname, strerror(errno));
-+            llamafile_close(lfile);
-+            return nullptr;
-+        }
-+        result = gguf_init_from_file_impl(file, params);
-+        // [llamafile] Don't fclose the fmemopen FILE* - it causes SIGBUS on Cosmopolitan Libc.
-+        // The underlying memory is owned by the llamafile and will be unmapped by llamafile_close().
-+    }
++    const struct gguf_llamafile_reader gr(lfile);
++    struct gguf_context * result = gguf_init_from_reader_impl(gr, params);
 +    llamafile_close(lfile);
 +    return result;
 +#else
      FILE * file = ggml_fopen(fname, "rb");
  
      if (!file) {
-@@ -741,6 +782,7 @@ struct gguf_context * gguf_init_from_file(const char * fname, struct gguf_init_p
+@@ -741,6 +854,7 @@ struct gguf_context * gguf_init_from_file(const char * fname, struct gguf_init_p
      struct gguf_context * result = gguf_init_from_file_impl(file, params);
      fclose(file);
      return result;
