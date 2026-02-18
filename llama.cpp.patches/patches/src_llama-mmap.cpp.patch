@@ -69,7 +69,7 @@ diff --git a/src/llama-mmap.cpp b/src/llama-mmap.cpp
 +                throw std::runtime_error(format("read error: %s", strerror(errno)));
 +            }
 +            if ((size_t)rc != len) {
-+                throw std::runtime_error("unexpectedly reached end of file");
++                throw std::runtime_error(format("short read: expected %zu bytes, got %ld", len, rc));
 +            }
 +            return;
 +        }
@@ -101,12 +101,14 @@ diff --git a/src/llama-mmap.cpp b/src/llama-mmap.cpp
  #endif
  
      void read_raw_at(void * ptr, size_t len, size_t offset) const {
-@@ -349,13 +399,19 @@ size_t llama_file::size() const { return pimpl->size; }
+@@ -349,13 +399,21 @@ size_t llama_file::size() const { return pimpl->size; }
  size_t llama_file::read_alignment() const { return pimpl->read_alignment(); }
  
  int llama_file::file_id() const {
 +#ifdef COSMOCC
-+    // [llamafile] For pre-mapped files, there's no fd
++    // [llamafile] For pre-mapped files (bundled /zip/ assets), there's no fd.
++    // Callers that need mmap should check has_premapped_content() first and use
++    // premapped_content() instead of calling file_id() + mmap().
 +    if (pimpl->lfile && !llamafile_fp(pimpl->lfile)) {
 +        return -1;
 +    }
@@ -123,7 +125,7 @@ diff --git a/src/llama-mmap.cpp b/src/llama-mmap.cpp
  #endif
  #endif
  }
-@@ -369,14 +425,59 @@ uint32_t llama_file::read_u32() const { return pimpl->read_u32(); }
+@@ -369,14 +427,64 @@ uint32_t llama_file::read_u32() const { return pimpl->read_u32(); }
  void llama_file::write_raw(const void * ptr, size_t len) const { pimpl->write_raw(ptr, len); }
  void llama_file::write_u32(uint32_t val) const { pimpl->write_u32(val); }
  
@@ -166,7 +168,12 @@ diff --git a/src/llama-mmap.cpp b/src/llama-mmap.cpp
      impl(struct llama_file * file, size_t prefetch, bool numa) {
          size = file->size();
 +
-+        // [llamafile] Check if file already has pre-mapped content (bundled zip assets)
++        // [llamafile] Check if file already has pre-mapped content (bundled zip assets).
++        // For /zip/ paths, the content is already memory-mapped by llamafile_open_zip().
++        // We use reference counting to keep the mapping alive: llamafile_ref() here and
++        // llamafile_unref() in the destructor. The llama_file also calls llamafile_close()
++        // (which internally calls llamafile_unref()) in its destructor. Either destruction
++        // order is safe: the memory is only freed when the last reference is released.
 +        if (file->has_premapped_content()) {
 +            addr = file->premapped_content();
 +            is_owned = false;
@@ -183,7 +190,7 @@ diff --git a/src/llama-mmap.cpp b/src/llama-mmap.cpp
          int fd = file->file_id();
          int flags = MAP_SHARED;
          if (numa) { prefetch = 0; }
-@@ -421,6 +522,11 @@ struct llama_mmap::impl {
+@@ -421,6 +529,11 @@ struct llama_mmap::impl {
      }
  
      void unmap_fragment(size_t first, size_t last) {
@@ -195,7 +202,7 @@ diff --git a/src/llama-mmap.cpp b/src/llama-mmap.cpp
          int page_size = sysconf(_SC_PAGESIZE);
          align_range(&first, &last, page_size);
          size_t len = last - first;
-@@ -457,6 +563,16 @@ struct llama_mmap::impl {
+@@ -457,6 +570,16 @@ struct llama_mmap::impl {
      }
  
      ~impl() {
