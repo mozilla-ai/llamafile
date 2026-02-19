@@ -10,7 +10,18 @@ In order for translation to work, you need to be using a multilingual
 model. On <https://huggingface.co/ggerganov/whisper.cpp/> the files that
 have `.en` in the name are English-only; you can't use those for
 translation. One model that does work well in translation mode is
-[`ggml-medium-q5_0.bin`](https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-medium-q5_0.bin?download=true).
+[`ggml-medium-q5_0.bin`](https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-medium-q5_0.bin?download=true), so for instance you could run:
+
+```
+# download ggml-medium model
+wget -O ggml-medium-q5_0.bin https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-medium-q5_0.bin
+
+# download the first chapter of Pinocchio
+wget https://archive.org/download/avventure_pinocchio_librivox/avventurepinocchio_01_collodi.ogg
+
+# read it, translated in English
+o//whisperfile/whisperfile -m ggml-medium-q5_0.bin -f avventurepinocchio_01_collodi.ogg -tr
+```
 
 ### Language Override
 
