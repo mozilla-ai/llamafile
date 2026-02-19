@@ -106,31 +106,18 @@ reset-repo: # Reset all submodules to their original state (removes patches or a
 	@echo "Reset complete. Run 'make setup' to reinitialize and apply patches."
 
 .PHONY: claude
-claude: # Set up Claude Code CLAUDE.md symlink and plugin symlinks
-	@echo "Setting up Claude Code..."
-	@for dir in skills commands; do \
-		if [ -e .llamafile_plugin/$$dir ] && [ ! -L .llamafile_plugin/$$dir ]; then \
-			echo "Error: .llamafile_plugin/$$dir exists and is not a symlink"; \
-			exit 1; \
-		fi; \
-		rm -f .llamafile_plugin/$$dir; \
-		ln -s ../docs/$$dir .llamafile_plugin/$$dir; \
-	done
+claude: # Set up CLAUDE.md symlink for Claude Code, show how to install the plugin
 	@if [ -e CLAUDE.md ] && [ ! -L CLAUDE.md ]; then \
 		echo "Error: CLAUDE.md exists and is not a symlink"; \
 		exit 1; \
 	fi
 	@rm -f CLAUDE.md
 	@ln -s docs/AGENTS.md CLAUDE.md
+	@echo "CLAUDE.md -> docs/AGENTS.md"
 	@echo ""
-	@echo "Claude Code configured:"
-	@echo "  CLAUDE.md -> docs/AGENTS.md"
-	@echo ""
-	@echo "To enable the llamafile plugin, run in Claude Code:"
+	@echo "To install the llamafile plugin, run in Claude Code:"
 	@echo "  /plugin marketplace add ./.llamafile_plugin"
 	@echo "  /plugin install llamafile"
-	@echo ""
-	@echo "Available after installation: /llamafile, /llamafile:build"
 
 ifeq ($(filter $(MAKECMDGOALS),setup reset-repo claude),)
 include build/deps.mk
