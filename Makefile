@@ -120,6 +120,9 @@ claude: # Set up Claude Code plugin and CLAUDE.md symlink
 	@if [ ! -f .claude/plugins/llamafile/.claude-plugin/plugin.json ]; then \
 		echo '{"name":"llamafile","version":"0.1.0","description":"Build guidance and commands for the llamafile project"}' > .claude/plugins/llamafile/.claude-plugin/plugin.json; \
 	fi
+	@if [ ! -f .claude/plugins/llamafile/.claude-plugin/marketplace.json ]; then \
+		echo '{"name":"llamafile-local","description":"Local llamafile plugin marketplace","owner":{"name":"Mozilla AI","email":"davide@mozilla.ai"},"plugins":[{"name":"llamafile","description":"Build guidance and commands for the llamafile project","version":"0.1.0","author":{"name":"Mozilla AI","email":"davide@mozilla.ai"},"source":"./"}]}' > .claude/plugins/llamafile/.claude-plugin/marketplace.json; \
+	fi
 	@if [ -e CLAUDE.md ] && [ ! -L CLAUDE.md ]; then \
 		echo "Error: CLAUDE.md exists and is not a symlink"; \
 		exit 1; \
