@@ -91,7 +91,7 @@ Submodules (llama.cpp, whisper.cpp, stable-diffusion.cpp) require a patch-based 
 
 NOTE: here we directly build and test dirty repos, but at some point we want to bring
 our changes into a commit. To do that, we need to generate patches from them: see
-`references/development.md` for detailed patch workflow.
+`development.md` for detailed patch workflow.
 
 ### Running Specific Tests
 
@@ -173,10 +173,10 @@ make -j8                      # Wrong - uses system make
 ### Reference Files
 
 For detailed information, consult:
-- **`references/building.md`** - Complete build system documentation, toolchain details
-- **`references/architecture.md`** - Repository structure, component overview
-- **`references/development.md`** - Development workflow, patch management, submodule integration
-- **`references/testing.md`** - Test patterns, running and writing tests
+- **`building.md`** - Complete build system documentation, toolchain details
+- **`architecture.md`** - Repository structure, component overview
+- **`development.md`** - Development workflow, patch management, submodule integration
+- **`testing.md`** - Test patterns, running and writing tests
 
 ### Project Documentation
 

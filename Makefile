@@ -9,7 +9,7 @@ MAKEFLAGS += --no-builtin-rules
 .FEATURES: output-sync
 
 # setup and reset-repo targets need to run before build/config.mk checks make version
-ifeq ($(filter $(MAKECMDGOALS),setup reset-repo),)
+ifeq ($(filter $(MAKECMDGOALS),setup reset-repo claude),)
 include build/config.mk
 include build/rules.mk
 
@@ -105,7 +105,21 @@ reset-repo: # Reset all submodules to their original state (removes patches or a
 	done
 	@echo "Reset complete. Run 'make setup' to reinitialize and apply patches."
 
-ifeq ($(filter $(MAKECMDGOALS),setup reset-repo),)
+.PHONY: claude
+claude: # Set up CLAUDE.md symlink for Claude Code, show how to install the plugin
+	@if [ -e CLAUDE.md ] && [ ! -L CLAUDE.md ]; then \
+		echo "Error: CLAUDE.md exists and is not a symlink"; \
+		exit 1; \
+	fi
+	@rm -f CLAUDE.md
+	@ln -s docs/AGENTS.md CLAUDE.md
+	@echo "CLAUDE.md -> docs/AGENTS.md"
+	@echo ""
+	@echo "To install the llamafile plugin, run in Claude Code:"
+	@echo "  /plugin marketplace add ./.llamafile_plugin"
+	@echo "  /plugin install llamafile"
+
+ifeq ($(filter $(MAKECMDGOALS),setup reset-repo claude),)
 include build/deps.mk
 include build/tags.mk
 endif

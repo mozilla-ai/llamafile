@@ -10,3 +10,6 @@
 /trace.json
 
 /*.log
+
+.claude
+CLAUDE.md
