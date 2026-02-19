@@ -9,8 +9,8 @@ FLAC, and OGG files are automatically converted to WAV format.
 Build and run the server with a model:
 
 ```
-.cosmocc/4.0.2/bin/make -j8 o//whisperfile/whisper-server
-o//whisperfile/whisper-server -m whisper-tiny.en-q5_1.bin
+.cosmocc/4.0.2/bin/make -j8 o//whisperfile
+o//whisperfile/whisper-server -m models/whisper-tiny.en-q5_1.bin
 ```
 
 The server accepts the following options:
