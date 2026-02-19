@@ -136,10 +136,10 @@ claude: # Set up Claude Code plugin and CLAUDE.md symlink
 	@echo "  .claude/plugins/llamafile/commands -> ../../../docs/commands"
 	@echo ""
 	@echo "To enable the plugin, run in Claude Code:"
-	@echo "  /plugin marketplace add ./.claude/plugins/"
+	@echo "  /plugin marketplace add ./.claude/plugins/llamafile"
 	@echo "  /plugin install llamafile"
 	@echo ""
-	@echo "Available after installation: /build, /llamafile"
+	@echo "Available after installation: /llamafile, /llamafile:build"
 
 ifeq ($(filter $(MAKECMDGOALS),setup reset-repo claude),)
 include build/deps.mk
