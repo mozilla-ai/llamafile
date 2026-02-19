@@ -9,7 +9,7 @@ MAKEFLAGS += --no-builtin-rules
 .FEATURES: output-sync
 
 # setup and reset-repo targets need to run before build/config.mk checks make version
-ifeq ($(filter $(MAKECMDGOALS),setup reset-repo),)
+ifeq ($(filter $(MAKECMDGOALS),setup reset-repo claude),)
 include build/config.mk
 include build/rules.mk
 
@@ -105,7 +105,36 @@ reset-repo: # Reset all submodules to their original state (removes patches or a
 	done
 	@echo "Reset complete. Run 'make setup' to reinitialize and apply patches."
 
-ifeq ($(filter $(MAKECMDGOALS),setup reset-repo),)
+.PHONY: claude
+claude: # Set up Claude Code plugin and CLAUDE.md symlink
+	@echo "Setting up Claude Code llamafile plugin..."
+	@mkdir -p .claude/plugins/llamafile
+	@for dir in skills commands; do \
+		if [ -e .claude/plugins/llamafile/$$dir ] && [ ! -L .claude/plugins/llamafile/$$dir ]; then \
+			echo "Error: .claude/plugins/llamafile/$$dir exists and is not a symlink"; \
+			exit 1; \
+		fi; \
+		rm -f .claude/plugins/llamafile/$$dir; \
+		ln -s ../../../docs/$$dir .claude/plugins/llamafile/$$dir; \
+	done
+	@if [ ! -f .claude/plugins/llamafile/plugin.json ]; then \
+		echo '{"name":"llamafile","version":"0.1.0","description":"Build guidance and commands for the llamafile project"}' > .claude/plugins/llamafile/plugin.json; \
+	fi
+	@if [ -e CLAUDE.md ] && [ ! -L CLAUDE.md ]; then \
+		echo "Error: CLAUDE.md exists and is not a symlink"; \
+		exit 1; \
+	fi
+	@rm -f CLAUDE.md
+	@ln -s docs/AGENTS.md CLAUDE.md
+	@echo "Claude Code configured:"
+	@echo "  CLAUDE.md -> docs/AGENTS.md"
+	@echo "  .claude/plugins/llamafile/skills -> ../../../docs/skills"
+	@echo "  .claude/plugins/llamafile/commands -> ../../../docs/commands"
+	@echo ""
+	@echo "The plugin is automatically available when running Claude Code in this directory."
+	@echo "Available commands: /build"
+
+ifeq ($(filter $(MAKECMDGOALS),setup reset-repo claude),)
 include build/deps.mk
 include build/tags.mk
 endif
