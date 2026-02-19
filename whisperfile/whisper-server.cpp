@@ -33,5 +33,8 @@ int main(int argc, char ** argv) {
         return 0;
     }
 
+    // Load default arguments from embedded .args file (for packaged whisperfiles)
+    argc = cosmo_args("/zip/.args", &argv);
+
     return whisper_server_main(argc, argv);
 }

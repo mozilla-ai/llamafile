@@ -30,7 +30,8 @@
 int whisper_cli_main(int argc, char ** argv);
 
 int main(int argc, char ** argv) {
-    // Enable crash reports for debugging
+    // CPU feature check and crash reports
+    llamafile_check_cpu();
     ShowCrashReports();
 
     // Handle --version before anything else
@@ -38,6 +39,9 @@ int main(int argc, char ** argv) {
         puts("whisperfile v" LLAMAFILE_VERSION_STRING);
         return 0;
     }
+
+    // Load default arguments from embedded .args file (for packaged whisperfiles)
+    argc = cosmo_args("/zip/.args", &argv);
 
     // Future: GPU initialization
     // When GPU support is added, uncomment:
