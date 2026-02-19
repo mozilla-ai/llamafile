@@ -55,7 +55,7 @@ static void *load_model(void *arg) {
 }
 
 int main(int argc, char *argv[]) {
-    FLAG_gpu = LLAMAFILE_GPU_DISABLE;
+    FLAG_gpu = LLAMAFILE_GPU_DISABLE;  // GPU support deferred to separate PR
     FLAG_log_disable = true;
     llamafile_check_cpu();
     ShowCrashReports();

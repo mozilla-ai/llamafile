@@ -203,9 +203,6 @@ int Transcriber::main(int argc, char *argv[]) {
     printf("[Start speaking]\n");
     fflush(stdout);
 
-    auto t_last  = std::chrono::high_resolution_clock::now();
-    const auto t_start = t_last;
-
     // main audio loop
     for (;;) {
         if (params.save_audio)
@@ -360,7 +357,7 @@ void Transcriber::inference() {
 }
 
 int main(int argc, char *argv[]) {
-    FLAG_gpu = LLAMAFILE_GPU_DISABLE;
+    FLAG_gpu = LLAMAFILE_GPU_DISABLE;  // GPU support deferred to separate PR
     llamafile_check_cpu();
     ShowCrashReports();
 
