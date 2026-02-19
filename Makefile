@@ -126,13 +126,14 @@ claude: # Set up Claude Code plugin and CLAUDE.md symlink
 	fi
 	@rm -f CLAUDE.md
 	@ln -s docs/AGENTS.md CLAUDE.md
+	@echo ""
 	@echo "Claude Code configured:"
 	@echo "  CLAUDE.md -> docs/AGENTS.md"
 	@echo "  .claude/plugins/llamafile/skills -> ../../../docs/skills"
 	@echo "  .claude/plugins/llamafile/commands -> ../../../docs/commands"
 	@echo ""
-	@echo "The plugin is automatically available when running Claude Code in this directory."
-	@echo "Available commands: /build"
+	@echo "To enable the plugin, run: tools/enable-claude-plugin.sh"
+	@echo "Available commands after enabling: /build"
 
 ifeq ($(filter $(MAKECMDGOALS),setup reset-repo claude),)
 include build/deps.mk
