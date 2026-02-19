@@ -108,7 +108,7 @@ reset-repo: # Reset all submodules to their original state (removes patches or a
 .PHONY: claude
 claude: # Set up Claude Code plugin and CLAUDE.md symlink
 	@echo "Setting up Claude Code llamafile plugin..."
-	@mkdir -p .claude/plugins/llamafile
+	@mkdir -p .claude/plugins/llamafile/.claude-plugin
 	@for dir in skills commands; do \
 		if [ -e .claude/plugins/llamafile/$$dir ] && [ ! -L .claude/plugins/llamafile/$$dir ]; then \
 			echo "Error: .claude/plugins/llamafile/$$dir exists and is not a symlink"; \
@@ -117,8 +117,8 @@ claude: # Set up Claude Code plugin and CLAUDE.md symlink
 		rm -f .claude/plugins/llamafile/$$dir; \
 		ln -s ../../../docs/$$dir .claude/plugins/llamafile/$$dir; \
 	done
-	@if [ ! -f .claude/plugins/llamafile/plugin.json ]; then \
-		echo '{"name":"llamafile","version":"0.1.0","description":"Build guidance and commands for the llamafile project"}' > .claude/plugins/llamafile/plugin.json; \
+	@if [ ! -f .claude/plugins/llamafile/.claude-plugin/plugin.json ]; then \
+		echo '{"name":"llamafile","version":"0.1.0","description":"Build guidance and commands for the llamafile project"}' > .claude/plugins/llamafile/.claude-plugin/plugin.json; \
 	fi
 	@if [ -e CLAUDE.md ] && [ ! -L CLAUDE.md ]; then \
 		echo "Error: CLAUDE.md exists and is not a symlink"; \
@@ -132,8 +132,11 @@ claude: # Set up Claude Code plugin and CLAUDE.md symlink
 	@echo "  .claude/plugins/llamafile/skills -> ../../../docs/skills"
 	@echo "  .claude/plugins/llamafile/commands -> ../../../docs/commands"
 	@echo ""
-	@echo "To enable the plugin, run: tools/enable-claude-plugin.sh"
-	@echo "Available commands after enabling: /build"
+	@echo "To enable the plugin, run in Claude Code:"
+	@echo "  /plugin marketplace add ./.claude/plugins/"
+	@echo "  /plugin install llamafile"
+	@echo ""
+	@echo "Available after installation: /build, /llamafile"
 
 ifeq ($(filter $(MAKECMDGOALS),setup reset-repo claude),)
 include build/deps.mk
