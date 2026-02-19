@@ -3,6 +3,23 @@
 This tutorial will explain how to turn speech from audio files into
 plain text, using the whisperfile software and OpenAI's whisper model.
 
+### (0) Setup the repo
+
+```
+git clone https://github.com/mozilla-ai/llamafile.git
+cd llamafile
+
+# checkout the current working branch
+git checkout new_build_wip
+
+# initialise all submodules - this step is required,
+# as the submodules need to be pulled and patched first!
+make setup
+
+# download cosmocc compiler
+build/download-cosmocc.sh .cosmocc/4.0.2 4.0.2 85b8c37a406d862e656ad4ec14be9f6ce474c1b436b9615e91a55208aced3f44
+```
+
 ### (1) Download Model
 
 First, you need to obtain the model weights. The tiny quantized weights
@@ -11,7 +28,7 @@ well. The transcribed output is readable, even though it may misspell or
 misunderstand some words.
 
 ```
-wget -O whisper-tiny.en-q5_1.bin https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-tiny.en-q5_1.bin
+wget -O models/whisper-tiny.en-q5_1.bin https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-tiny.en-q5_1.bin
 ```
 
 ### (2) Build Software
@@ -20,8 +37,7 @@ Now build the whisperfile software from source. You need to run `make setup`
 first to download the cosmocc toolchain, then use that make to build.
 
 ```
-make setup
-.cosmocc/4.0.2/bin/make -j8 o//whisperfile/whisperfile
+.cosmocc/4.0.2/bin/make -j8 o//whisperfile
 ```
 
 ### (3) Run Program
@@ -31,7 +47,7 @@ speech into text. Included in this repository is a .wav file holding a
 short clip of John F. Kennedy speaking. You can transcribe it using:
 
 ```
-o//whisperfile/whisperfile -m whisper-tiny.en-q5_1.bin -f whisper.cpp/jfk.wav --no-prints
+o//whisperfile/whisperfile -m models/whisper-tiny.en-q5_1.bin whisperfile/jfk.wav --no-prints
 ```
 
 The `--no-prints` is optional. It's helpful in avoiding a lot of verbose
@@ -49,10 +65,10 @@ For example, here's an audio recording of a famous poem in MP3 format:
 
 ```
 wget https://archive.org/download/raven/raven_poe_64kb.mp3
-o//whisperfile/whisperfile -m whisper-tiny.en-q5_1.bin -f raven_poe_64kb.mp3 -pc
+o//whisperfile/whisperfile -m models/whisper-tiny.en-q5_1.bin -f raven_poe_64kb.mp3 -pc
 ```
 
-Here we also passed the `-pc` flag to get color-coded terminal output
+Here we passed the `-pc` flag to get color-coded terminal output
 which communicates the confidence of transcription.
 
 ## Higher Quality Models
@@ -69,8 +85,8 @@ o//whisperfile/whisperfile -m ggml-medium.en.bin -f raven_poe_64kb.mp3 --no-prin
 Lastly, there's the large model, which is the best, but also slowest.
 
 ```
-wget -O whisper-large-v3.bin https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3.bin
-o//whisperfile/whisperfile -m whisper-large-v3.bin -f raven_poe_64kb.mp3 --no-prints
+wget -O models/whisper-large-v3.bin https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3.bin
+o//whisperfile/whisperfile -m models/whisper-large-v3.bin -f raven_poe_64kb.mp3 --no-prints
 ```
 
 ## Installation

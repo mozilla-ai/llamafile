@@ -16,15 +16,17 @@ isn't already installed on your system, then you can build it from
 source as follows:
 
 ```
-.cosmocc/4.0.2/bin/make -j8 o//llamafile/zipalign
+.cosmocc/4.0.2/bin/make -j8 o//third_party/zipalign
 ```
 
 Now you can either obtain a prebuilt `whisperfile` executable from our
 GitHub releases page, or build one from source yourself.
 
 ```
-.cosmocc/4.0.2/bin/make -j8 o//whisperfile/whisperfile
-cp o//whisperfile/whisperfile whisperfile
+.cosmocc/4.0.2/bin/make -j8 o//whisperfile
+
+# let us use a more specific name for our first whisperfile
+cp o//whisperfile/whisperfile whisper-tiny
 ```
 
 Next, choose your favorite weights. For the purposes of this tutorial,
@@ -42,18 +44,18 @@ the `-0` flag to disable PKZIP DEFLATE compression since it isn't
 profitable on weights files.
 
 ```
-o//llamafile/zipalign -0 whisperfile whisper-tiny.en-q5_1.bin
+o//third_party/zipalign/zipalign -0 whisper-tiny whisper-tiny.en-q5_1.bin
 ```
 
 Your weights are now embedded. You can list the embedded files using
-`unzip -vl whisperfile` to confirm that it's there. Once the asset is
+`unzip -vl whisper-tiny` to confirm that it's there. Once the asset is
 inside, Cosmopolitan Libc will make it available under the synthetic
 `/zip/...` root directory, via the standard I/O APIs. So if `unzip -vl`
 lists the asset as being named `whisper-tiny.en-q5_1.bin` then the
 executable may access it at the path `/zip/whisper-tiny.en-q5_1.bin`.
 
 ```
-./whisperfile -m /zip/whisper-tiny.en-q5_1.bin -f whisper.cpp/jfk.wav
+./whisper-tiny -m /zip/whisper-tiny.en-q5_1.bin -f whisperfile/jfk.wav
 ```
 
 It's now safe to delete the original weights file.
@@ -83,12 +85,12 @@ It's where any additional CLI-specified args will be filled-in later on.
 Now embed the `.args` file inside your whisperfile using `zipalign`.
 
 ```
-o//llamafile/zipalign whisperfile .args
+o//third_party/zipalign/zipalign whisper-tiny .args
 rm -f .args
 ```
 
 And congratulations, you now have a self-contained whisperfile!
 
 ```
-./whisperfile -f whisper.cpp/jfk.wav
+./whisper-tiny -f whisperfile/jfk.wav
 ```
