@@ -106,23 +106,16 @@ reset-repo: # Reset all submodules to their original state (removes patches or a
 	@echo "Reset complete. Run 'make setup' to reinitialize and apply patches."
 
 .PHONY: claude
-claude: # Set up Claude Code plugin and CLAUDE.md symlink
-	@echo "Setting up Claude Code llamafile plugin..."
-	@mkdir -p .claude/plugins/llamafile/.claude-plugin
+claude: # Set up Claude Code CLAUDE.md symlink and plugin symlinks
+	@echo "Setting up Claude Code..."
 	@for dir in skills commands; do \
-		if [ -e .claude/plugins/llamafile/$$dir ] && [ ! -L .claude/plugins/llamafile/$$dir ]; then \
-			echo "Error: .claude/plugins/llamafile/$$dir exists and is not a symlink"; \
+		if [ -e .llamafile_plugin/$$dir ] && [ ! -L .llamafile_plugin/$$dir ]; then \
+			echo "Error: .llamafile_plugin/$$dir exists and is not a symlink"; \
 			exit 1; \
 		fi; \
-		rm -f .claude/plugins/llamafile/$$dir; \
-		ln -s ../../../docs/$$dir .claude/plugins/llamafile/$$dir; \
+		rm -f .llamafile_plugin/$$dir; \
+		ln -s ../docs/$$dir .llamafile_plugin/$$dir; \
 	done
-	@if [ ! -f .claude/plugins/llamafile/.claude-plugin/plugin.json ]; then \
-		echo '{"name":"llamafile","version":"0.1.0","description":"Build guidance and commands for the llamafile project"}' > .claude/plugins/llamafile/.claude-plugin/plugin.json; \
-	fi
-	@if [ ! -f .claude/plugins/llamafile/.claude-plugin/marketplace.json ]; then \
-		echo '{"name":"llamafile-local","description":"Local llamafile plugin marketplace","owner":{"name":"Mozilla AI","email":"davide@mozilla.ai"},"plugins":[{"name":"llamafile","description":"Build guidance and commands for the llamafile project","version":"0.1.0","author":{"name":"Mozilla AI","email":"davide@mozilla.ai"},"source":"./"}]}' > .claude/plugins/llamafile/.claude-plugin/marketplace.json; \
-	fi
 	@if [ -e CLAUDE.md ] && [ ! -L CLAUDE.md ]; then \
 		echo "Error: CLAUDE.md exists and is not a symlink"; \
 		exit 1; \
@@ -132,11 +125,9 @@ claude: # Set up Claude Code plugin and CLAUDE.md symlink
 	@echo ""
 	@echo "Claude Code configured:"
 	@echo "  CLAUDE.md -> docs/AGENTS.md"
-	@echo "  .claude/plugins/llamafile/skills -> ../../../docs/skills"
-	@echo "  .claude/plugins/llamafile/commands -> ../../../docs/commands"
 	@echo ""
-	@echo "To enable the plugin, run in Claude Code:"
-	@echo "  /plugin marketplace add ./.claude/plugins/llamafile"
+	@echo "To enable the llamafile plugin, run in Claude Code:"
+	@echo "  /plugin marketplace add ./.llamafile_plugin"
 	@echo "  /plugin install llamafile"
 	@echo ""
 	@echo "Available after installation: /llamafile, /llamafile:build"

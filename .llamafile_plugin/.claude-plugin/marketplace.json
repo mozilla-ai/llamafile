@@ -1,0 +1,20 @@
+{
+  "name": "llamafile-local",
+  "description": "Local llamafile plugin marketplace",
+  "owner": {
+    "name": "Mozilla AI",
+    "email": "davide@mozilla.ai"
+  },
+  "plugins": [
+    {
+      "name": "llamafile",
+      "description": "Build guidance and commands for the llamafile project",
+      "version": "0.1.0",
+      "author": {
+        "name": "Mozilla AI",
+        "email": "davide@mozilla.ai"
+      },
+      "source": "./"
+    }
+  ]
+}
