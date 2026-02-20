@@ -1,7 +1,7 @@
 ---
 name: llamafile
-description: This skill should be used when the user asks to "build llamafile", "rebuild llamafile", "run llamafile tests", "set up llamafile", "update patches", "modify llama.cpp", "how does llamafile work", "llamafile architecture", or needs guidance on the llamafile build system, patch workflow, submodule integration, or development practices.
-version: 0.1.0
+description: This skill should be used when the user asks to "build llamafile", "rebuild llamafile", "run llamafile tests", "set up llamafile", "update patches", "update llama.cpp", "upstream llama.cpp", "how does llamafile work", "llamafile architecture", or needs guidance on the llamafile build system, patch workflow, submodule integration, or development practices.
+version: 0.1.1
 ---
 
 # Llamafile Development Guide
@@ -176,6 +176,7 @@ For detailed information, consult:
 - **`architecture.md`** - Repository structure, component overview
 - **`development.md`** - Development workflow, patch management, submodule integration
 - **`testing.md`** - Test patterns, running and writing tests
+- **`update_llamacpp.md`** - Keeping llamafile updated with upstream llama.cpp
 
 ### Project Documentation
 
