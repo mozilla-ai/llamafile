@@ -9,7 +9,7 @@
     {
       "name": "llamafile",
       "description": "Build guidance and commands for the llamafile project",
-      "version": "0.1.0",
+      "version": "0.1.1",
       "author": {
         "name": "Mozilla AI",
         "email": "davide@mozilla.ai"
