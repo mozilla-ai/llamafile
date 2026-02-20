@@ -1,7 +1,7 @@
 diff --git a/ggml/src/ggml-metal/ggml-metal.cpp b/ggml/src/ggml-metal/ggml-metal.cpp
 --- a/llama.cpp/ggml/src/ggml-metal/ggml-metal.cpp
 +++ b/llama.cpp/ggml/src/ggml-metal/ggml-metal.cpp
-@@ -79,6 +79,14 @@ static void ggml_backend_metal_buffer_shared_clear(ggml_backend_buffer_t buffer,
+@@ -83,6 +83,14 @@ static void ggml_backend_metal_buffer_shared_clear(ggml_backend_buffer_t buffer,
      ggml_metal_buffer_clear(ctx, value);
  }
  
@@ -16,7 +16,7 @@ diff --git a/ggml/src/ggml-metal/ggml-metal.cpp b/ggml/src/ggml-metal/ggml-metal
  static ggml_backend_buffer_i ggml_backend_metal_buffer_shared_i = {
      /* .free_buffer     = */ ggml_backend_metal_buffer_shared_free_buffer,
      /* .get_base        = */ ggml_backend_metal_buffer_shared_get_base,
-@@ -89,6 +97,7 @@ static ggml_backend_buffer_i ggml_backend_metal_buffer_shared_i = {
+@@ -93,6 +101,7 @@ static ggml_backend_buffer_i ggml_backend_metal_buffer_shared_i = {
      /* .cpy_tensor      = */ ggml_backend_metal_buffer_shared_cpy_tensor,
      /* .clear           = */ ggml_backend_metal_buffer_shared_clear,
      /* .reset           = */ NULL,
@@ -24,11 +24,11 @@ diff --git a/ggml/src/ggml-metal/ggml-metal.cpp b/ggml/src/ggml-metal/ggml-metal
  };
  
  // private buffer
-@@ -163,6 +172,7 @@ static ggml_backend_buffer_i ggml_backend_metal_buffer_private_i = {
+@@ -167,6 +176,7 @@ static ggml_backend_buffer_i ggml_backend_metal_buffer_private_i = {
      /* .cpy_tensor      = */ ggml_backend_metal_buffer_private_cpy_tensor,
      /* .clear           = */ ggml_backend_metal_buffer_private_clear,
      /* .reset           = */ NULL,
 +    /* .free_struct     = */ ggml_backend_metal_buffer_free_struct,
  };
  
- //
+ static bool ggml_backend_buffer_is_metal(ggml_backend_buffer_t buffer) {

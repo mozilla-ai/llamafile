@@ -69,7 +69,7 @@ extern std::vector<int> g_history;
 extern volatile sig_atomic_t g_got_sigint;
 extern bool g_interrupted_exit;
 extern common_chat_templates_ptr g_chat_templates;
-extern common_chat_syntax g_chat_syntax;
+extern common_chat_parser_params g_chat_syntax;
 
 int main(int, char **);
 

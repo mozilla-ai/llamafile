@@ -3,7 +3,7 @@
 
 PKGS += TESTS
 
-include tests/minja/BUILD.mk
+# Note: tests/minja/BUILD.mk removed - minja was replaced with built-in jinja
 include tests/sgemm/BUILD.mk
 
 # ==============================================================================
@@ -30,7 +30,8 @@ EXTRACT_DATA_URIS_TEST_DEPS := \
 	o/$(MODE)/llamafile/image.o \
 	o/$(MODE)/llamafile/string.o \
 	o/$(MODE)/llamafile/xterm.o \
-	o/$(MODE)/third_party/stb/stb.a
+	o/$(MODE)/third_party/stb/stb.a \
+	o/$(MODE)/o/$(MODE)/llama.cpp/common/build-info.cpp.o
 
 o/$(MODE)/tests/extract_data_uris_test.o: tests/extract_data_uris_test.cpp
 	@mkdir -p $(@D)
@@ -48,5 +49,4 @@ o/$(MODE)/tests/extract_data_uris_test: \
 
 .PHONY: o/$(MODE)/tests
 o/$(MODE)/tests: \
-	o/$(MODE)/tests/extract_data_uris_test.runs \
-	o/$(MODE)/tests/minja/minja_integration_test.runs
+	o/$(MODE)/tests/extract_data_uris_test.runs

@@ -1,0 +1,11 @@
+diff --git a/common/ngram-mod.cpp b/common/ngram-mod.cpp
+--- a/llama.cpp/common/ngram-mod.cpp
++++ b/llama.cpp/common/ngram-mod.cpp
+@@ -1,5 +1,7 @@
+ #include "ngram-mod.h"
+ 
++#include <algorithm>
++
+ //
+ // common_ngram_mod
+ //

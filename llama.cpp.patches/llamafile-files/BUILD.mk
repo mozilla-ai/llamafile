@@ -23,6 +23,7 @@ GGML_SRCS_C := \
 	llama.cpp/ggml/src/ggml-cpu/quants.c
 
 GGML_SRCS_CPP := \
+	llama.cpp/ggml/src/ggml-backend-dl.cpp \
 	llama.cpp/ggml/src/ggml-backend-reg.cpp \
 	llama.cpp/ggml/src/ggml-backend.cpp \
 	llama.cpp/ggml/src/ggml-opt.cpp \
@@ -71,12 +72,14 @@ LLAMA_SRCS_CPP := \
 	llama.cpp/src/models/deci.cpp \
 	llama.cpp/src/models/deepseek.cpp \
 	llama.cpp/src/models/deepseek2.cpp \
+	llama.cpp/src/models/delta-net-base.cpp \
 	llama.cpp/src/models/dots1.cpp \
 	llama.cpp/src/models/dream.cpp \
 	llama.cpp/src/models/ernie4-5-moe.cpp \
 	llama.cpp/src/models/ernie4-5.cpp \
 	llama.cpp/src/models/exaone.cpp \
 	llama.cpp/src/models/exaone4.cpp \
+	llama.cpp/src/models/exaone-moe.cpp \
 	llama.cpp/src/models/falcon-h1.cpp \
 	llama.cpp/src/models/falcon.cpp \
 	llama.cpp/src/models/gemma-embedding.cpp \
@@ -90,14 +93,16 @@ LLAMA_SRCS_CPP := \
 	llama.cpp/src/models/gptneox.cpp \
 	llama.cpp/src/models/granite-hybrid.cpp \
 	llama.cpp/src/models/granite.cpp \
-	llama.cpp/src/models/graph-context-mamba.cpp \
+	llama.cpp/src/models/mamba-base.cpp \
 	llama.cpp/src/models/grok.cpp \
 	llama.cpp/src/models/grovemoe.cpp \
 	llama.cpp/src/models/hunyuan-dense.cpp \
 	llama.cpp/src/models/hunyuan-moe.cpp \
 	llama.cpp/src/models/internlm2.cpp \
 	llama.cpp/src/models/jais.cpp \
+	llama.cpp/src/models/jais2.cpp \
 	llama.cpp/src/models/jamba.cpp \
+	llama.cpp/src/models/kimi-linear.cpp \
 	llama.cpp/src/models/lfm2.cpp \
 	llama.cpp/src/models/llada-moe.cpp \
 	llama.cpp/src/models/llada.cpp \
@@ -120,6 +125,7 @@ LLAMA_SRCS_CPP := \
 	llama.cpp/src/models/openai-moe-iswa.cpp \
 	llama.cpp/src/models/openelm.cpp \
 	llama.cpp/src/models/orion.cpp \
+	llama.cpp/src/models/paddleocr.cpp \
 	llama.cpp/src/models/pangu-embedded.cpp \
 	llama.cpp/src/models/phi2.cpp \
 	llama.cpp/src/models/phi3.cpp \
@@ -134,6 +140,8 @@ LLAMA_SRCS_CPP := \
 	llama.cpp/src/models/qwen3.cpp \
 	llama.cpp/src/models/qwen3moe.cpp \
 	llama.cpp/src/models/qwen3next.cpp \
+	llama.cpp/src/models/qwen35.cpp \
+	llama.cpp/src/models/qwen35moe.cpp \
 	llama.cpp/src/models/qwen3vl-moe.cpp \
 	llama.cpp/src/models/qwen3vl.cpp \
 	llama.cpp/src/models/refact.cpp \
@@ -148,6 +156,7 @@ LLAMA_SRCS_CPP := \
 	llama.cpp/src/models/smollm3.cpp \
 	llama.cpp/src/models/stablelm.cpp \
 	llama.cpp/src/models/starcoder.cpp \
+	llama.cpp/src/models/step35-iswa.cpp \
 	llama.cpp/src/models/starcoder2.cpp \
 	llama.cpp/src/models/t5-dec.cpp \
 	llama.cpp/src/models/t5-enc.cpp \
@@ -167,6 +176,7 @@ LLAMA_SRCS_CPP := \
 	llama.cpp/src/llama-kv-cache-iswa.cpp \
 	llama.cpp/src/llama-kv-cache.cpp \
 	llama.cpp/src/llama-memory-hybrid.cpp \
+	llama.cpp/src/llama-memory-hybrid-iswa.cpp \
 	llama.cpp/src/llama-memory-recurrent.cpp \
 	llama.cpp/src/llama-memory.cpp \
 	llama.cpp/src/llama-mmap.cpp \
@@ -174,7 +184,7 @@ LLAMA_SRCS_CPP := \
 	llama.cpp/src/llama-model-saver.cpp \
 	llama.cpp/src/llama-model.cpp \
 	llama.cpp/src/llama-quant.cpp \
-	llama.cpp/src/llama-sampling.cpp \
+	llama.cpp/src/llama-sampler.cpp \
 	llama.cpp/src/llama-vocab.cpp \
 	llama.cpp/src/unicode-data.cpp \
 	llama.cpp/src/unicode.cpp
@@ -193,12 +203,22 @@ COMMON_SRCS_CPP := \
 	llama.cpp/common/chat.cpp \
 	llama.cpp/common/common.cpp \
 	llama.cpp/common/console.cpp \
+	llama.cpp/common/debug.cpp \
 	llama.cpp/common/download.cpp \
+	llama.cpp/common/jinja/caps.cpp \
+	llama.cpp/common/jinja/lexer.cpp \
+	llama.cpp/common/jinja/parser.cpp \
+	llama.cpp/common/jinja/runtime.cpp \
+	llama.cpp/common/jinja/string.cpp \
+	llama.cpp/common/jinja/value.cpp \
 	llama.cpp/common/json-partial.cpp \
 	llama.cpp/common/json-schema-to-grammar.cpp \
+	llama.cpp/common/license.cpp \
 	llama.cpp/common/llguidance.cpp \
 	llama.cpp/common/log.cpp \
 	llama.cpp/common/ngram-cache.cpp \
+	llama.cpp/common/ngram-map.cpp \
+	llama.cpp/common/ngram-mod.cpp \
 	llama.cpp/common/peg-parser.cpp \
 	llama.cpp/common/preset.cpp \
 	llama.cpp/common/regex-partial.cpp \
@@ -256,10 +276,14 @@ MTMD_SRCS_CPP := \
 	llama.cpp/tools/mtmd/models/conformer.cpp \
 	llama.cpp/tools/mtmd/models/glm4v.cpp \
 	llama.cpp/tools/mtmd/models/internvl.cpp \
+	llama.cpp/tools/mtmd/models/kimik25.cpp \
 	llama.cpp/tools/mtmd/models/kimivl.cpp \
 	llama.cpp/tools/mtmd/models/llama4.cpp \
 	llama.cpp/tools/mtmd/models/llava.cpp \
 	llama.cpp/tools/mtmd/models/minicpmv.cpp \
+	llama.cpp/tools/mtmd/models/mobilenetv5.cpp \
+	llama.cpp/tools/mtmd/models/nemotron-v2-vl.cpp \
+	llama.cpp/tools/mtmd/models/paddleocr.cpp \
 	llama.cpp/tools/mtmd/models/pixtral.cpp \
 	llama.cpp/tools/mtmd/models/qwen2vl.cpp \
 	llama.cpp/tools/mtmd/models/qwen3vl.cpp \
