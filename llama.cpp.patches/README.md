@@ -108,7 +108,7 @@ Once they are ready to be committed, you can update all files in the `llama.cpp.
 
 ```sh
 cd llama.cpp
-../tools/generate-patches --output-dir ../llama.cpp.patches
+../tools/generate-patches.sh --output-dir ../llama.cpp.patches
 ```
 
 Patch filenames will automatically reflect the file path with underscores replacing slashes (e.g., `common_arg.cpp.patch` for `common/arg.cpp`).
