@@ -11,7 +11,9 @@ llama.cpp.patches/
 ├── renames.sh             # Script for file renames/moves (if any)
 ├── llamafile-files/       # Additional files to copy into llama.cpp
 │   ├── BUILD.mk           # Makefile for building llama.cpp with cosmocc
-│   └── README.llamafile   # License and modification notes
+│   ├── README.llamafile   # License and modification notes
+│   └── common/
+│       └── license.cpp    # Generated license file (cmake creates this at build time)
 └── patches/               # Patch files for upstream sources
 ```
 
@@ -40,6 +42,7 @@ These patches address compatibility issues when building with Cosmopolitan libc 
 | `common_arg.cpp.patch` | Adds `COSMOCC` platform detection for `PATH_MAX` (includes `linux/limits.h`) |
 | `common_common.cpp.patch` | Adds platform-aware cache directory detection for Cosmopolitan (checks `LOCALAPPDATA`, `XDG_CACHE_HOME`, falls back to `~/.cache/`) |
 | `common_download.cpp.patch` | Adds `COSMOCC` platform detection for `PATH_MAX` |
+| `common_ngram-mod.cpp.patch` | Adds missing `#include <algorithm>` for `std::fill` |
 
 ### Threading and Signal Handling
 
@@ -49,7 +52,7 @@ Cosmopolitan libc has specific behaviors with condition variables and signals th
 |-------|-------------|
 | `common_log.cpp.patch` | Blocks `SIGINT`/`SIGTERM` on logger thread to prevent `EINTR` exceptions; uses `wait_for()` instead of `wait()` to work around XNU futex timeout bug (~72 minute expiry) |
 | `tools_server_server-queue.cpp.patch` | Same threading fixes for server queue: signal masking and `wait_for()` timeouts |
-| `vendor_cpp-httplib_httplib.h.patch` | Fixes httplib thread pool with `wait_for()` instead of `wait()` for XNU futex compatibility |
+| `vendor_cpp-httplib_httplib.cpp.patch` | Fixes httplib thread pool with `wait_for()` instead of `wait()` for XNU futex compatibility |
 
 ### Cross-Module Memory Management
 
@@ -93,7 +96,6 @@ These patches integrate llamafile's file handling APIs for loading models from b
 | Patch | Description |
 |-------|-------------|
 | `vendor_miniaudio_miniaudio.h.patch` | Removes `__COSMOPOLITAN__` from Windows platform detection (Cosmopolitan handles this at runtime) |
-| `vendor_minja_minja.hpp.patch` | Replaces regex-based Jinja comment parsing with manual parsing to prevent stack overflow on large templates |
 
 ### Miscellaneous
 
