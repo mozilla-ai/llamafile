@@ -692,7 +692,7 @@ void llamafile_log_callback_null(int level, const char *text, void *user_data) {
 // llamafile_has_cuda() and llamafile_has_amd_gpu() are defined in cuda.c
 
 bool llamafile_has_gpu(void) {
-    return llamafile_has_metal() || llamafile_has_cuda() || llamafile_has_amd_gpu();
+    return llamafile_has_metal() || llamafile_has_cuda() || llamafile_has_amd_gpu() || llamafile_has_vulkan();
 }
 
 const char *llamafile_describe_gpu(void) {
@@ -705,6 +705,8 @@ const char *llamafile_describe_gpu(void) {
         return "apple";
     case LLAMAFILE_GPU_NVIDIA:
         return "nvidia";
+    case LLAMAFILE_GPU_VULKAN:
+        return "vulkan";
     case LLAMAFILE_GPU_DISABLE:
         return "disabled";
     default:
@@ -723,6 +725,8 @@ int llamafile_gpu_parse(const char *s) {
         return LLAMAFILE_GPU_APPLE;
     if (!strcasecmp(s, "nvidia") || !strcasecmp(s, "cublas"))
         return LLAMAFILE_GPU_NVIDIA;
+    if (!strcasecmp(s, "vulkan") || !strcasecmp(s, "vk"))
+        return LLAMAFILE_GPU_VULKAN;
     return LLAMAFILE_GPU_ERROR;
 }
 

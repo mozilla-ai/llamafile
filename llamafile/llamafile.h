@@ -124,11 +124,13 @@ int llamafile_is_file_newer_than(const char *, const char *);
 #define LLAMAFILE_GPU_AMD 1
 #define LLAMAFILE_GPU_APPLE 2
 #define LLAMAFILE_GPU_NVIDIA 4
+#define LLAMAFILE_GPU_VULKAN 8
 
 bool llamafile_has_gpu(void);             // Defined in llamafile.c
 bool llamafile_has_metal(void);           // Defined in metal.c (dynamic loader)
 bool llamafile_has_cuda(void);            // Defined in cuda.c (dynamic loader)
 bool llamafile_has_amd_gpu(void);         // Defined in cuda.c (dynamic loader)
+bool llamafile_has_vulkan(void);          // Defined in vulkan.c (dynamic loader)
 int llamafile_gpu_parse(const char *);    // Defined in llamafile.c
 const char *llamafile_describe_gpu(void); // Defined in llamafile.c
 void llamafile_early_gpu_init(char **);   // Defined in llamafile.c
@@ -146,6 +148,10 @@ void llamafile_metal_log_set(llamafile_log_callback log_callback, void *user_dat
 // Set logging callback for CUDA/ROCm dylib (defined in cuda.c)
 // Pass a no-op callback to disable logging
 void llamafile_cuda_log_set(llamafile_log_callback log_callback, void *user_data);
+
+// Set logging callback for Vulkan dylib (defined in vulkan.c)
+// Pass a no-op callback to disable logging
+void llamafile_vulkan_log_set(llamafile_log_callback log_callback, void *user_data);
 
 #ifdef __cplusplus
 }
