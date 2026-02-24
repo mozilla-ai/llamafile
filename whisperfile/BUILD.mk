@@ -14,10 +14,18 @@
 PKGS += WHISPERFILE
 
 # ==============================================================================
+# Package Sources (NOT using deps.mk SRCS/HDRS mechanism)
+# ==============================================================================
+# Note: We don't define WHISPERFILE_SRCS or WHISPERFILE_HDRS because:
+# 1. Our sources include whisper.cpp headers with relative paths
+# 2. mkdeps can't resolve these relative paths against full-path HDRS entries
+# This matches the pattern used by whisper.cpp/BUILD.mk
+
+# ==============================================================================
 # Source files
 # ==============================================================================
 
-WHISPERFILE_SRCS := \
+WHISPERFILE_CLI_SRCS := \
 	whisperfile/whisperfile.cpp \
 	whisperfile/slurp.cpp \
 	whisperfile/color.cpp
@@ -42,7 +50,7 @@ WHISPERFILE_SERVER_SRCS := \
 # Object files
 # ==============================================================================
 
-WHISPERFILE_OBJS := $(WHISPERFILE_SRCS:%.cpp=o/$(MODE)/%.o)
+WHISPERFILE_OBJS := $(WHISPERFILE_CLI_SRCS:%.cpp=o/$(MODE)/%.o)
 WHISPERFILE_STREAM_OBJS := $(WHISPERFILE_STREAM_SRCS:%.cpp=o/$(MODE)/%.o)
 WHISPERFILE_MIC2TXT_OBJS := $(WHISPERFILE_MIC2TXT_SRCS:%.cpp=o/$(MODE)/%.o)
 WHISPERFILE_MIC2RAW_OBJS := $(WHISPERFILE_MIC2RAW_SRCS:%.cpp=o/$(MODE)/%.o)
@@ -51,8 +59,10 @@ WHISPERFILE_SERVER_OBJS := $(WHISPERFILE_SERVER_SRCS:%.cpp=o/$(MODE)/%.o)
 # ==============================================================================
 # Include paths
 # ==============================================================================
+# Note: Using WHISPERFILE_INCLUDES (not _INCS) to avoid being collected by
+# deps.mk which expects _INCS to be a list of .inc files, not compiler flags.
 
-WHISPERFILE_INCS := \
+WHISPERFILE_INCLUDES := \
 	-iquote . \
 	-iquote whisperfile \
 	-iquote whisper.cpp/include \
@@ -65,7 +75,7 @@ WHISPERFILE_INCS := \
 # ==============================================================================
 
 WHISPERFILE_CPPFLAGS := \
-	$(WHISPERFILE_INCS) \
+	$(WHISPERFILE_INCLUDES) \
 	-DLLAMAFILE_VERSION_STRING=\"$(LLAMAFILE_VERSION_STRING)\"
 
 # ==============================================================================
