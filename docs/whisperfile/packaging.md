@@ -56,6 +56,8 @@ directory, so a file named `ggml-tiny.en-q5_1.bin` is accessible at
 ./whisper-tiny -m /zip/ggml-tiny.en-q5_1.bin -f whisper.cpp/samples/jfk.wav
 ```
 
+(`jfk.wav` is a sample audio clip included in the repository.)
+
 It's now safe to delete the original weights file:
 
 ```bash

@@ -1,12 +1,36 @@
 # Using Whisperfile with GPUs
 
-Pass the `--gpu auto` flag to use GPU mode. This can be particularly
-helpful in speeding up the medium and large models.
+GPU acceleration is most beneficial for the medium and large models. The
+tiny model is already fast on CPU, so the speedup there is minimal.
 
-You can also specify a specific GPU backend:
+Pass `--gpu auto` to let whisperfile detect and use the best available GPU
+on your system. If no supported GPU is found, it falls back to CPU silently:
 
-- `--gpu apple` - Use Apple Metal (macOS)
-- `--gpu amd` - Use AMD ROCm
-- `--gpu nvidia` - Use NVIDIA CUDA
+```bash
+whisperfile -m models/ggml-medium.en.bin -f audio.wav --gpu auto
+```
 
-To disable GPU acceleration entirely, use `--no-gpu` or `--gpu disable`.
+You can also target a specific backend:
+
+- `--gpu apple` — Apple Metal (macOS, works on Apple Silicon and AMD GPUs)
+- `--gpu nvidia` — NVIDIA CUDA (requires CUDA Toolkit to be installed)
+- `--gpu amd` — AMD ROCm (requires ROCm to be installed on Linux)
+
+To disable GPU acceleration entirely:
+
+```bash
+whisperfile -m models/ggml-medium.en.bin -f audio.wav --no-gpu
+```
+
+## Troubleshooting
+
+**`ggml_backend_load_best: search path does not exist` warnings**
+
+These are benign. They appear when whisperfile searches for GPU backend
+libraries and doesn't find them — usually because no GPU is present or
+configured. Transcription will continue on CPU. To suppress them, redirect
+stderr:
+
+```bash
+whisperfile -m models/ggml-medium.en.bin -f audio.wav 2>/dev/null
+```

@@ -8,14 +8,14 @@ FLAC, and OGG files are automatically converted to WAV format.
 
 Build and run the server with a model:
 
-```
+```bash
 .cosmocc/4.0.2/bin/make -j8 o//whisperfile
 o//whisperfile/whisper-server -m models/whisper-tiny.en-q5_1.bin
 ```
 
 The server accepts the following options:
 
-```
+```text
 whisper-server options:
   -m FNAME, --model FNAME     Path of Whisper model weights
   --host ADDR                 Hostname or IP address to bind to (default: 127.0.0.1)
@@ -40,6 +40,22 @@ Run `whisper-server --help` for the complete list of options.
 Returns server health status as JSON. Returns HTTP 503 if the model
 is still loading.
 
+```bash
+curl http://localhost:8080/health
+```
+
+Response when ready (HTTP 200):
+
+```json
+{"status": "ok"}
+```
+
+Response while model is loading (HTTP 503):
+
+```json
+{"status": "loading model"}
+```
+
 ### POST /inference
 
 Transcribe an audio file. Send as multipart/form-data with the audio
@@ -55,17 +71,29 @@ Optional form fields:
 
 Example:
 
-```
+```bash
 curl http://localhost:8080/inference \
-  -F "file=@audio.wav" \
+  -F "file=@whisper.cpp/samples/jfk.wav" \
   -F "response_format=json"
+```
+
+Response (HTTP 200):
+
+```json
+{"text": " And so my fellow Americans, ask not what your country can do for you, ask what you can do for your country."}
 ```
 
 ### POST /load
 
 Load a different model at runtime.
 
-```
+```bash
 curl http://localhost:8080/load \
   -F "model=/path/to/model.bin"
+```
+
+Response (HTTP 200):
+
+```text
+Load was successful!
 ```
