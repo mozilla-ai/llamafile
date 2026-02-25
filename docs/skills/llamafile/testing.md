@@ -82,8 +82,7 @@ Tests in llamafile use the `.runs` suffix convention:
 # In tests/BUILD.mk
 .PHONY: o/$(MODE)/tests
 o/$(MODE)/tests: \
-    o/$(MODE)/tests/extract_data_uris_test.runs \
-    o/$(MODE)/tests/minja/minja_integration_test.runs
+    o/$(MODE)/tests/extract_data_uris_test.runs 
 ```
 
 The `.runs` file is a timestamp marker indicating the test passed. The build system:
@@ -125,8 +124,6 @@ Currently in the `new_build_wip` branch, these tests are saved in:
 
 ```
 tests/
-└── minja
-     └── *_test.c     # Jinja template parsing tests
 └── sgemm
      └── *_test.c     # Optimized CPU kernels tests
 ...
@@ -188,10 +185,10 @@ the `tests/BUILD.mk` file, thus they need to be manually compiled and run.
 
 ```sh
 # Build the test
-.cosmocc/4.0.2/bin/make o//tests/minja/minja_integration_test
+.cosmocc/4.0.2/bin/make o//tests/extract_data_uris_test
 
 # Run directly
-.o/tests/minja/minja_integration_test
+./o/tests/extract_data_uris_test
 ```
 
 ### Debug Build
