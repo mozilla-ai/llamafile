@@ -26,7 +26,7 @@ it is the smallest and fastest to get started with and works reasonably well. Th
 
 
 ```bash
-wget -O models/whisper-tiny.en-q5_1.bin https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-tiny.en-q5_1.bin
+curl -L -o models/whisper-tiny.en-q5_1.bin https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-tiny.en-q5_1.bin
 ```
 
 ## (2) Build Software
@@ -55,7 +55,7 @@ FLAC, and Ogg Vorbis formats are supported across platforms.
 For example, here's an audio recording of a famous poem in MP3 format:
 
 ```bash
-wget https://archive.org/download/raven/raven_poe_64kb.mp3
+curl -LO https://archive.org/download/raven/raven_poe_64kb.mp3
 o//whisperfile/whisperfile -m models/whisper-tiny.en-q5_1.bin -f raven_poe_64kb.mp3 -pc
 ```
 
@@ -68,14 +68,14 @@ The tiny model may get some words wrong. For example, it might think
 enables whisperfile to decode The Raven perfectly. However it's slower.
 
 ```bash
-wget https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-medium.en.bin
+curl -LO https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-medium.en.bin
 o//whisperfile/whisperfile -m ggml-medium.en.bin -f raven_poe_64kb.mp3 --no-prints
 ```
 
 Lastly, there's the large model, which is the best, but also slowest.
 
-```
-wget -O models/whisper-large-v3.bin https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3.bin
+```bash
+curl -L -o models/whisper-large-v3.bin https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3.bin
 o//whisperfile/whisperfile -m models/whisper-large-v3.bin -f raven_poe_64kb.mp3 --no-prints
 ```
 

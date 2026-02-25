@@ -5,7 +5,7 @@ Mozilla.ai recently adopted the llamafile project, and we're planning an approac
 [Read more via the blog](https://blog.mozilla.ai/llamafile-returns/) and add your voice to the discussion [here](https://github.com/mozilla-ai/llamafile/discussions/809).
 
 
-[![ci status](https://github.com/Mozilla-Ocho/llamafile/actions/workflows/ci.yml/badge.svg)](https://github.com/Mozilla-Ocho/llamafile/actions/workflows/ci.yml)<br/>
+[![ci status](https://github.com/mozilla-ai/llamafile/actions/workflows/ci.yml/badge.svg)](https://github.com/mozilla-ai/llamafile/actions/workflows/ci.yml)<br/>
 [![](https://dcbadge.vercel.app/api/server/YuMNeuKStr)](https://discord.gg/YuMNeuKStr)<br/><br/>
 
 <img src="images/llamafile-640x640.png" width="320" height="320"
@@ -18,7 +18,9 @@ accessible to both developers and end users. We're doing that by
 combining [llama.cpp](https://github.com/ggerganov/llama.cpp) with [Cosmopolitan Libc](https://github.com/jart/cosmopolitan) into one
 framework that collapses all the complexity of LLMs down to
 a single-file executable (called a "llamafile") that runs
-locally on most computers, with no installation.<br/><br/>
+locally on most computers, with no installation.
+
+llamafile also includes **[whisperfile](whisperfile/index.md)**, a single-file speech-to-text tool built on [whisper.cpp](https://github.com/ggerganov/whisper.cpp) and the same Cosmopolitan packaging. It supports transcription and translation of audio files across all the same platforms, with no installation required.<br/><br/>
 
 <a href="https://builders.mozilla.org/"><img src="images/mozilla-logo-bw-rgb.png" width="150"></a><br/>
 llamafile is a <a href="https://builders.mozilla.org/">Mozilla Builders</a> project.<br/><br/>
@@ -76,4 +78,4 @@ should that be desired.
 The llamafile logo on this page was generated with the assistance of DALL·E 3.
 
 
-[![Star History Chart](https://api.star-history.com/svg?repos=Mozilla-Ocho/llamafile&type=Date)](https://star-history.com/#Mozilla-Ocho/llamafile&Date)
+[![Star History Chart](https://api.star-history.com/svg?repos=mozilla-ai/llamafile&type=Date)](https://star-history.com/#mozilla-ai/llamafile&Date)

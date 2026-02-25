@@ -1,3 +1,5 @@
+# Getting Started with llamafile 
+
 The easiest way to try it for yourself is to download our example
 llamafile for the [LLaVA](https://llava-vl.github.io/) model (license: [LLaMA 2](https://ai.meta.com/resources/models-and-libraries/llama-downloads/),
 [OpenAI](https://openai.com/policies/terms-of-use)). LLaVA is a new LLM that can do more
@@ -33,7 +35,7 @@ chmod +x llava-v1.5-7b-q4.llamafile
 
 **Having trouble? See the [Troubleshooting](troubleshooting.md) page.**
 
-### JSON API Quickstart
+## JSON API Quickstart
 
 When llamafile is started, in addition to hosting a web
 UI chat server at <http://127.0.0.1:8080/>, an [OpenAI
@@ -150,7 +152,7 @@ OpenAI API compatible endpoints, including embeddings. It's designed to
 be more reliable. It's better able to recycle context windows across
 multiple slots. To try it, run:
 
-```
+```bash
 llamafile --server --v2 --help
 llamafile --server --v2
 ```
@@ -188,7 +190,7 @@ This section answers the question *"I already have a model downloaded locally by
 
  So if you have downloaded e.g. the `llama-2-7b.Q2_K.gguf` file for `TheBloke/Llama-2-7B-GGUF`, you can run llamafile as follows:
 
-```
+```bash
 cd ~/.cache/lm-studio/models/TheBloke/Llama-2-7B-GGUF
 llamafile -m llama-2-7b.Q2_K.gguf
 ```
@@ -201,7 +203,7 @@ The manifest maps each file related to the model (e.g. GGUF weights, license, pr
 
 Each sha256 digest is also used as a filename in the `~/.ollama/models/blobs` directory (if you look into that directory you'll see *only* those sha256-* filenames). This means you can directly run llamafile by passing the sha256 digest as the model filename. So if e.g. the `llama3:latest` GGUF file digest is `sha256-00e1317cbf74d901080d7100f57580ba8dd8de57203072dc6f668324ba545f29`, you can run llamafile as follows:
 
-```
+```bash
 cd ~/.ollama/models/blobs
 llamafile -m sha256-00e1317cbf74d901080d7100f57580ba8dd8de57203072dc6f668324ba545f29
 ```
