@@ -57,7 +57,7 @@ mtmd_context *g_mtmd = nullptr;         // multimodal context
 llama_model *g_model = nullptr;
 llama_context *g_ctx = nullptr;
 common_chat_templates_ptr g_chat_templates;  // chat template handler
-common_chat_syntax g_chat_syntax;            // chat syntax for parsing
+common_chat_parser_params g_chat_syntax;            // chat syntax for parsing
 
 // Static storage for params
 static common_params s_params;

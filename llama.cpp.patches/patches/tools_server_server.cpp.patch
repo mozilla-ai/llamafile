@@ -34,7 +34,7 @@ diff --git a/tools/server/server.cpp b/tools/server/server.cpp
      common_init();
  
      // struct that contains llama context and inference
-@@ -316,5 +326,43 @@ int main(int argc, char ** argv) {
+@@ -318,5 +328,43 @@ int main(int argc, char ** argv) {
          }
      }
  

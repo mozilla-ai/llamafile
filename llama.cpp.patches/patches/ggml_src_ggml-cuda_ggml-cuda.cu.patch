@@ -1,7 +1,7 @@
 diff --git a/ggml/src/ggml-cuda/ggml-cuda.cu b/ggml/src/ggml-cuda/ggml-cuda.cu
 --- a/llama.cpp/ggml/src/ggml-cuda/ggml-cuda.cu
 +++ b/llama.cpp/ggml/src/ggml-cuda/ggml-cuda.cu
-@@ -668,6 +668,14 @@ static void ggml_backend_cuda_buffer_clear(ggml_backend_buffer_t buffer, uint8_t
+@@ -669,6 +669,14 @@ static void ggml_backend_cuda_buffer_clear(ggml_backend_buffer_t buffer, uint8_t
      CUDA_CHECK(cudaStreamSynchronize(cudaStreamPerThread));
  }
  
@@ -16,7 +16,7 @@ diff --git a/ggml/src/ggml-cuda/ggml-cuda.cu b/ggml/src/ggml-cuda/ggml-cuda.cu
  static const ggml_backend_buffer_i ggml_backend_cuda_buffer_interface = {
      /* .free_buffer     = */ ggml_backend_cuda_buffer_free_buffer,
      /* .get_base        = */ ggml_backend_cuda_buffer_get_base,
-@@ -678,6 +686,7 @@ static const ggml_backend_buffer_i ggml_backend_cuda_buffer_interface = {
+@@ -679,6 +687,7 @@ static const ggml_backend_buffer_i ggml_backend_cuda_buffer_interface = {
      /* .cpy_tensor      = */ ggml_backend_cuda_buffer_cpy_tensor,
      /* .clear           = */ ggml_backend_cuda_buffer_clear,
      /* .reset           = */ NULL,
@@ -24,7 +24,7 @@ diff --git a/ggml/src/ggml-cuda/ggml-cuda.cu b/ggml/src/ggml-cuda/ggml-cuda.cu
  };
  
  // cuda buffer type
-@@ -990,6 +999,7 @@ static const ggml_backend_buffer_i ggml_backend_cuda_split_buffer_interface = {
+@@ -991,6 +1000,7 @@ static const ggml_backend_buffer_i ggml_backend_cuda_split_buffer_interface = {
      /* .cpy_tensor      = */ NULL,
      /* .clear           = */ ggml_backend_cuda_split_buffer_clear,
      /* .reset           = */ NULL,
@@ -32,7 +32,7 @@ diff --git a/ggml/src/ggml-cuda/ggml-cuda.cu b/ggml/src/ggml-cuda/ggml-cuda.cu
  };
  
  // cuda split buffer type
-@@ -1144,12 +1154,20 @@ static ggml_backend_buffer_t ggml_backend_cuda_host_buffer_type_alloc_buffer(ggm
+@@ -1145,12 +1155,20 @@ static ggml_backend_buffer_t ggml_backend_cuda_host_buffer_type_alloc_buffer(ggm
  
      if (ptr == nullptr) {
          // fallback to cpu buffer
@@ -54,7 +54,7 @@ diff --git a/ggml/src/ggml-cuda/ggml-cuda.cu b/ggml/src/ggml-cuda/ggml-cuda.cu
  
      return buffer;
  }
-@@ -1249,8 +1267,13 @@ static void ggml_cuda_op_mul_mat_cublas(
+@@ -1250,8 +1268,13 @@ static void ggml_cuda_op_mul_mat_cublas(
  
      const int cc = ggml_cuda_info().devices[id].cc;
  

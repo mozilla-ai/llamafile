@@ -1,10 +1,10 @@
 diff --git a/src/llama-mmap.h b/src/llama-mmap.h
 --- a/llama.cpp/src/llama-mmap.h
 +++ b/llama.cpp/src/llama-mmap.h
-@@ -33,6 +33,11 @@ struct llama_file {
-     void write_u32(uint32_t val) const;
+@@ -34,6 +34,11 @@ struct llama_file {
  
      size_t read_alignment() const;
+     bool has_direct_io() const;
 +
 +    // [llamafile] Check if file has pre-mapped content (for bundled zip assets)
 +    bool has_premapped_content() const;
