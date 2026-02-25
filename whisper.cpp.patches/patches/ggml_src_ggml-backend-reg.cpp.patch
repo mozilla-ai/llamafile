@@ -1,0 +1,13 @@
+diff --git a/ggml/src/ggml-backend-reg.cpp b/ggml/src/ggml-backend-reg.cpp
+--- a/whisper.cpp/ggml/src/ggml-backend-reg.cpp
++++ b/whisper.cpp/ggml/src/ggml-backend-reg.cpp
+@@ -545,7 +545,8 @@ static ggml_backend_reg_t ggml_backend_load_best(const char * name, bool silent,
+             if (ec) {
+                 GGML_LOG_DEBUG("%s: posix_stat(%s) failure, error-message: %s\n", __func__, path_str(search_path).c_str(), ec.message().c_str());
+             } else {
+-                GGML_LOG_DEBUG("%s: search path %s does not exist\n", __func__, path_str(search_path).c_str());
++                // whisperfile will return this multiple times - removing
++                // GGML_LOG_DEBUG("%s: search path %s does not exist\n", __func__, path_str(search_path).c_str());
+             }
+             continue;
+         }
