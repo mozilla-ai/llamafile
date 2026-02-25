@@ -37,6 +37,16 @@ static bool has_binary(const std::string_view s) {
 
 // Helper to apply chat template for a single system message
 static std::string apply_system_template(const std::string &content) {
+    // Use the properly initialized Jinja-based chat templates if available
+    if (g_chat_templates) {
+        common_chat_msg msg;
+        msg.role = "system";
+        msg.content = content;
+        std::vector<common_chat_msg> past_msg;  // empty for single message
+        return common_chat_format_single(g_chat_templates.get(), past_msg, msg, false, /*use_jinja=*/true);
+    }
+
+    // Fallback to heuristic-based template if Jinja templates not available
     const char *tmpl = g_params->chat_template.empty()
                        ? llama_model_chat_template(g_model, nullptr)
                        : g_params->chat_template.c_str();
