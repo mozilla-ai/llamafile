@@ -39,20 +39,30 @@ bool g_said_something;
 char g_last_printed_char;
 volatile sig_atomic_t g_got_sigint;
 
-// Helper to apply chat template
-static std::string apply_chat_template(const std::vector<llama_chat_message> &messages, bool add_assistant) {
+// Helper to apply chat template using Jinja-based templates
+static std::string apply_chat_template(const char *role, const char *content, bool add_assistant) {
+    // Use the properly initialized Jinja-based chat templates if available
+    if (g_chat_templates) {
+        common_chat_msg msg;
+        msg.role = role;
+        msg.content = content;
+        std::vector<common_chat_msg> past_msg;  // empty for single message
+        return common_chat_format_single(g_chat_templates.get(), past_msg, msg, add_assistant, /*use_jinja=*/true);
+    }
+
+    // Fallback to heuristic-based template if Jinja templates not available
     const char *tmpl = g_params->chat_template.empty()
                        ? llama_model_chat_template(g_model, nullptr)
                        : g_params->chat_template.c_str();
 
-    // First call to get required size
-    int len = llama_chat_apply_template(tmpl, messages.data(), messages.size(), add_assistant, nullptr, 0);
+    llama_chat_message chat[] = {{role, content}};
+    int len = llama_chat_apply_template(tmpl, chat, 1, add_assistant, nullptr, 0);
     if (len < 0) {
         return "";
     }
 
     std::string result(len, '\0');
-    llama_chat_apply_template(tmpl, messages.data(), messages.size(), add_assistant, &result[0], result.size());
+    llama_chat_apply_template(tmpl, chat, 1, add_assistant, &result[0], result.size());
     return result;
 }
 
@@ -138,8 +148,7 @@ void repl() {
         if (is_base_model()) {
             msg = g_params->prompt;
         } else {
-            llama_chat_message chat[] = {{"system", g_params->prompt.c_str()}};
-            msg = apply_chat_template({chat, chat + 1}, false);
+            msg = apply_chat_template("system", g_params->prompt.c_str(), false);
         }
         if (!eval_string(msg, DONT_ADD_SPECIAL, PARSE_SPECIAL))
             exit(6);
@@ -202,8 +211,7 @@ void repl() {
         if (is_base_model()) {
             msg = line;
         } else {
-            llama_chat_message chat[] = {{get_role_name(g_role), line}};
-            msg = apply_chat_template({chat, chat + 1}, add_assi);
+            msg = apply_chat_template(get_role_name(g_role), line, add_assi);
         }
         if (!eval_string(msg, DONT_ADD_SPECIAL, PARSE_SPECIAL)) {
             rewind(tokens_used_before);

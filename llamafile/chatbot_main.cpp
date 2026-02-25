@@ -57,7 +57,7 @@ mtmd_context *g_mtmd = nullptr;         // multimodal context
 llama_model *g_model = nullptr;
 llama_context *g_ctx = nullptr;
 common_chat_templates_ptr g_chat_templates;  // chat template handler
-common_chat_syntax g_chat_syntax;            // chat syntax for parsing
+common_chat_parser_params g_chat_syntax;            // chat syntax for parsing
 
 // Static storage for params
 static common_params s_params;
@@ -238,6 +238,11 @@ int main(int argc, char **argv) {
                 auto chat_params = common_chat_templates_apply(g_chat_templates.get(), inputs);
                 g_chat_syntax.format = chat_params.format;
                 g_chat_syntax.thinking_forced_open = chat_params.thinking_forced_open;
+
+                // Load the PEG parser if one was provided
+                if (!chat_params.parser.empty()) {
+                    g_chat_syntax.parser.load(chat_params.parser);
+                }
 
                 // Enable reasoning extraction for all chat models, like llama.cpp CLI/server does.
                 // Parsers handle models without think mode gracefully - if there's no <think> or

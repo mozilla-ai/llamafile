@@ -1,7 +1,7 @@
 ---
 name: llamafile
-description: This skill should be used when the user asks to "build llamafile", "rebuild llamafile", "run llamafile tests", "set up llamafile", "update patches", "modify llama.cpp", "how does llamafile work", "llamafile architecture", or needs guidance on the llamafile build system, patch workflow, submodule integration, or development practices.
-version: 0.1.0
+description: This skill should be used when the user asks to "build llamafile", "rebuild llamafile", "run llamafile tests", "set up llamafile", "update patches", "update llama.cpp", "upstream llama.cpp", "how does llamafile work", "llamafile architecture", or needs guidance on the llamafile build system, patch workflow, submodule integration, or development practices.
+version: 0.1.1
 ---
 
 # Llamafile Development Guide
@@ -89,8 +89,8 @@ Submodules (llama.cpp, whisper.cpp, stable-diffusion.cpp) require a patch-based 
 2. Rebuild with `.cosmocc/4.0.2/bin/make -j8`
 3. Run unit tests with `.cosmocc/4.0.2/bin/make check`
 
-NOTE: here we directly build and test dirty repos, but at some point we want to bring
-our changes into a commit. To do that, we need to generate patches from them: see
+NOTE: never try to edit patches or generate them manually. This step is 
+done only after rebuild and tests (even manual ones) are successful. See
 `development.md` for detailed patch workflow.
 
 ### Running Specific Tests
@@ -119,7 +119,6 @@ Each submodule has a corresponding patches directory:
 Patches include:
 - **Modifications** (.patch files): Changes to upstream code
 - **Additions** (llamafile-files/): New files for integration (BUILD.mk, utilities)
-- **Deletions**: Removal of upstream build systems
 
 ### Build System
 
@@ -165,7 +164,7 @@ make reset-repo
 Ensure using cosmocc's make, not system make:
 ```sh
 .cosmocc/4.0.2/bin/make -j8  # Correct
-make -j8                      # Wrong - uses system make
+make -j8                     # Wrong - uses system make
 ```
 
 ## Additional Resources
@@ -177,6 +176,7 @@ For detailed information, consult:
 - **`architecture.md`** - Repository structure, component overview
 - **`development.md`** - Development workflow, patch management, submodule integration
 - **`testing.md`** - Test patterns, running and writing tests
+- **`update_llamacpp.md`** - Keeping llamafile updated with upstream llama.cpp
 
 ### Project Documentation
 

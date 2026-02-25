@@ -1,7 +1,7 @@
 diff --git a/common/common.cpp b/common/common.cpp
 --- a/llama.cpp/common/common.cpp
 +++ b/llama.cpp/common/common.cpp
-@@ -920,6 +920,16 @@ std::string fs_get_cache_directory() {
+@@ -874,6 +874,16 @@ std::string fs_get_cache_directory() {
          cache_directory = std::getenv("HOME") + std::string("/Library/Caches/");
  #elif defined(_WIN32)
          cache_directory = std::getenv("LOCALAPPDATA");
