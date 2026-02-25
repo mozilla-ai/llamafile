@@ -13,7 +13,7 @@ llama.cpp.patches/
 │   ├── BUILD.mk           # Makefile for building llama.cpp with cosmocc
 │   ├── README.llamafile   # License and modification notes
 │   └── common/
-│       └── license.cpp    # Generated license file (cmake creates this at build time)
+│       └── license.cpp    # Llama.cpp's license file (cmake creates this at build time)
 └── patches/               # Patch files for upstream sources
 ```
 
