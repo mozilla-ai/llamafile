@@ -95,14 +95,14 @@ bool slurp_audio_file(const char *fname,
         do {
             pcmf32.resize(total + want);
             rc = ma_decoder_read_pcm_frames(&decoder, &pcmf32[total], want, &got);
-            if (rc != MA_SUCCESS) {
+            if (rc != MA_SUCCESS && rc != MA_AT_END) {
                 ma_decoder_uninit(&decoder);
                 tinylogf("%s: failed to read pcm frames from audio file: %s\n",
                          fname, ma_result_description(rc));
                 return false;
             }
             pcmf32.resize((total += got));
-        } while (got == want);
+        } while (got == want && rc != MA_AT_END);
     } else {
         float frames[512];
         ma_uint64 want = sizeof(frames) / sizeof(*frames) / 2;
@@ -110,7 +110,7 @@ bool slurp_audio_file(const char *fname,
         pcmf32s.resize(2);
         do {
             rc = ma_decoder_read_pcm_frames(&decoder, frames, want, &got);
-            if (rc != MA_SUCCESS) {
+            if (rc != MA_SUCCESS && rc != MA_AT_END) {
                 ma_decoder_uninit(&decoder);
                 tinylogf("%s: failed to read pcm frames from audio file: %s\n",
                          fname, ma_result_description(rc));
@@ -124,7 +124,7 @@ bool slurp_audio_file(const char *fname,
                 pcmf32s[0].push_back(left);
                 pcmf32s[1].push_back(right);
             }
-        } while (got == want);
+        } while (got == want && rc != MA_AT_END);
     }
 
     // we're done
