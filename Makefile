@@ -15,7 +15,9 @@ include build/rules.mk
 
 include third_party/BUILD.mk
 include llama.cpp/BUILD.mk
+include whisper.cpp/BUILD.mk
 include llamafile/BUILD.mk
+include whisperfile/BUILD.mk
 include tests/BUILD.mk
 endif
 
@@ -24,6 +26,8 @@ endif
 .PHONY: o/$(MODE)/
 o/$(MODE)/:	o/$(MODE)/llamafile	\
 		o/$(MODE)/llama.cpp \
+		o/$(MODE)/whisper.cpp \
+		o/$(MODE)/whisperfile \
 		o/$(MODE)/third_party/zipalign
 
 .PHONY: install

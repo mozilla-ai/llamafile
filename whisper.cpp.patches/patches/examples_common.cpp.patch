@@ -1,0 +1,35 @@
+diff --git a/examples/common.cpp b/examples/common.cpp
+--- a/whisper.cpp/examples/common.cpp
++++ b/whisper.cpp/examples/common.cpp
+@@ -2,6 +2,7 @@
+ 
+ #include "common.h"
+ 
++#include <algorithm>
+ #include <cmath>
+ #include <codecvt>
+ #include <cstring>
+@@ -418,9 +419,9 @@ gpt_vocab::id gpt_sample_top_k_top_p(
+     }
+ 
+     // find the top K tokens
+-    std::partial_sort(
++    std::sort(
+             logits_id.begin(),
+-            logits_id.begin() + top_k, logits_id.end(),
++            logits_id.end(),
+             [](const std::pair<double, gpt_vocab::id> & a, const std::pair<double, gpt_vocab::id> & b) {
+         return a.first > b.first;
+     });
+@@ -533,9 +534,9 @@ gpt_vocab::id gpt_sample_top_k_top_p_repeat(
+     }
+ 
+     // find the top K tokens
+-    std::partial_sort(
++    std::sort(
+             logits_id.begin(),
+-            logits_id.begin() + top_k, logits_id.end(),
++            logits_id.end(),
+             [](const std::pair<double, gpt_vocab::id> & a, const std::pair<double, gpt_vocab::id> & b) {
+         return a.first > b.first;
+     });

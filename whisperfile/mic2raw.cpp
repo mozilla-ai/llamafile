@@ -17,6 +17,7 @@
 
 #include "color.h"
 #include "whisper.h"
+#include "llamafile/llamafile.h"
 
 #include <math.h>
 #include <cosmo.h>
@@ -54,7 +55,7 @@ static void *load_model(void *arg) {
 }
 
 int main(int argc, char *argv[]) {
-    FLAG_gpu = LLAMAFILE_GPU_DISABLE;
+    FLAG_gpu = LLAMAFILE_GPU_DISABLE;  // GPU support deferred to separate PR
     FLAG_log_disable = true;
     llamafile_check_cpu();
     ShowCrashReports();
@@ -119,9 +120,10 @@ int main(int argc, char *argv[]) {
     whisper_full_params wparams =
             whisper_full_default_params(WHISPER_SAMPLING_BEAM_SEARCH);
     wparams.no_timestamps = true;
-    wparams.suppress_non_speech_tokens = true;
+    wparams.suppress_nst = true;
     wparams.greedy.best_of = 8;
     wparams.beam_search.beam_size = 8;
+    wparams.initial_prompt = nullptr;
     if ((status = whisper_full(g_ctx, wparams, samples.data(), samples.size()))) {
         fprintf(stderr, "error: whisper failed with %d\n", status);
         return 3;
@@ -131,23 +133,20 @@ int main(int argc, char *argv[]) {
         int n_tokens = whisper_full_n_tokens(g_ctx, i);
         for (int j = 0; j < n_tokens; ++j) {
             const whisper_token id = whisper_full_get_token_id(g_ctx, i, j);
-            if (id >= whisper_token_eot(g_ctx))
-                continue;
             const char *text = whisper_full_get_token_text(g_ctx, i, j);
+            float p = whisper_full_get_token_p(g_ctx, i, j);
             if (should_print_color) {
-                float confidence = whisper_full_get_token_p(g_ctx, i, j);
                 int colorcount = kRedToGreenXterm256.size();
-                int colorindex = powf(confidence, 3) * colorcount;
+                int colorindex = powf(p, 2.5) * colorcount;
                 colorindex = ctl::max(0, ctl::min(colorcount - 1, colorindex));
                 fprintf(stderr, "%s", kRedToGreenXterm256[colorindex].c_str());
                 fflush(stderr);
             }
-            printf("%s", text);
+            printf("%12f %8d %-`'20s\n", id, text, p);
             fflush(stdout);
         }
     }
     if (should_print_color)
         fprintf(stderr, "\033[0m");
-    printf("\n");
     whisper_free(g_ctx);
 }

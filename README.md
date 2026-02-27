@@ -4,7 +4,6 @@
 Mozilla.ai recently adopted the llamafile project, and we're planning an approach for codebase modernization. Please share what you find most valuable about llamafile and what would make it more useful for your work.
 [Read more via the blog](https://blog.mozilla.ai/llamafile-returns/) and add your voice to the discussion [here](https://github.com/mozilla-ai/llamafile/discussions/809).
 
-
 [![ci status](https://github.com/Mozilla-Ocho/llamafile/actions/workflows/ci.yml/badge.svg)](https://github.com/Mozilla-Ocho/llamafile/actions/workflows/ci.yml)<br/>
 [![](https://dcbadge.vercel.app/api/server/YuMNeuKStr)](https://discord.gg/YuMNeuKStr)<br/><br/>
 
@@ -52,6 +51,7 @@ Check the full documentation in the [docs/](docs/) folder or online at [mozilla-
 - [Technical details](https://mozilla-ai.github.io/llamafile/technical_details/)
 - [Security](https://mozilla-ai.github.io/llamafile/security/)
 - [Troubleshooting](https://mozilla-ai.github.io/llamafile/troubleshooting/)
+- [Whisperfile](https://mozilla-ai.github.io/llamafile/whisperfile/) — speech-to-text
 
 
 ## Licensing

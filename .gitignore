@@ -10,6 +10,8 @@
 /trace.json
 
 /*.log
+/*.bin
+/*.mp3
 
 .claude
 CLAUDE.md
