@@ -239,6 +239,11 @@ int main(int argc, char **argv) {
                 g_chat_syntax.format = chat_params.format;
                 g_chat_syntax.thinking_forced_open = chat_params.thinking_forced_open;
 
+                // Load the PEG parser if one was provided
+                if (!chat_params.parser.empty()) {
+                    g_chat_syntax.parser.load(chat_params.parser);
+                }
+
                 // Enable reasoning extraction for all chat models, like llama.cpp CLI/server does.
                 // Parsers handle models without think mode gracefully - if there's no <think> or
                 // similar tags in the output, no reasoning gets extracted.

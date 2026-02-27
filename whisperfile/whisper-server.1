@@ -1,0 +1,78 @@
+.Dd February 15, 2026
+.Dt WHISPER-SERVER 1
+.Os Mozilla.ai 
+.Sh NAME
+.Nm whisper-server
+.Nd HTTP server for speech to text
+.Sh SYNOPSIS
+.Nm
+.Op flags...
+.Fl m Ar model.gguf
+.Sh DESCRIPTION
+.Nm
+provides an HTTP API for speech-to-text transcription using OpenAI's
+Whisper model. It accepts audio file uploads and returns transcriptions
+in various formats including JSON, plain text, SRT, and VTT.
+.Pp
+Supported audio formats are WAV, MP3, FLAC, and OGG.
+.Sh OPTIONS
+The following options are available:
+.Bl -tag -width indent
+.It Fl Fl version
+Print version and exit.
+.It Fl h , Fl Fl help
+Show help message and exit.
+.It Fl m Ar FNAME , Fl Fl model Ar FNAME
+Path of Whisper model weights. See
+https://huggingface.co/ggerganov/whisper.cpp
+.It Fl Fl host Ar ADDR
+Hostname or IP address to bind to. Default is 127.0.0.1.
+.It Fl Fl port Ar PORT
+Port number. Default is 8080.
+.It Fl l Ar LANG , Fl Fl language Ar LANG
+Default spoken language. Use 'auto' for auto-detect.
+.It Fl tr , Fl Fl translate
+Translate audio into English text.
+.It Fl t Ar N , Fl Fl threads Ar N
+Number of threads to use during computation.
+.It Fl ng , Fl Fl no-gpu
+Disable GPU acceleration.
+.It Fl Fl gpu Ar VALUE
+Select GPU backend. Values: auto, apple, amd, nvidia, disable.
+.It Fl Fl log-disable
+Suppress logging output.
+.El
+.Pp
+Additional transcription options are available. Run
+.Nm Fl Fl help
+for the complete list.
+.Sh HTTP API
+.Ss GET /health
+Returns server health status as JSON. Returns HTTP 503 if the model
+is still loading.
+.Ss POST /inference
+Transcribe an audio file. Send as multipart/form-data with the audio
+file in a field named "file".
+.Pp
+Optional form fields: response_format (json, text, srt, vtt, verbose_json),
+language, translate, temperature, prompt.
+.Pp
+Example:
+.Bd -literal -offset indent
+curl http://localhost:8080/inference \\
+  -F "file=@audio.wav" \\
+  -F "response_format=json"
+.Ed
+.Ss POST /load
+Load a different model at runtime.
+.Bd -literal -offset indent
+curl http://localhost:8080/load \\
+  -F "model=/path/to/model.bin"
+.Ed
+.Sh DOCUMENTATION
+Read our Markdown documentation for additional help and tutorials. See
+the docs/whisperfile/ directory in the llamafile source repository on GitHub.
+.Sh SEE ALSO
+.Xr whisperfile 1 ,
+.Xr llamafile 1 ,
+.Xr curl 1

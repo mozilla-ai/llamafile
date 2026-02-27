@@ -4,6 +4,23 @@
 PKGS += LLAMAFILE
 
 # ==============================================================================
+# Header files (for mkdeps dependency tracking)
+# ==============================================================================
+
+# ==============================================================================
+# Package Sources (NOT using full deps.mk SRCS/HDRS mechanism)
+# ==============================================================================
+# Note: We only list headers that:
+# 1. Are needed by code scanned by mkdeps (like third_party sources)
+# 2. Only include standard library headers (no llama.cpp dependencies)
+# Headers like chatbot.h that include llama.cpp headers are excluded
+# because mkdeps can't resolve those include paths.
+
+LLAMAFILE_HDRS := \
+	llamafile/llamafile.h \
+	llamafile/sgemm.h
+
+# ==============================================================================
 # Version information
 # ==============================================================================
 

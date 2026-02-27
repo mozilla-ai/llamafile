@@ -1,0 +1,93 @@
+diff --git a/examples/server/server.cpp b/examples/server/server.cpp
+--- a/whisper.cpp/examples/server/server.cpp
++++ b/whisper.cpp/examples/server/server.cpp
+@@ -23,6 +23,11 @@
+ #include <windows.h>
+ #endif
+ 
++#ifdef WHISPERFILE
++#include "whisperfile/slurp.h"
++#include "llamafile/llamafile.h"
++#endif
++
+ using namespace httplib;
+ using json = nlohmann::ordered_json;
+ 
+@@ -261,6 +266,22 @@ bool whisper_params_parse(int argc, char ** argv, whisper_params & params, serve
+         else if (arg == "-vmsd" || arg == "--vad-max-speech-duration-s")   { params.vad_max_speech_duration_s   = std::stof(argv[++i]); }
+         else if (arg == "-vp"   || arg == "--vad-speech-pad-ms")           { params.vad_speech_pad_ms           = std::stoi(argv[++i]); }
+         else if (arg == "-vo"   || arg == "--vad-samples-overlap")         { params.vad_samples_overlap         = std::stof(argv[++i]); }
++#ifdef WHISPERFILE
++        // llamafile flags
++        else if (arg == "--log-disable") { FLAG_log_disable = true; }
++        else if (arg == "-ng" || arg == "--no-gpu") { FLAG_gpu = LLAMAFILE_GPU_DISABLE; }
++        else if (arg == "--gpu") {
++            if (++i >= argc) {
++                fprintf(stderr, "error: missing --gpu flag value\n");
++                exit(1);
++            }
++            FLAG_gpu = llamafile_gpu_parse(argv[i]);
++            if (FLAG_gpu == LLAMAFILE_GPU_ERROR) {
++                fprintf(stderr, "error: invalid --gpu flag value: %s\n", argv[i]);
++                exit(1);
++            }
++        }
++#endif
+         else {
+             fprintf(stderr, "error: unknown argument: %s\n", arg.c_str());
+             whisper_print_usage(argc, argv, params, sparams);
+@@ -611,7 +632,8 @@ void get_req_parameters(const Request & req, whisper_params & params)
+ 
+ }  // namespace
+ 
+-int main(int argc, char ** argv) {
++// Core server logic - can be called from whisper-server main or standalone
++int whisper_server_main(int argc, char ** argv) {
+     ggml_backend_load_all();
+ 
+     whisper_params params;
+@@ -818,6 +840,25 @@ int main(int argc, char ** argv) {
+         std::vector<float> pcmf32;               // mono-channel F32 PCM
+         std::vector<std::vector<float>> pcmf32s; // stereo-channel F32 PCM
+ 
++#ifdef WHISPERFILE
++        // whisperfile: use slurp_audio_file for WAV/MP3/FLAC/OGG support
++        {
++            // write incoming audio to temporary file
++            const std::string temp_filename = generate_temp_filename(sparams.tmp_dir, "whisper-server", "");
++            std::ofstream temp_file{temp_filename, std::ios::binary};
++            temp_file << audio_file.content;
++            temp_file.close();
++
++            bool ok = slurp_audio_file(temp_filename.c_str(), pcmf32, pcmf32s, params.diarize);
++            std::remove(temp_filename.c_str());
++            if (!ok) {
++                fprintf(stderr, "error: failed to read audio file\n");
++                const std::string error_resp = "{\"error\":\"failed to read audio file (supported: wav, mp3, flac, ogg)\"}";
++                res.set_content(error_resp, "application/json");
++                return;
++            }
++        }
++#else
+         if (sparams.ffmpeg_converter) {
+             // if file is not wav, convert to wav
+             // write to temporary file
+@@ -853,6 +894,7 @@ int main(int argc, char ** argv) {
+                 return;
+             }
+         }
++#endif
+ 
+         printf("Successfully loaded %s\n", filename.c_str());
+ 
+@@ -1246,3 +1288,10 @@ int main(int argc, char ** argv) {
+ 
+     return 0;
+ }
++
++// Standalone entry point - only when NOT building as part of whisperfile
++#ifndef WHISPERFILE
++int main(int argc, char ** argv) {
++    return whisper_server_main(argc, argv);
++}
++#endif

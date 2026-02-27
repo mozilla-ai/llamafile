@@ -1,0 +1,51 @@
+diff --git a/examples/cli/cli.cpp b/examples/cli/cli.cpp
+--- a/whisper.cpp/examples/cli/cli.cpp
++++ b/whisper.cpp/examples/cli/cli.cpp
+@@ -21,6 +21,10 @@
+ #include <windows.h>
+ #endif
+ 
++#ifdef WHISPERFILE
++#include "whisperfile/slurp.h"
++#endif
++
+ // helper function to replace substrings
+ static void replace_all(std::string & s, const std::string & search, const std::string & replace) {
+     for (size_t pos = 0; ; pos += replace.length()) {
+@@ -918,7 +922,9 @@ static void output_lrc(struct whisper_context * ctx, std::ofstream & fout, const
+ 
+ static void cb_log_disable(enum ggml_log_level , const char * , void * ) { }
+ 
+-int main(int argc, char ** argv) {
++// Core whisper-cli logic - can be called from whisperfile main or standalone main()
++// When building whisperfile, its main() calls this function directly
++int whisper_cli_main(int argc, char ** argv) {
+     ggml_backend_load_all();
+ 
+ #if defined(_WIN32)
+@@ -1115,7 +1121,12 @@ int main(int argc, char ** argv) {
+         std::vector<float> pcmf32;               // mono-channel F32 PCM
+         std::vector<std::vector<float>> pcmf32s; // stereo-channel F32 PCM
+ 
++#ifdef WHISPERFILE
++        // Use slurp_audio_file for better format support (WAV, MP3, FLAC, OGG)
++        if (!slurp_audio_file(fname_inp.c_str(), pcmf32, pcmf32s, params.diarize)) {
++#else
+         if (!::read_audio_data(fname_inp, pcmf32, pcmf32s, params.diarize)) {
++#endif
+             fprintf(stderr, "error: failed to read audio file '%s'\n", fname_inp.c_str());
+             continue;
+         }
+@@ -1304,3 +1315,12 @@ int main(int argc, char ** argv) {
+ 
+     return 0;
+ }
++
++// Standalone entry point for whisper-cli executable
++// Not compiled when building as part of whisperfile (which has its own main)
++// Having this allows us to build a vanilla whisper-cli without llamafile features
++#ifndef WHISPERFILE
++int main(int argc, char ** argv) {
++    return whisper_cli_main(argc, argv);
++}
++#endif
