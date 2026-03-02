@@ -71,7 +71,14 @@ extern bool g_interrupted_exit;
 extern common_chat_templates_ptr g_chat_templates;
 extern common_chat_parser_params g_chat_syntax;
 
-int main(int, char **);
+// Original entry point: loads its own model
+int main(int argc, char **argv);
+
+// Entry point for combined mode: uses a shared model (does not free it)
+int main_with_model(llama_model *model, const common_params &params);
+
+// CLI mode: single prompt -> response, then exit
+int cli_main(int argc, char **argv);
 
 bool eval_string(std::string_view, bool, bool);
 DataUriExtraction extract_data_uris(std::string_view, const char *marker);
