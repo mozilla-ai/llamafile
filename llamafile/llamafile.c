@@ -424,67 +424,15 @@ void llamafile_close(struct llamafile *file) {
 // ==============================================================================
 // FLAG variable definitions
 // ==============================================================================
-// These are Cosmopolitan FLAG system variables. For migration to other
-// platforms, replace these with your own configuration system.
 
-bool FLAGS_READY = false;
-bool FLAG_ascii = false;
-bool FLAG_completion_mode = false;
-bool FLAG_fast = false;
-bool FLAG_iq = false;
 bool FLAG_log_disable = false;
-bool FLAG_mlock = false;
-bool FLAG_mmap = true;
-bool FLAG_no_display_prompt = false;
 bool FLAG_nocompile = false;
 bool FLAG_nologo = false;
+bool FLAG_nothink = false;
 bool FLAG_precise = false;
 bool FLAG_recompile = false;
-bool FLAG_tinyblas = false;
-bool FLAG_trace = false;
-bool FLAG_trap = false;
-bool FLAG_unsecure = false;
-bool FLAG_v2 = false;
-const char *FLAG_chat_template = NULL;
-const char *FLAG_db = NULL;
-const char *FLAG_db_startup_sql = NULL;
-const char *FLAG_file = NULL;
-const char *FLAG_ip_header = NULL;
-const char *FLAG_listen = "127.0.0.1:8080";
-const char *FLAG_mmproj = NULL;
-const char *FLAG_model = NULL;
-const char *FLAG_prompt = NULL;
-const char *FLAG_url_prefix = "";
-const char *FLAG_www_root = NULL;
-double FLAG_token_rate = 0;
-float FLAG_decay_growth = 0;
-float FLAG_frequency_penalty = 0;
-float FLAG_presence_penalty = 0;
-float FLAG_reserve_tokens = 0;
-float FLAG_temperature = 0.8;
-float FLAG_top_p = 0.95;
-int FLAG_batch = 512;
-int FLAG_ctx_size = 0;
-int FLAG_decay_delay = 0;
-int FLAG_flash_attn = 0;
 int FLAG_gpu = LLAMAFILE_GPU_AUTO;
-int FLAG_http_ibuf_size = 65536;
-int FLAG_http_obuf_size = 65536;
-int FLAG_keepalive = 5;
-int FLAG_main_gpu = 0;
-int FLAG_n_gpu_layers = -1;
-int FLAG_slots = 1;
-int FLAG_split_mode = 0;
-int FLAG_threads = 0;
-int FLAG_threads_batch = 0;
-int FLAG_token_burst = 0;
-int FLAG_token_cidr = 0;
-int FLAG_ubatch = 512;
 int FLAG_verbose = 0;
-bool FLAG_nothink = false;
-int FLAG_warmup = 0;
-int FLAG_workers = 0;
-unsigned FLAG_seed = 0;
 
 // ==============================================================================
 // Utility functions

@@ -89,7 +89,7 @@ static server_http_context::handler_t ex_wrapper(server_http_context::handler_t 
 }
 
 // Combined mode: run server and chatbot together, sharing the model
-static int combined_main(int argc, char **argv, bool verbose) {
+static int combined_main(int argc, char **argv) {
     common_params params;
 
     // Parse parameters (using SERVER example type for full server options)
@@ -109,7 +109,7 @@ static int combined_main(int argc, char **argv, bool verbose) {
 
     // Suppress server/model loading logs unless --verbose was specified
     // This gives combined mode a clean UX similar to --chat mode
-    if (!verbose) {
+    if (!FLAG_verbose) {
         llama_log_set((ggml_log_callback)llamafile_log_callback_null, NULL);
         common_log_set_verbosity_thold(LOG_LEVEL_ERROR);
         mtmd_helper_log_set((ggml_log_callback)llamafile_log_callback_null, NULL);
@@ -188,7 +188,7 @@ static int combined_main(int argc, char **argv, bool verbose) {
     // Mark server as ready
     ctx_http.is_ready.store(true);
 
-    if (verbose) {
+    if (FLAG_verbose) {
         LOG_INF("%s: server is listening on %s\n", __func__, ctx_http.listening_address.c_str());
     }
 
@@ -233,15 +233,14 @@ int main(int argc, char **argv) {
 
     // Suppress GPU and backend logging unless --verbose was specified
     // This must happen BEFORE llamafile_has_gpu() which triggers Metal/CUDA init
-    if (!args.verbose) {
+    if (!FLAG_verbose) {
         llamafile_metal_log_set(llamafile_log_callback_null, NULL);
         llamafile_cuda_log_set(llamafile_log_callback_null, NULL);
         llama_log_set((ggml_log_callback)llamafile_log_callback_null, NULL);
     }
 
-    // For CLI mode, also suppress logo
+    // For CLI mode, suppress logo (but respect --verbose if user specified it)
     if (args.mode == lf::ProgramMode::CLI) {
-        FLAG_verbose = 0;
         FLAG_nologo = 1;
     }
 
@@ -264,7 +263,7 @@ int main(int argc, char **argv) {
 
         case lf::ProgramMode::AUTO:
             // Combined mode: chat + server sharing model
-            return lf::combined_main(args.llama_argc, args.llama_argv, args.verbose);
+            return lf::combined_main(args.llama_argc, args.llama_argv);
     }
 
     return 1;

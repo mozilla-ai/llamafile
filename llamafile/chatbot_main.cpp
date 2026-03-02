@@ -108,9 +108,8 @@ int main(int argc, char **argv) {
     // print logo
     logo(argv);
 
-    // Check if verbose mode is requested (must be set before Metal init)
-    bool verbose = llamafile_has(argv, "--verbose");
-    FLAG_verbose = verbose ? 1 : 0;
+    // FLAG_verbose is set by parse_llamafile_args() in args.cpp
+    bool verbose = FLAG_verbose;
 
     // Initialize params with defaults
     g_params = &s_params;

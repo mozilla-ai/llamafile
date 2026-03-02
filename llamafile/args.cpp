@@ -26,6 +26,15 @@ namespace lf {
 // Static storage for filtered argv (persists after function returns)
 static std::vector<char*> g_filtered_argv;
 
+// Helper: returns true if arg is a llamafile-specific flag (not recognized by llama.cpp)
+static bool is_llamafile_flag(const char* arg) {
+    return strcmp(arg, "--server") == 0 ||
+           strcmp(arg, "--chat") == 0 ||
+           strcmp(arg, "--cli") == 0 ||
+           strcmp(arg, "--gpu") == 0 ||
+           strcmp(arg, "--nothink") == 0;
+}
+
 LlamafileArgs parse_llamafile_args(int argc, char** argv) {
     LlamafileArgs args;
 
@@ -47,7 +56,10 @@ LlamafileArgs parse_llamafile_args(int argc, char** argv) {
     }
 
     // Check verbose flag
-    args.verbose = llamafile_has(argv, "--verbose");
+    FLAG_verbose = llamafile_has(argv, "--verbose") ? 1 : 0;
+
+    // Check --nothink flag (filters thinking/reasoning content in CLI mode)
+    FLAG_nothink = llamafile_has(argv, "--nothink");
 
     // Filter out llamafile-specific arguments
     // These are not recognized by llama.cpp and would cause errors
@@ -56,18 +68,11 @@ LlamafileArgs parse_llamafile_args(int argc, char** argv) {
     for (int i = 0; i < argc; ++i) {
         const char* arg = argv[i];
 
-        // Skip mode flags (llamafile-specific)
-        if (strcmp(arg, "--server") == 0 ||
-            strcmp(arg, "--chat") == 0 ||
-            strcmp(arg, "--cli") == 0) {
-            continue;
-        }
-
-        // Skip --gpu and its value (llamafile-specific)
-        if (strcmp(arg, "--gpu") == 0) {
-            if (i + 1 < argc) {
-                args.gpu_backend = argv[i + 1];
-                ++i;  // Skip the value too
+        // Skip llamafile-specific flags
+        if (is_llamafile_flag(arg)) {
+            // --gpu takes a value argument, skip it too
+            if (strcmp(arg, "--gpu") == 0 && i + 1 < argc) {
+                ++i;
             }
             continue;
         }

@@ -93,29 +93,8 @@ int cli_main(int argc, char **argv) {
     params.n_batch = 256;
     params.sampling.temp = 0;  // deterministic by default
 
-    // Check for --nothink flag (filter out thinking/reasoning content)
-    FLAG_nothink = llamafile_has(argv, "--nothink");
-
-    // Filter --nothink from argv before passing to llama.cpp parser
-    std::vector<char*> filtered_argv;
-    for (int i = 0; i < argc; ++i) {
-        if (strcmp(argv[i], "--nothink") != 0) {
-            filtered_argv.push_back(argv[i]);
-        }
-    }
-    filtered_argv.push_back(nullptr);
-    int filtered_argc = static_cast<int>(filtered_argv.size()) - 1;
-
-    // Suppress all logging
-    FLAG_verbose = 0;
-    FLAG_nologo = 1;
-
-    // Set GPU log callbacks BEFORE GPU init
-    llamafile_metal_log_set(llamafile_log_callback_null, NULL);
-    llamafile_cuda_log_set(llamafile_log_callback_null, NULL);
-
-    // Initialize GPU
-    llamafile_has_gpu();
+    // Note: FLAG_nothink, FLAG_verbose, FLAG_nologo are set by main.cpp
+    // before calling cli_main(). GPU is also initialized there;
 
     // Fully disable common_log system BEFORE common_init() to prevent build info log
     // This pauses the log worker thread so LOG_INF calls become no-ops
@@ -128,8 +107,8 @@ int cli_main(int argc, char **argv) {
     llama_backend_init();
     common_init();
 
-    // Parse arguments (use filtered argv without --nothink)
-    if (!common_params_parse(filtered_argc, filtered_argv.data(), params, LLAMA_EXAMPLE_CLI)) {
+    // Parse arguments (argv is already filtered by parse_llamafile_args in args.cpp)
+    if (!common_params_parse(argc, argv, params, LLAMA_EXAMPLE_CLI)) {
         fprintf(stderr, "error: failed to parse arguments\n");
         return 1;
     }

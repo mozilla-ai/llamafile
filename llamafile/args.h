@@ -17,8 +17,6 @@
 
 #pragma once
 
-#include <string>
-
 namespace lf {
 
 // Program execution modes
@@ -33,13 +31,14 @@ enum class ProgramMode {
 struct LlamafileArgs {
     ProgramMode mode = ProgramMode::AUTO;
 
-    // Llamafile-specific flags (extracted before passing to llama.cpp)
-    std::string gpu_backend;     // --gpu <backend>
-    bool verbose = false;        // --verbose
-
     // Filtered argc/argv for llama.cpp (excludes llamafile-specific args)
     int llama_argc = 0;
     char** llama_argv = nullptr;
+
+    // Note: Llamafile-specific flags are stored in FLAG_* globals (llamafile.h):
+    //   --verbose  -> FLAG_verbose
+    //   --nothink  -> FLAG_nothink
+    //   --gpu      -> FLAG_gpu (set by llamafile_early_gpu_init)
 };
 
 // Parse command line arguments, determine execution mode, and filter out
