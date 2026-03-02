@@ -9,7 +9,7 @@ stock install:
 - Windows 10+ (AMD64 only)
 - FreeBSD 13+
 - NetBSD 9.2+ (AMD64 only)
-- OpenBSD 7+ (AMD64 only)
+- OpenBSD 7.0 to 7.4 (AMD64 only)
 
 On Windows, llamafile runs as a native portable executable. On UNIX
 systems, llamafile extracts a small loader program named `ape` to
