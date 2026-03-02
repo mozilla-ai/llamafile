@@ -67,7 +67,8 @@ static bool g_owns_model = true;
 
 std::string describe_compute(void) {
     // Check if using GPU based on params
-    if (g_params && g_params->n_gpu_layers > 0 && llamafile_has_gpu()) {
+    // n_gpu_layers > 0 means explicitly enabled, < 0 means "auto" (use GPU if available)
+    if (g_params && g_params->n_gpu_layers != 0 && llamafile_has_gpu()) {
         if (llamafile_has_metal()) {
             return "Apple Metal GPU";
         } else {
