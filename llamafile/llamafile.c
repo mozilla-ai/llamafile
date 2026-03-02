@@ -481,6 +481,7 @@ int FLAG_token_burst = 0;
 int FLAG_token_cidr = 0;
 int FLAG_ubatch = 512;
 int FLAG_verbose = 0;
+bool FLAG_nothink = false;
 int FLAG_warmup = 0;
 int FLAG_workers = 0;
 unsigned FLAG_seed = 0;

@@ -25,15 +25,18 @@
 // - Exits after response completes
 //
 // Usage: llamafile -m model.gguf --cli -p "Your prompt here"
+//        llamafile -m model.gguf --cli --nothink -p "Your prompt here"
 //
 
 #include "chatbot.h"
 
 #include <cstdio>
 #include <cstdlib>
+#include <cstring>
 #include <limits.h>
 #include <signal.h>
 #include <string>
+#include <vector>
 
 #include "arg.h"
 #include "chat.h"
@@ -90,6 +93,19 @@ int cli_main(int argc, char **argv) {
     params.n_batch = 256;
     params.sampling.temp = 0;  // deterministic by default
 
+    // Check for --nothink flag (filter out thinking/reasoning content)
+    FLAG_nothink = llamafile_has(argv, "--nothink");
+
+    // Filter --nothink from argv before passing to llama.cpp parser
+    std::vector<char*> filtered_argv;
+    for (int i = 0; i < argc; ++i) {
+        if (strcmp(argv[i], "--nothink") != 0) {
+            filtered_argv.push_back(argv[i]);
+        }
+    }
+    filtered_argv.push_back(nullptr);
+    int filtered_argc = static_cast<int>(filtered_argv.size()) - 1;
+
     // Suppress all logging
     FLAG_verbose = 0;
     FLAG_nologo = 1;
@@ -112,8 +128,8 @@ int cli_main(int argc, char **argv) {
     llama_backend_init();
     common_init();
 
-    // Parse arguments
-    if (!common_params_parse(argc, argv, params, LLAMA_EXAMPLE_CLI)) {
+    // Parse arguments (use filtered argv without --nothink)
+    if (!common_params_parse(filtered_argc, filtered_argv.data(), params, LLAMA_EXAMPLE_CLI)) {
         fprintf(stderr, "error: failed to parse arguments\n");
         return 1;
     }
@@ -168,6 +184,39 @@ int cli_main(int argc, char **argv) {
 
     if (is_chat_model) {
         chat_templates = common_chat_templates_init(model, params.chat_template);
+    }
+
+    // Initialize chat parser for --nothink mode
+    common_chat_parser_params chat_syntax;
+    if (FLAG_nothink && is_chat_model && chat_templates) {
+        // Set up chat parser to detect and filter reasoning content
+        common_chat_msg dummy_msg;
+        dummy_msg.role = "user";
+        dummy_msg.content = "test";
+
+        common_chat_templates_inputs inputs;
+        inputs.messages = {dummy_msg};
+        inputs.use_jinja = true;
+
+        try {
+            auto chat_params = common_chat_templates_apply(chat_templates.get(), inputs);
+            chat_syntax.format = chat_params.format;
+            chat_syntax.thinking_forced_open = chat_params.thinking_forced_open;
+
+            if (!chat_params.parser.empty()) {
+                chat_syntax.parser.load(chat_params.parser);
+            }
+
+            // Enable reasoning extraction
+            chat_syntax.reasoning_format = COMMON_REASONING_FORMAT_DEEPSEEK;
+            chat_syntax.reasoning_in_content = false;
+        } catch (...) {
+            // Fall back to no parsing if template fails
+            FLAG_nothink = false;
+        }
+    } else if (FLAG_nothink && !is_chat_model) {
+        // Can't filter thinking on base models
+        FLAG_nothink = false;
     }
 
     // Build the prompt
@@ -226,6 +275,10 @@ int cli_main(int argc, char **argv) {
 
     // Generate response
     int n_cur = tokens.size();
+    std::string raw_output;           // For --nothink: accumulates raw output for parsing
+    common_chat_msg prev_msg;         // For --nothink: previous parse state
+    bool use_chat_parser = FLAG_nothink && (chat_syntax.format != COMMON_CHAT_FORMAT_CONTENT_ONLY);
+
     while (n_cur < params.n_ctx) {
         if (g_got_sigint) {
             g_got_sigint = 0;
@@ -240,10 +293,29 @@ int cli_main(int argc, char **argv) {
             break;
         }
 
-        // Output token (no streaming decorations)
-        std::string piece = llamafile_token_to_piece(ctx, id, false);
-        fputs(piece.c_str(), stdout);
-        fflush(stdout);
+        if (use_chat_parser) {
+            // --nothink mode: parse output to filter reasoning content
+            std::string token_str = llamafile_token_to_piece(ctx, id, true);
+            raw_output += token_str;
+
+            // Parse incrementally
+            auto msg = common_chat_parse(raw_output, /*is_partial=*/true, chat_syntax);
+            auto diffs = common_chat_msg_diff::compute_diffs(prev_msg, msg);
+
+            // Only output content, skip reasoning
+            for (const auto &diff : diffs) {
+                if (!diff.content_delta.empty()) {
+                    fputs(diff.content_delta.c_str(), stdout);
+                    fflush(stdout);
+                }
+            }
+            prev_msg = msg;
+        } else {
+            // Normal mode: output tokens directly
+            std::string piece = llamafile_token_to_piece(ctx, id, false);
+            fputs(piece.c_str(), stdout);
+            fflush(stdout);
+        }
 
         // Evaluate token
         if (llama_decode(ctx, llama_batch_get_one(&id, 1))) {

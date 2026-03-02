@@ -67,7 +67,8 @@ extern int FLAG_threads_batch;            // UNUSED: not referenced
 extern int FLAG_token_burst;              // UNUSED: not referenced
 extern int FLAG_token_cidr;               // UNUSED: not referenced
 extern int FLAG_ubatch;                   // UNUSED: not referenced
-extern int FLAG_verbose;                  // UNUSED: not referenced
+extern int FLAG_verbose;                  // USED: chatbot_main.cpp, metal.c, cuda.c
+extern bool FLAG_nothink;                 // USED: chatbot_cli.cpp (--nothink flag)
 extern int FLAG_warmup;                   // UNUSED: not referenced
 extern int FLAG_workers;                  // UNUSED: not referenced
 extern unsigned FLAG_seed;                // UNUSED: not referenced
