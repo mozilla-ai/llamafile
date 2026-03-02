@@ -38,7 +38,10 @@ ARCH := $(shell uname -m)
 
 # apple still distributes a 17 year old version of gnu make
 ifeq ($(MAKE_VERSION), 3.81)
+ifneq ($(MAKECMDGOALS),cosmocc)
+# show the following message unless someone's trying to install cosmocc
 $(error please use bin/make from cosmocc.zip rather than old xcode make)
+endif
 endif
 
 # let `make m=foo` be shorthand for `make MODE=foo`
