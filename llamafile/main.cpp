@@ -36,6 +36,8 @@
 #include "llama.h"
 #include "log.h"
 #include "server-context.h"
+#include "server-http.h"
+#include "server-common.h"
 
 #include "args.h"
 #include "chatbot.h"
@@ -44,6 +46,7 @@
 
 #include <cstdio>
 #include <thread>
+#include <exception>
 
 #ifdef COSMOCC
 #include <cosmo.h>
@@ -53,6 +56,37 @@
 extern int server_main(int argc, char **argv);
 
 namespace lf {
+
+// Exception wrapper for HTTP handlers (same as in server.cpp)
+static server_http_context::handler_t ex_wrapper(server_http_context::handler_t func) {
+    return [func = std::move(func)](const server_http_req & req) -> server_http_res_ptr {
+        std::string message;
+        error_type error;
+        try {
+            return func(req);
+        } catch (const std::invalid_argument & e) {
+            error = ERROR_TYPE_INVALID_REQUEST;
+            message = e.what();
+        } catch (const std::exception & e) {
+            error = ERROR_TYPE_SERVER;
+            message = e.what();
+        } catch (...) {
+            error = ERROR_TYPE_SERVER;
+            message = "unknown error";
+        }
+
+        auto res = std::make_unique<server_http_res>();
+        res->status = 500;
+        try {
+            json error_data = format_error_response(message, error);
+            res->status = json_value(error_data, "code", 500);
+            res->data = safe_json_to_str({{ "error", error_data }});
+        } catch (...) {
+            res->data = "Internal Server Error";
+        }
+        return res;
+    };
+}
 
 // Combined mode: run server and chatbot together, sharing the model
 static int combined_main(int argc, char **argv, bool verbose) {
@@ -85,19 +119,84 @@ static int combined_main(int argc, char **argv, bool verbose) {
     llama_backend_init();
     llama_numa_init(params.numa);
 
-    // Create server context and load model
+    // Create server context
     server_context ctx_server;
 
-    if (!ctx_server.load_model(params)) {
-        fprintf(stderr, "error: failed to load model\n");
+    // Initialize HTTP server
+    server_http_context ctx_http;
+    if (!ctx_http.init(params)) {
+        fprintf(stderr, "error: failed to initialize HTTP server\n");
         llama_backend_free();
         return 1;
+    }
+
+    // Register API routes
+    server_routes routes(params, ctx_server);
+
+    ctx_http.get ("/health",              ex_wrapper(routes.get_health));
+    ctx_http.get ("/v1/health",           ex_wrapper(routes.get_health));
+    ctx_http.get ("/metrics",             ex_wrapper(routes.get_metrics));
+    ctx_http.get ("/props",               ex_wrapper(routes.get_props));
+    ctx_http.post("/props",               ex_wrapper(routes.post_props));
+    ctx_http.post("/api/show",            ex_wrapper(routes.get_api_show));
+    ctx_http.get ("/models",              ex_wrapper(routes.get_models));
+    ctx_http.get ("/v1/models",           ex_wrapper(routes.get_models));
+    ctx_http.get ("/api/tags",            ex_wrapper(routes.get_models));
+    ctx_http.post("/completion",          ex_wrapper(routes.post_completions));
+    ctx_http.post("/completions",         ex_wrapper(routes.post_completions));
+    ctx_http.post("/v1/completions",      ex_wrapper(routes.post_completions_oai));
+    ctx_http.post("/chat/completions",    ex_wrapper(routes.post_chat_completions));
+    ctx_http.post("/v1/chat/completions", ex_wrapper(routes.post_chat_completions));
+    ctx_http.post("/api/chat",            ex_wrapper(routes.post_chat_completions));
+    ctx_http.post("/v1/responses",        ex_wrapper(routes.post_responses_oai));
+    ctx_http.post("/v1/messages",         ex_wrapper(routes.post_anthropic_messages));
+    ctx_http.post("/v1/messages/count_tokens", ex_wrapper(routes.post_anthropic_count_tokens));
+    ctx_http.post("/infill",              ex_wrapper(routes.post_infill));
+    ctx_http.post("/embedding",           ex_wrapper(routes.post_embeddings));
+    ctx_http.post("/embeddings",          ex_wrapper(routes.post_embeddings));
+    ctx_http.post("/v1/embeddings",       ex_wrapper(routes.post_embeddings_oai));
+    ctx_http.post("/rerank",              ex_wrapper(routes.post_rerank));
+    ctx_http.post("/reranking",           ex_wrapper(routes.post_rerank));
+    ctx_http.post("/v1/rerank",           ex_wrapper(routes.post_rerank));
+    ctx_http.post("/v1/reranking",        ex_wrapper(routes.post_rerank));
+    ctx_http.post("/tokenize",            ex_wrapper(routes.post_tokenize));
+    ctx_http.post("/detokenize",          ex_wrapper(routes.post_detokenize));
+    ctx_http.post("/apply-template",      ex_wrapper(routes.post_apply_template));
+    ctx_http.get ("/lora-adapters",       ex_wrapper(routes.get_lora_adapters));
+    ctx_http.post("/lora-adapters",       ex_wrapper(routes.post_lora_adapters));
+    ctx_http.get ("/slots",               ex_wrapper(routes.get_slots));
+    ctx_http.post("/slots/:id_slot",      ex_wrapper(routes.post_slots));
+
+    // Start HTTP server before loading model (to serve /health during loading)
+    if (!ctx_http.start()) {
+        fprintf(stderr, "error: failed to start HTTP server\n");
+        llama_backend_free();
+        return 1;
+    }
+
+    // Load model
+    if (!ctx_server.load_model(params)) {
+        fprintf(stderr, "error: failed to load model\n");
+        ctx_http.stop();
+        llama_backend_free();
+        return 1;
+    }
+
+    // Update routes metadata now that model is loaded
+    routes.update_meta(ctx_server);
+
+    // Mark server as ready
+    ctx_http.is_ready.store(true);
+
+    if (verbose) {
+        LOG_INF("%s: server is listening on %s\n", __func__, ctx_http.listening_address.c_str());
     }
 
     // Get the shared model pointer from server's context
     llama_context *server_ctx = ctx_server.get_llama_context();
     if (!server_ctx) {
         fprintf(stderr, "error: server context not initialized\n");
+        ctx_http.stop();
         llama_backend_free();
         return 1;
     }
@@ -112,6 +211,7 @@ static int combined_main(int argc, char **argv, bool verbose) {
     int result = chatbot::main_with_model(shared_model, params);
 
     // Cleanup: terminate server and wait for thread
+    ctx_http.stop();
     ctx_server.terminate();
     server_thread.join();
 
@@ -131,11 +231,12 @@ int main(int argc, char **argv) {
     // This also handles GPU initialization via llamafile_early_gpu_init()
     lf::LlamafileArgs args = lf::parse_llamafile_args(argc, argv);
 
-    // Suppress GPU logging unless --verbose was specified
+    // Suppress GPU and backend logging unless --verbose was specified
     // This must happen BEFORE llamafile_has_gpu() which triggers Metal/CUDA init
     if (!args.verbose) {
         llamafile_metal_log_set(llamafile_log_callback_null, NULL);
         llamafile_cuda_log_set(llamafile_log_callback_null, NULL);
+        llama_log_set((ggml_log_callback)llamafile_log_callback_null, NULL);
     }
 
     // For CLI mode, also suppress logo
