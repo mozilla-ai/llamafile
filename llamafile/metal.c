@@ -135,6 +135,13 @@ extern void ggml_backend_register(ggml_backend_reg_t reg);
 // Log callback type (must match ggml_log_callback from ggml.h)
 typedef void (*llamafile_log_callback)(int level, const char *text, void *user_data);
 
+// Pending log callback (set before dylib loads, applied during init)
+static struct {
+    llamafile_log_callback callback;
+    void *user_data;
+    bool is_set;
+} g_metal_pending_log;
+
 // Function pointers for dynamically loaded Metal backend
 static struct MetalBackend {
     bool supported;
@@ -635,6 +642,11 @@ static bool ImportMetalImpl(void) {
     // Build and link Metal support DSO if possible
     if (BuildMetal(dso)) {
         if (LinkMetal(dso)) {
+            // Apply pending log callback before registration triggers GPU init
+            if (g_metal_pending_log.is_set && g_metal.log_set) {
+                g_metal.log_set(g_metal_pending_log.callback, g_metal_pending_log.user_data);
+            }
+
             // Register the Metal backend with GGML
             if (g_metal.backend_metal_reg) {
                 ggml_backend_reg_t reg = g_metal.backend_metal_reg();
@@ -682,8 +694,14 @@ bool ggml_backend_is_metal(ggml_backend_t backend) {
 }
 
 void llamafile_metal_log_set(llamafile_log_callback log_callback, void *user_data) {
-    if (!llamafile_has_metal())
-        return;
-    if (g_metal.log_set)
+    // Store as pending callback - will be applied when dylib loads
+    // This must be set BEFORE llamafile_has_metal() is called
+    g_metal_pending_log.callback = log_callback;
+    g_metal_pending_log.user_data = user_data;
+    g_metal_pending_log.is_set = true;
+
+    // If dylib is already loaded, apply immediately
+    if (g_metal.lib_handle && g_metal.log_set) {
         g_metal.log_set(log_callback, user_data);
+    }
 }

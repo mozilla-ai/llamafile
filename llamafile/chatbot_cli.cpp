@@ -94,21 +94,23 @@ int cli_main(int argc, char **argv) {
     FLAG_verbose = 0;
     FLAG_nologo = 1;
 
+    // Set GPU log callbacks BEFORE GPU init
+    llamafile_metal_log_set(llamafile_log_callback_null, NULL);
+    llamafile_cuda_log_set(llamafile_log_callback_null, NULL);
+
     // Initialize GPU
     llamafile_has_gpu();
-    if (llamafile_has_metal()) {
-        llamafile_metal_log_set(llamafile_log_callback_null, NULL);
-    } else if (llamafile_has_cuda() || llamafile_has_amd_gpu()) {
-        llamafile_cuda_log_set(llamafile_log_callback_null, NULL);
-    }
 
-    // Initialize backend
+    // Fully disable common_log system BEFORE common_init() to prevent build info log
+    // This pauses the log worker thread so LOG_INF calls become no-ops
+    common_log_pause(common_log_main());
+
+    // Set llama log callback to null
+    llama_log_set((ggml_log_callback)llamafile_log_callback_null, NULL);
+
+    // Initialize backend and common
     llama_backend_init();
     common_init();
-
-    // Suppress llama.cpp logging
-    llama_log_set((ggml_log_callback)llamafile_log_callback_null, NULL);
-    common_log_set_verbosity_thold(LOG_LEVEL_ERROR);
 
     // Parse arguments
     if (!common_params_parse(argc, argv, params, LLAMA_EXAMPLE_CLI)) {
