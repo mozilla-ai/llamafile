@@ -70,6 +70,7 @@ extern volatile sig_atomic_t g_got_sigint;
 extern bool g_interrupted_exit;
 extern common_chat_templates_ptr g_chat_templates;
 extern common_chat_parser_params g_chat_syntax;
+extern std::string g_pending_file_content;  // accumulated /upload content awaiting user message
 
 // Original entry point: loads its own model
 int main(int argc, char **argv);

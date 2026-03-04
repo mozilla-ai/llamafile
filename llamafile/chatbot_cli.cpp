@@ -53,34 +53,42 @@ namespace chatbot {
 // Forward declarations from chatbot_repl.cpp
 extern void on_sigint(int sig);
 
-// Helper to apply chat template
-static std::string cli_apply_chat_template(llama_model *model,
-                                           common_chat_templates *templates,
-                                           const common_params &params,
-                                           const char *role,
-                                           const char *content,
-                                           bool add_assistant) {
+// Helper to apply chat template with full control over inputs
+static std::string cli_apply_chat_template_full(llama_model *model,
+                                                common_chat_templates *templates,
+                                                const common_params &params,
+                                                const std::vector<common_chat_msg> &messages,
+                                                bool add_assistant,
+                                                bool enable_thinking) {
     if (templates) {
-        common_chat_msg msg;
-        msg.role = role;
-        msg.content = content;
-        std::vector<common_chat_msg> past_msg;
-        return common_chat_format_single(templates, past_msg, msg, add_assistant, /*use_jinja=*/true);
+        common_chat_templates_inputs inputs;
+        inputs.messages = messages;
+        inputs.use_jinja = true;
+        inputs.add_generation_prompt = add_assistant;
+        inputs.enable_thinking = enable_thinking;
+
+        auto chat_params = common_chat_templates_apply(templates, inputs);
+        return chat_params.prompt;
     }
 
-    // Fallback to heuristic-based template
+    // Fallback to heuristic-based template (doesn't support enable_thinking)
     const char *tmpl = params.chat_template.empty()
                        ? llama_model_chat_template(model, nullptr)
                        : params.chat_template.c_str();
 
-    llama_chat_message chat[] = {{role, content}};
-    int len = llama_chat_apply_template(tmpl, chat, 1, add_assistant, nullptr, 0);
+    // Build llama_chat_message array from messages
+    std::vector<llama_chat_message> chat;
+    for (const auto &msg : messages) {
+        chat.push_back({msg.role.c_str(), msg.content.c_str()});
+    }
+
+    int len = llama_chat_apply_template(tmpl, chat.data(), chat.size(), add_assistant, nullptr, 0);
     if (len < 0) {
         return "";
     }
 
     std::string result(len, '\0');
-    llama_chat_apply_template(tmpl, chat, 1, add_assistant, &result[0], result.size());
+    llama_chat_apply_template(tmpl, chat.data(), chat.size(), add_assistant, &result[0], result.size());
     return result;
 }
 
@@ -165,51 +173,32 @@ int cli_main(int argc, char **argv) {
         chat_templates = common_chat_templates_init(model, params.chat_template);
     }
 
-    // Initialize chat parser for --nothink mode
-    common_chat_parser_params chat_syntax;
-    if (FLAG_nothink && is_chat_model && chat_templates) {
-        // Set up chat parser to detect and filter reasoning content
-        common_chat_msg dummy_msg;
-        dummy_msg.role = "user";
-        dummy_msg.content = "test";
-
-        common_chat_templates_inputs inputs;
-        inputs.messages = {dummy_msg};
-        inputs.use_jinja = true;
-
-        try {
-            auto chat_params = common_chat_templates_apply(chat_templates.get(), inputs);
-            chat_syntax.format = chat_params.format;
-            chat_syntax.thinking_forced_open = chat_params.thinking_forced_open;
-
-            if (!chat_params.parser.empty()) {
-                chat_syntax.parser.load(chat_params.parser);
-            }
-
-            // Enable reasoning extraction
-            chat_syntax.reasoning_format = COMMON_REASONING_FORMAT_DEEPSEEK;
-            chat_syntax.reasoning_in_content = false;
-        } catch (...) {
-            // Fall back to no parsing if template fails
-            FLAG_nothink = false;
-        }
-    } else if (FLAG_nothink && !is_chat_model) {
-        // Can't filter thinking on base models
-        FLAG_nothink = false;
-    }
-
     // Build the prompt
     std::string formatted_prompt;
     const llama_vocab *vocab = llama_model_get_vocab(model);
 
     if (is_chat_model) {
-        // Apply chat template: system prompt (if any) + user message
+        // Build message list
+        std::vector<common_chat_msg> messages;
+
         if (!params.system_prompt.empty()) {
-            formatted_prompt = cli_apply_chat_template(model, chat_templates.get(), params,
-                                                       "system", params.system_prompt.c_str(), false);
+            common_chat_msg sys_msg;
+            sys_msg.role = "system";
+            sys_msg.content = params.system_prompt;
+            messages.push_back(sys_msg);
         }
-        formatted_prompt += cli_apply_chat_template(model, chat_templates.get(), params,
-                                                    "user", params.prompt.c_str(), true);
+
+        common_chat_msg user_msg;
+        user_msg.role = "user";
+        user_msg.content = params.prompt;
+        messages.push_back(user_msg);
+
+        // Apply chat template with enable_thinking based on --nothink flag
+        // When --nothink is set, we tell the template to disable thinking mode
+        // so the model won't produce <think>...</think> output at all
+        bool enable_thinking = !FLAG_nothink;
+        formatted_prompt = cli_apply_chat_template_full(model, chat_templates.get(), params,
+                                                        messages, true, enable_thinking);
     } else {
         // Base model: use prompt as-is
         formatted_prompt = params.prompt;
@@ -253,10 +242,9 @@ int cli_main(int argc, char **argv) {
     sigaction(SIGINT, &sa, &old_sa);
 
     // Generate response
+    // Note: When --nothink is set, enable_thinking=false was passed to the template,
+    // so the model won't produce <think>...</think> output. No parsing needed.
     int n_cur = tokens.size();
-    std::string raw_output;           // For --nothink: accumulates raw output for parsing
-    common_chat_msg prev_msg;         // For --nothink: previous parse state
-    bool use_chat_parser = FLAG_nothink && (chat_syntax.format != COMMON_CHAT_FORMAT_CONTENT_ONLY);
 
     while (n_cur < params.n_ctx) {
         if (g_got_sigint) {
@@ -272,29 +260,10 @@ int cli_main(int argc, char **argv) {
             break;
         }
 
-        if (use_chat_parser) {
-            // --nothink mode: parse output to filter reasoning content
-            std::string token_str = llamafile_token_to_piece(ctx, id, true);
-            raw_output += token_str;
-
-            // Parse incrementally
-            auto msg = common_chat_parse(raw_output, /*is_partial=*/true, chat_syntax);
-            auto diffs = common_chat_msg_diff::compute_diffs(prev_msg, msg);
-
-            // Only output content, skip reasoning
-            for (const auto &diff : diffs) {
-                if (!diff.content_delta.empty()) {
-                    fputs(diff.content_delta.c_str(), stdout);
-                    fflush(stdout);
-                }
-            }
-            prev_msg = msg;
-        } else {
-            // Normal mode: output tokens directly
-            std::string piece = llamafile_token_to_piece(ctx, id, false);
-            fputs(piece.c_str(), stdout);
-            fflush(stdout);
-        }
+        // Output token directly
+        std::string piece = llamafile_token_to_piece(ctx, id, false);
+        fputs(piece.c_str(), stdout);
+        fflush(stdout);
 
         // Evaluate token
         if (llama_decode(ctx, llama_batch_get_one(&id, 1))) {
