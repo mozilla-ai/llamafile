@@ -20,6 +20,7 @@
 #include <cassert>
 #include <vector>
 
+#include "chat.h"
 #include "common.h"  // llama.cpp common (includes llama.h)
 #include "llama.h"   // llamafile wrapper functions
 #include "color.h"
@@ -31,7 +32,7 @@ namespace chatbot {
 
 bool g_manual_mode;
 enum Role g_role = ROLE_USER;
-int g_system_prompt_tokens;
+std::vector<common_chat_msg> g_messages;  // chat message history
 std::vector<int> g_stack;
 std::vector<int> g_undo;
 std::vector<int> g_history;
@@ -152,7 +153,6 @@ static void fix_stack(std::vector<int> *stack) {
 void fix_stacks(void) {
     fix_stack(&g_undo);
     fix_stack(&g_stack);
-    g_system_prompt_tokens = MIN(g_system_prompt_tokens, tokens_used());
 }
 
 static std::vector<int> adjust_stack(int erase_begin, int erase_end,
@@ -250,7 +250,8 @@ void on_context(const std::vector<std::string> &args) {
 }
 
 void on_clear(const std::vector<std::string> &args) {
-    rewind(g_system_prompt_tokens);
+    rewind(0);
+    g_messages.clear();
     g_stack.clear();
     fix_stacks();
 }

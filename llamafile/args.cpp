@@ -42,6 +42,14 @@ LlamafileArgs parse_llamafile_args(int argc, char** argv) {
     // This reads --gpu and -ngl flags to set FLAG_gpu
     llamafile_early_gpu_init(argv);
 
+    // Capture -p/--prompt value before filtering (needed for combined mode
+    // where SERVER parsing excludes -p)
+    for (int i = 0; i < argc; ++i) {
+        if ((strcmp(argv[i], "-p") == 0 || strcmp(argv[i], "--prompt") == 0) && i + 1 < argc) {
+            args.system_prompt = argv[i + 1];
+        }
+    }
+
     // Determine execution mode from flags
     // Priority: explicit flags override defaults
     if (llamafile_has(argv, "--server")) {

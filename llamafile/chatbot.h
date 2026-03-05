@@ -62,7 +62,7 @@ extern mtmd_context *g_mtmd;          // multimodal context (replaces g_clip)
 extern enum Role g_role;
 extern common_params *g_params;       // pointer to params (replaces gpt_params)
 extern common_sampler *g_sampler;     // sampler context (new)
-extern int g_system_prompt_tokens;
+extern std::vector<common_chat_msg> g_messages;  // chat message history
 extern llama_context *g_ctx;
 extern llama_model *g_model;
 extern std::vector<int> g_history;

@@ -89,13 +89,18 @@ static server_http_context::handler_t ex_wrapper(server_http_context::handler_t 
 }
 
 // Combined mode: run server and chatbot together, sharing the model
-static int combined_main(int argc, char **argv) {
+static int combined_main(const LlamafileArgs &args) {
     common_params params;
 
     // Parse parameters (using SERVER example type for full server options)
-    if (!common_params_parse(argc, argv, params, LLAMA_EXAMPLE_SERVER)) {
+    if (!common_params_parse(args.llama_argc, args.llama_argv, params, LLAMA_EXAMPLE_SERVER)) {
         fprintf(stderr, "error: failed to parse arguments\n");
         return 1;
+    }
+
+    // Apply system prompt captured from -p (SERVER mode parsing excludes -p)
+    if (!args.system_prompt.empty()) {
+        params.prompt = args.system_prompt;
     }
 
     // Handle n_parallel auto-selection (server sets -1 for "auto")
@@ -263,7 +268,7 @@ int main(int argc, char **argv) {
 
         case lf::ProgramMode::AUTO:
             // Combined mode: chat + server sharing model
-            return lf::combined_main(args.llama_argc, args.llama_argv);
+            return lf::combined_main(args);
     }
 
     return 1;

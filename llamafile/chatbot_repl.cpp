@@ -39,79 +39,6 @@ bool g_said_something;
 char g_last_printed_char;
 volatile sig_atomic_t g_got_sigint;
 
-// Track pending system prompt (deferred until first user message)
-static bool g_system_prompt_pending = false;
-static std::string g_pending_system_prompt;
-
-// Helper to apply chat template for system+user messages together
-// This avoids template validation errors in models like Qwen3.5 that
-// require user messages to be present when applying the template.
-static std::string apply_chat_template_with_system(const char *system_content,
-                                                    const char *user_role,
-                                                    const char *user_content,
-                                                    bool add_assistant) {
-    if (g_chat_templates) {
-        common_chat_templates_inputs inputs;
-        inputs.use_jinja = true;
-        inputs.add_generation_prompt = add_assistant;
-
-        common_chat_msg sys_msg;
-        sys_msg.role = "system";
-        sys_msg.content = system_content;
-        inputs.messages.push_back(sys_msg);
-
-        common_chat_msg user_msg;
-        user_msg.role = user_role;
-        user_msg.content = user_content;
-        inputs.messages.push_back(user_msg);
-
-        auto chat_params = common_chat_templates_apply(g_chat_templates.get(), inputs);
-        return chat_params.prompt;
-    }
-
-    // Fallback to heuristic-based template
-    const char *tmpl = g_params->chat_template.empty()
-                       ? llama_model_chat_template(g_model, nullptr)
-                       : g_params->chat_template.c_str();
-
-    llama_chat_message chat[] = {{"system", system_content}, {user_role, user_content}};
-    int len = llama_chat_apply_template(tmpl, chat, 2, add_assistant, nullptr, 0);
-    if (len < 0) {
-        return "";
-    }
-
-    std::string result(len, '\0');
-    llama_chat_apply_template(tmpl, chat, 2, add_assistant, &result[0], result.size());
-    return result;
-}
-
-// Helper to apply chat template using Jinja-based templates
-static std::string apply_chat_template(const char *role, const char *content, bool add_assistant) {
-    // Use the properly initialized Jinja-based chat templates if available
-    if (g_chat_templates) {
-        common_chat_msg msg;
-        msg.role = role;
-        msg.content = content;
-        std::vector<common_chat_msg> past_msg;  // empty for single message
-        return common_chat_format_single(g_chat_templates.get(), past_msg, msg, add_assistant, /*use_jinja=*/true);
-    }
-
-    // Fallback to heuristic-based template if Jinja templates not available
-    const char *tmpl = g_params->chat_template.empty()
-                       ? llama_model_chat_template(g_model, nullptr)
-                       : g_params->chat_template.c_str();
-
-    llama_chat_message chat[] = {{role, content}};
-    int len = llama_chat_apply_template(tmpl, chat, 1, add_assistant, nullptr, 0);
-    if (len < 0) {
-        return "";
-    }
-
-    std::string result(len, '\0');
-    llama_chat_apply_template(tmpl, chat, 1, add_assistant, &result[0], result.size());
-    return result;
-}
-
 void on_sigint(int sig) {
     g_got_sigint = 1;
 }
@@ -188,25 +115,24 @@ void repl() {
         g_params->prompt = "";
 
     // setup system prompt
-    // For chat models, we defer evaluation until the first user message arrives.
-    // This ensures the template is applied with both system and user messages together,
-    // which is required by some models (e.g., Qwen3.5) that validate message structure.
     if (!g_params->prompt.empty()) {
         if (is_base_model()) {
-            // Base models: evaluate system prompt immediately (no template validation)
+            // Base models: evaluate system prompt directly (no template)
             print_ephemeral("loading system prompt...");
             std::string msg = g_params->prompt;
             if (!eval_string(msg, DONT_ADD_SPECIAL, PARSE_SPECIAL))
                 exit(6);
             llama_synchronize(g_ctx);
-            g_system_prompt_tokens = tokens_used();
             clear_ephemeral();
         } else {
-            // Chat models: store system prompt for deferred evaluation
-            g_system_prompt_pending = true;
-            g_pending_system_prompt = g_params->prompt;
+            // Chat models: add system prompt to messages array
+            // It will be formatted with common_chat_format_single() on first user message
+            common_chat_msg sys_msg;
+            sys_msg.role = "system";
+            sys_msg.content = g_params->prompt;
+            g_messages.push_back(sys_msg);
         }
-        // Display system prompt at startup (regardless of when it's evaluated)
+        // Display system prompt at startup
         if (g_params->display_prompt)
             printf("%s\n", g_params->prompt.c_str());
     }
@@ -271,27 +197,30 @@ void repl() {
             user_content = line;
         }
 
+        // Build the message
+        common_chat_msg user_msg;
+        user_msg.role = get_role_name(g_role);
+        user_msg.content = user_content;
+
+        // Format message using template
         std::string msg;
         if (is_base_model()) {
             msg = user_content;
-        } else if (g_system_prompt_pending) {
-            // First user message with pending system prompt:
-            // Format both together to satisfy template validation requirements
-            msg = apply_chat_template_with_system(g_pending_system_prompt.c_str(),
-                                                   get_role_name(g_role), user_content.c_str(), add_assi);
         } else {
-            msg = apply_chat_template(get_role_name(g_role), user_content.c_str(), add_assi);
+            // Use common_chat_format_single which handles past messages (including system prompt)
+            msg = common_chat_format_single(g_chat_templates.get(), g_messages, user_msg, add_assi, /*use_jinja=*/true);
         }
+
         if (!eval_string(msg, DONT_ADD_SPECIAL, PARSE_SPECIAL)) {
             rewind(tokens_used_before);
             continue;
         }
-        // Clear pending system prompt flag after successful eval
-        if (g_system_prompt_pending) {
-            g_system_prompt_tokens = tokens_used_before;
-            g_system_prompt_pending = false;
-            g_pending_system_prompt.clear();
+
+        // Track message in history
+        if (!is_base_model()) {
+            g_messages.push_back(user_msg);
         }
+
         if (g_manual_mode) {
             g_role = get_next_role(g_role);
             free(line);
@@ -299,7 +228,8 @@ void repl() {
         }
         // Check if we should use chat parsing (for think mode models like gpt-oss)
         const bool use_chat_parser = g_chat_syntax.format != COMMON_CHAT_FORMAT_CONTENT_ONLY;
-        std::string raw_output;           // Accumulates raw token output
+        std::string raw_output;           // Accumulates raw token output (for chat parsing)
+        std::string assistant_content;    // Accumulates assistant response content
         common_chat_msg prev_msg;         // Previous parse result for diff computation
         bool in_reasoning = false;        // Track if we're currently in reasoning mode
 
@@ -350,6 +280,7 @@ void repl() {
                             print("\n\n");  // Add newline between reasoning and content
                             in_reasoning = false;
                         }
+                        assistant_content += diff.content_delta;
                         std::string s;
                         bleeder.feed(&s, diff.content_delta);
                         print(s);
@@ -361,6 +292,7 @@ void repl() {
             } else {
                 // No chat parsing - direct output
                 std::string token_str = token_to_piece(g_ctx, id, g_params->special);
+                assistant_content += token_str;
                 std::string s;
                 bleeder.feed(&s, token_str);
                 print(s);
@@ -371,6 +303,14 @@ void repl() {
         // End reasoning mode if still active
         if (in_reasoning) {
             print(UNBOLD);
+        }
+
+        // Track assistant response in message history
+        if (!is_base_model() && !assistant_content.empty()) {
+            common_chat_msg asst_msg;
+            asst_msg.role = "assistant";
+            asst_msg.content = assistant_content;
+            g_messages.push_back(asst_msg);
         }
 
         g_got_sigint = 0;
