@@ -17,6 +17,8 @@
 
 #pragma once
 
+#include <string>
+
 namespace lf {
 
 // Program execution modes
@@ -34,6 +36,10 @@ struct LlamafileArgs {
     // Filtered argc/argv for llama.cpp (excludes llamafile-specific args)
     int llama_argc = 0;
     char** llama_argv = nullptr;
+
+    // System prompt captured from -p (needed for combined mode where SERVER
+    // parsing excludes -p)
+    std::string system_prompt;
 
     // Note: Llamafile-specific flags are stored in FLAG_* globals (llamafile.h):
     //   --verbose  -> FLAG_verbose

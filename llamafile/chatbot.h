@@ -62,7 +62,7 @@ extern mtmd_context *g_mtmd;          // multimodal context (replaces g_clip)
 extern enum Role g_role;
 extern common_params *g_params;       // pointer to params (replaces gpt_params)
 extern common_sampler *g_sampler;     // sampler context (new)
-extern int g_system_prompt_tokens;
+extern std::vector<common_chat_msg> g_messages;  // chat message history
 extern llama_context *g_ctx;
 extern llama_model *g_model;
 extern std::vector<int> g_history;
@@ -70,6 +70,7 @@ extern volatile sig_atomic_t g_got_sigint;
 extern bool g_interrupted_exit;
 extern common_chat_templates_ptr g_chat_templates;
 extern common_chat_parser_params g_chat_syntax;
+extern std::string g_pending_file_content;  // accumulated /upload content awaiting user message
 
 // Original entry point: loads its own model
 int main(int argc, char **argv);

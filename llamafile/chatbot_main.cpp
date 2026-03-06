@@ -58,6 +58,7 @@ llama_model *g_model = nullptr;
 llama_context *g_ctx = nullptr;
 common_chat_templates_ptr g_chat_templates;  // chat template handler
 common_chat_parser_params g_chat_syntax;            // chat syntax for parsing
+std::string g_pending_file_content;                 // accumulated /upload content awaiting user message
 
 // Static storage for params
 static common_params s_params;
@@ -233,9 +234,19 @@ int main(int argc, char **argv) {
             dummy_msg.role = "user";
             dummy_msg.content = "test";
 
+            // Check if the template supports enable_thinking (like llama.cpp server does).
+            // This is needed for models like Qwen3.5 that check enable_thinking in their
+            // template - without this, the template outputs a closed thinking block.
+            bool supports_thinking = common_chat_templates_support_enable_thinking(g_chat_templates.get());
+
             common_chat_templates_inputs inputs;
             inputs.messages = {dummy_msg};
             inputs.use_jinja = true;
+            inputs.enable_thinking = supports_thinking;
+            // CRITICAL: Set reasoning_format BEFORE applying templates. The PEG parser
+            // is built during common_chat_templates_apply() and checks this value to
+            // decide whether to include reasoning extraction in the grammar.
+            inputs.reasoning_format = COMMON_REASONING_FORMAT_DEEPSEEK;
 
             try {
                 auto chat_params = common_chat_templates_apply(g_chat_templates.get(), inputs);
@@ -247,9 +258,7 @@ int main(int argc, char **argv) {
                     g_chat_syntax.parser.load(chat_params.parser);
                 }
 
-                // Enable reasoning extraction for all chat models, like llama.cpp CLI/server does.
-                // Parsers handle models without think mode gracefully - if there's no <think> or
-                // similar tags in the output, no reasoning gets extracted.
+                // Copy reasoning format to chat syntax for use by the parser at runtime
                 g_chat_syntax.reasoning_format = COMMON_REASONING_FORMAT_DEEPSEEK;
                 g_chat_syntax.reasoning_in_content = false;
 
@@ -399,9 +408,19 @@ int main_with_model(llama_model *model, const common_params &params) {
             dummy_msg.role = "user";
             dummy_msg.content = "test";
 
+            // Check if the template supports enable_thinking (like llama.cpp server does).
+            // This is needed for models like Qwen3.5 that check enable_thinking in their
+            // template - without this, the template outputs a closed thinking block.
+            bool supports_thinking = common_chat_templates_support_enable_thinking(g_chat_templates.get());
+
             common_chat_templates_inputs inputs;
             inputs.messages = {dummy_msg};
             inputs.use_jinja = true;
+            inputs.enable_thinking = supports_thinking;
+            // CRITICAL: Set reasoning_format BEFORE applying templates. The PEG parser
+            // is built during common_chat_templates_apply() and checks this value to
+            // decide whether to include reasoning extraction in the grammar.
+            inputs.reasoning_format = COMMON_REASONING_FORMAT_DEEPSEEK;
 
             try {
                 auto chat_params = common_chat_templates_apply(g_chat_templates.get(), inputs);
@@ -412,6 +431,7 @@ int main_with_model(llama_model *model, const common_params &params) {
                     g_chat_syntax.parser.load(chat_params.parser);
                 }
 
+                // Copy reasoning format to chat syntax for use by the parser at runtime
                 g_chat_syntax.reasoning_format = COMMON_REASONING_FORMAT_DEEPSEEK;
                 g_chat_syntax.reasoning_in_content = false;
 

@@ -77,6 +77,12 @@ MODIFIED_FILES=$(git status -s | grep '^ M\|^M ' | awk '{print $2}')
 # Get new/untracked files
 NEW_FILES=$(git status -s | grep '^??\|^A ' | awk '{print $2}')
 
+# BUILD.mk is always present in submodules but may be gitignored on case-insensitive
+# filesystems (macOS). Ensure it's included if it exists.
+if [ -f "BUILD.mk" ] && ! echo "$NEW_FILES" | grep -q '^BUILD\.mk$'; then
+    NEW_FILES="$NEW_FILES BUILD.mk"
+fi
+
 # --- Process Modified Files (create patches) ---
 if [ -n "$MODIFIED_FILES" ]; then
     echo ""

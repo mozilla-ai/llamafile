@@ -12,18 +12,22 @@ diff --git a/ggml/src/gguf.cpp b/ggml/src/gguf.cpp
  #include <cinttypes>
  #include <cstddef>
  #include <cstdint>
-@@ -284,14 +288,103 @@ struct gguf_reader {
-     bool read(void * dst, const size_t size) const {
-         return fread(dst, 1, size, file) == size;
+@@ -358,18 +362,107 @@ struct gguf_reader {
+         return nread == size;
      }
-+
+ 
 +    size_t tell() const {
-+        return ftell(file);
++        return gguf_ftell(file);
 +    }
 +
 +    bool seek(size_t offset, int whence) const {
-+        return fseek(file, offset, whence) == 0;
++        return gguf_fseek(file, offset, whence) == 0;
 +    }
++
+ private:
+     FILE * file;
+ 
+     mutable uint64_t nbytes_remain;
  };
  
 +#ifdef COSMOCC
@@ -118,7 +122,7 @@ diff --git a/ggml/src/gguf.cpp b/ggml/src/gguf.cpp
      if (is_array) {
          std::vector<T> value;
          try {
-@@ -316,8 +409,8 @@ bool gguf_read_emplace_helper(const struct gguf_reader & gr, std::vector<struct
+@@ -394,8 +487,8 @@ bool gguf_read_emplace_helper(const struct gguf_reader & gr, std::vector<struct
      return true;
  }
  
@@ -129,11 +133,11 @@ diff --git a/ggml/src/gguf.cpp b/ggml/src/gguf.cpp
      struct gguf_context * ctx = new gguf_context;
  
      bool ok = true;
-@@ -618,14 +711,14 @@ struct gguf_context * gguf_init_from_file_impl(FILE * file, struct gguf_init_par
+@@ -696,14 +789,14 @@ struct gguf_context * gguf_init_from_file_impl(FILE * file, struct gguf_init_par
      GGML_ASSERT(int64_t(ctx->info.size()) == n_tensors);
  
      // we require the data section to be aligned, so take into account any padding
--    if (fseek(file, GGML_PAD(ftell(file), ctx->alignment), SEEK_SET) != 0) {
+-    if (gguf_fseek(file, GGML_PAD(gguf_ftell(file), ctx->alignment), SEEK_SET) != 0) {
 +    if (!gr.seek(GGML_PAD(gr.tell(), ctx->alignment), SEEK_SET)) {
          GGML_LOG_ERROR("%s: failed to seek to beginning of data section\n", __func__);
          gguf_free(ctx);
@@ -141,12 +145,12 @@ diff --git a/ggml/src/gguf.cpp b/ggml/src/gguf.cpp
      }
  
      // store the current file offset - this is where the data section starts
--    ctx->offset = ftell(file);
+-    ctx->offset = gguf_ftell(file);
 +    ctx->offset = gr.tell();
  
      // compute the total size of the data section, taking into account the alignment
      {
-@@ -738,7 +831,27 @@ struct gguf_context * gguf_init_from_file_impl(FILE * file, struct gguf_init_par
+@@ -840,7 +933,27 @@ struct gguf_context * gguf_init_from_file_impl(FILE * file, struct gguf_init_par
      return ctx;
  }
  
@@ -174,7 +178,7 @@ diff --git a/ggml/src/gguf.cpp b/ggml/src/gguf.cpp
      FILE * file = ggml_fopen(fname, "rb");
  
      if (!file) {
-@@ -749,6 +862,7 @@ struct gguf_context * gguf_init_from_file(const char * fname, struct gguf_init_p
+@@ -851,6 +964,7 @@ struct gguf_context * gguf_init_from_file(const char * fname, struct gguf_init_p
      struct gguf_context * result = gguf_init_from_file_impl(file, params);
      fclose(file);
      return result;
