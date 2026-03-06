@@ -44,6 +44,8 @@ LlamafileArgs parse_llamafile_args(int argc, char** argv) {
 
     // Capture -p/--prompt value before filtering (needed for combined mode
     // where SERVER parsing excludes -p)
+    // Note: Loop does not break early; if multiple -p flags are given,
+    // the last occurrence wins (intentional for override flexibility)
     for (int i = 0; i < argc; ++i) {
         if ((strcmp(argv[i], "-p") == 0 || strcmp(argv[i], "--prompt") == 0) && i + 1 < argc) {
             args.system_prompt = argv[i + 1];

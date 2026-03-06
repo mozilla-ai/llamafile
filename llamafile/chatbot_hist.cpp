@@ -252,6 +252,7 @@ void on_context(const std::vector<std::string> &args) {
 void on_clear(const std::vector<std::string> &args) {
     rewind(0);
     g_messages.clear();
+    g_pending_file_content.clear();
     g_stack.clear();
     fix_stacks();
 }

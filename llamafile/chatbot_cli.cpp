@@ -98,6 +98,8 @@ static cli_chat_template_result cli_apply_chat_template_full(llama_model *model,
                        : params.chat_template.c_str();
 
     // Build llama_chat_message array from messages
+    // Note: c_str() pointers remain valid because messages vector is not modified
+    // until after llama_chat_apply_template() completes
     std::vector<llama_chat_message> chat;
     for (const auto &msg : messages) {
         chat.push_back({msg.role.c_str(), msg.content.c_str()});
