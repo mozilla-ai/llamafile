@@ -35,32 +35,6 @@ static bool has_binary(const std::string_view s) {
     return s.find('\0') != std::string_view::npos;
 }
 
-// Helper to apply chat template for a single system message
-static std::string apply_system_template(const std::string &content) {
-    // Use the properly initialized Jinja-based chat templates if available
-    if (g_chat_templates) {
-        common_chat_msg msg;
-        msg.role = "system";
-        msg.content = content;
-        std::vector<common_chat_msg> past_msg;  // empty for single message
-        return common_chat_format_single(g_chat_templates.get(), past_msg, msg, false, /*use_jinja=*/true);
-    }
-
-    // Fallback to heuristic-based template if Jinja templates not available
-    const char *tmpl = g_params->chat_template.empty()
-                       ? llama_model_chat_template(g_model, nullptr)
-                       : g_params->chat_template.c_str();
-
-    llama_chat_message chat[] = {{"system", content.c_str()}};
-    int len = llama_chat_apply_template(tmpl, chat, 1, false, nullptr, 0);
-    if (len < 0) {
-        return "";
-    }
-
-    std::string result(len, '\0');
-    llama_chat_apply_template(tmpl, chat, 1, false, &result[0], result.size());
-    return result;
-}
 
 void on_upload(const std::vector<std::string> &args) {
     if (args.size() < 2) {
@@ -79,7 +53,6 @@ void on_upload(const std::vector<std::string> &args) {
         err("%s: file does not exist", path);
         return;
     }
-    int tokens_used_before = tokens_used();
     std::string content;
     if (!slurp(&content, path)) {
         err("%s: failed to slurp file", path);
@@ -111,17 +84,13 @@ void on_upload(const std::vector<std::string> &args) {
             markdown += '\n';
         markdown += "``````";
     }
-    std::string formatted = apply_system_template(markdown);
-    if (formatted.empty()) {
-        err("failed to apply chat template");
-        rewind(tokens_used_before);
-        return;
+    // Store content for inclusion with next user message.
+    // This avoids template validation errors in models like Qwen3.5 that
+    // require user messages to be present when applying the template.
+    if (!g_pending_file_content.empty()) {
+        g_pending_file_content += "\n\n";
     }
-    if (!eval_string(formatted, DONT_ADD_SPECIAL, PARSE_SPECIAL)) {
-        rewind(tokens_used_before);
-        return;
-    }
-    llama_synchronize(g_ctx);
+    g_pending_file_content += markdown;
 }
 
 } // namespace chatbot

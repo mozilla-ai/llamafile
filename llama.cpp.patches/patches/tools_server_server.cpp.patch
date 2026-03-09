@@ -1,7 +1,7 @@
 diff --git a/tools/server/server.cpp b/tools/server/server.cpp
 --- a/llama.cpp/tools/server/server.cpp
 +++ b/llama.cpp/tools/server/server.cpp
-@@ -16,6 +16,11 @@
+@@ -17,6 +17,11 @@
  #include <windows.h>
  #endif
  
@@ -13,18 +13,18 @@ diff --git a/tools/server/server.cpp b/tools/server/server.cpp
  static std::function<void(int)> shutdown_handler;
  static std::atomic_flag is_terminating = ATOMIC_FLAG_INIT;
  
-@@ -66,7 +71,8 @@ static server_http_context::handler_t ex_wrapper(server_http_context::handler_t
+@@ -67,7 +72,8 @@ static server_http_context::handler_t ex_wrapper(server_http_context::handler_t
      };
  }
  
 -int main(int argc, char ** argv) {
 +// Core server logic - can be called from llamafile main.cpp or standalone main()
 +int server_main(int argc, char ** argv) {
-     // own arguments required by this example
-     common_params params;
+     std::setlocale(LC_NUMERIC, "C");
  
-@@ -95,6 +101,10 @@ int main(int argc, char ** argv) {
-         params.model_alias = params.model.name;
+     // own arguments required by this example
+@@ -98,6 +104,10 @@ int main(int argc, char ** argv) {
+         params.model_alias.insert(params.model.name);
      }
  
 +#ifdef COSMOCC
@@ -34,7 +34,7 @@ diff --git a/tools/server/server.cpp b/tools/server/server.cpp
      common_init();
  
      // struct that contains llama context and inference
-@@ -318,5 +328,43 @@ int main(int argc, char ** argv) {
+@@ -322,5 +332,43 @@ int main(int argc, char ** argv) {
          }
      }
  
@@ -48,7 +48,7 @@ diff --git a/tools/server/server.cpp b/tools/server/server.cpp
 +#else
      return 0;
 +#endif
-+}
+ }
 +
 +// Standalone entry point for llama-server executable
 +// Not compiled when building as part of llamafile TUI (which has its own main)
@@ -76,6 +76,5 @@ diff --git a/tools/server/server.cpp b/tools/server/server.cpp
 +    }
 +#endif
 +    return server_main(argc, argv);
- }
++}
 +#endif
-\ No newline at end of file
