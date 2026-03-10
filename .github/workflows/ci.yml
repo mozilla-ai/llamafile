@@ -56,13 +56,13 @@ jobs:
           tinyllama.gguf
           ...
           EoF
-          cp o//llama.cpp/main/main \
+          cp o//llamafile/llamafile \
             tinyllama.llamafile
-          o//llamafile/zipalign -j0 \
+          o//third_party/zipalign/zipalign -j0 \
             tinyllama.llamafile \
             tinyllama.gguf \
             .args
 
-      - name: Execute LLM CLI CPU  # GA doesn't have "support_simdgroup_reduction" for RMS_NORM :'(
+      - name: Execute LLM CLI CPU
         run: |
-          ./tinyllama.llamafile -e -p '## Famous Speech\n\nFour score and seven' -n 50 -ngl 0
+          ./tinyllama.llamafile --cli -p '## Famous Speech\n\nFour score and seven'

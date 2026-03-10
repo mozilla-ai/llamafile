@@ -7,70 +7,17 @@ extern "C" {
 #endif
 
 // =============================================================================
-// FLAGS - Global configuration variables
-// Most are defined in llamafile.c but only a few are actively used:
-//   USED: FLAG_nologo (chatbot_main.cpp), FLAG_log_disable (chatbot_comm.cpp),
-//         FLAG_gpu (internal, llamafile.c)
-//   UNUSED: All others - kept for potential future use or server integration
+// FLAGS - Global configuration variables (defined in llamafile.c)
 // =============================================================================
 
-extern bool FLAGS_READY;                  // UNUSED: not referenced
-extern bool FLAG_ascii;                   // UNUSED: not referenced
-extern bool FLAG_completion_mode;         // UNUSED: not referenced
-extern bool FLAG_fast;                    // UNUSED: not referenced
-extern bool FLAG_iq;                      // UNUSED: not referenced
-extern bool FLAG_log_disable;             // USED: chatbot_comm.cpp
-extern bool FLAG_mlock;                   // UNUSED: not referenced
-extern bool FLAG_mmap;                    // UNUSED: not referenced
-extern bool FLAG_no_display_prompt;       // UNUSED: not referenced
-extern bool FLAG_nocompile;               // UNUSED: not referenced
-extern bool FLAG_nologo;                  // USED: chatbot_main.cpp
-extern bool FLAG_precise;                 // UNUSED: not referenced
-extern bool FLAG_recompile;               // UNUSED: not referenced
-extern bool FLAG_tinyblas;                // UNUSED: not referenced
-extern bool FLAG_trace;                   // UNUSED: not referenced
-extern bool FLAG_trap;                    // UNUSED: not referenced
-extern bool FLAG_unsecure;                // UNUSED: not referenced
-extern bool FLAG_v2;                      // UNUSED: not referenced
-extern const char *FLAG_chat_template;    // UNUSED: not referenced
-extern const char *FLAG_db;               // UNUSED: not referenced
-extern const char *FLAG_db_startup_sql;   // UNUSED: not referenced
-extern const char *FLAG_file;             // UNUSED: not referenced
-extern const char *FLAG_ip_header;        // UNUSED: not referenced
-extern const char *FLAG_listen;           // UNUSED: not referenced
-extern const char *FLAG_mmproj;           // UNUSED: not referenced
-extern const char *FLAG_model;            // UNUSED: not referenced
-extern const char *FLAG_prompt;           // UNUSED: not referenced
-extern const char *FLAG_url_prefix;       // UNUSED: not referenced
-extern const char *FLAG_www_root;         // UNUSED: not referenced
-extern double FLAG_token_rate;            // UNUSED: not referenced
-extern float FLAG_decay_growth;           // UNUSED: not referenced
-extern float FLAG_frequency_penalty;      // UNUSED: not referenced
-extern float FLAG_presence_penalty;       // UNUSED: not referenced
-extern float FLAG_reserve_tokens;         // UNUSED: not referenced
-extern float FLAG_temperature;            // UNUSED: not referenced
-extern float FLAG_top_p;                  // UNUSED: not referenced
-extern int FLAG_batch;                    // UNUSED: not referenced
-extern int FLAG_ctx_size;                 // UNUSED: not referenced
-extern int FLAG_decay_delay;              // UNUSED: not referenced
-extern int FLAG_flash_attn;               // UNUSED: not referenced
-extern int FLAG_gpu;                      // USED: internal (llamafile.c)
-extern int FLAG_http_ibuf_size;           // UNUSED: not referenced
-extern int FLAG_http_obuf_size;           // UNUSED: not referenced
-extern int FLAG_keepalive;                // UNUSED: not referenced
-extern int FLAG_main_gpu;                 // UNUSED: not referenced
-extern int FLAG_n_gpu_layers;             // UNUSED: not referenced
-extern int FLAG_slots;                    // UNUSED: not referenced
-extern int FLAG_split_mode;               // UNUSED: not referenced
-extern int FLAG_threads;                  // UNUSED: not referenced
-extern int FLAG_threads_batch;            // UNUSED: not referenced
-extern int FLAG_token_burst;              // UNUSED: not referenced
-extern int FLAG_token_cidr;               // UNUSED: not referenced
-extern int FLAG_ubatch;                   // UNUSED: not referenced
-extern int FLAG_verbose;                  // UNUSED: not referenced
-extern int FLAG_warmup;                   // UNUSED: not referenced
-extern int FLAG_workers;                  // UNUSED: not referenced
-extern unsigned FLAG_seed;                // UNUSED: not referenced
+extern bool FLAG_log_disable;   // Disables logging (chatbot_comm.cpp)
+extern bool FLAG_nocompile;     // Disables GPU library compilation (metal.c)
+extern bool FLAG_nologo;        // Suppresses logo display (chatbot_main.cpp)
+extern bool FLAG_nothink;       // Filters thinking/reasoning content (chatbot_cli.cpp)
+extern bool FLAG_precise;       // Forces precise math in tinyblas (tinyblas_cpu.h)
+extern bool FLAG_recompile;     // Forces GPU library recompilation (metal.c)
+extern int FLAG_gpu;            // GPU backend selection (llamafile.c, metal.c, cuda.c)
+extern int FLAG_verbose;        // Verbose output (chatbot_main.cpp, metal.c, cuda.c)
 
 // =============================================================================
 // File I/O - GGUF file handling with zip support

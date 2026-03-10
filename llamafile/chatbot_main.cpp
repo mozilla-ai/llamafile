@@ -58,13 +58,18 @@ llama_model *g_model = nullptr;
 llama_context *g_ctx = nullptr;
 common_chat_templates_ptr g_chat_templates;  // chat template handler
 common_chat_parser_params g_chat_syntax;            // chat syntax for parsing
+std::string g_pending_file_content;                 // accumulated /upload content awaiting user message
 
 // Static storage for params
 static common_params s_params;
 
+// Track whether we own the model (for cleanup)
+static bool g_owns_model = true;
+
 std::string describe_compute(void) {
     // Check if using GPU based on params
-    if (g_params && g_params->n_gpu_layers > 0 && llamafile_has_gpu()) {
+    // n_gpu_layers > 0 means explicitly enabled, < 0 means "auto" (use GPU if available)
+    if (g_params && g_params->n_gpu_layers != 0 && llamafile_has_gpu()) {
         if (llamafile_has_metal()) {
             return "Apple Metal GPU";
         } else {
@@ -104,9 +109,8 @@ int main(int argc, char **argv) {
     // print logo
     logo(argv);
 
-    // Check if verbose mode is requested (must be set before Metal init)
-    bool verbose = llamafile_has(argv, "--verbose");
-    FLAG_verbose = verbose ? 1 : 0;
+    // FLAG_verbose is set by parse_llamafile_args() in args.cpp
+    bool verbose = FLAG_verbose;
 
     // Initialize params with defaults
     g_params = &s_params;
@@ -230,9 +234,19 @@ int main(int argc, char **argv) {
             dummy_msg.role = "user";
             dummy_msg.content = "test";
 
+            // Check if the template supports enable_thinking (like llama.cpp server does).
+            // This is needed for models like Qwen3.5 that check enable_thinking in their
+            // template - without this, the template outputs a closed thinking block.
+            bool supports_thinking = common_chat_templates_support_enable_thinking(g_chat_templates.get());
+
             common_chat_templates_inputs inputs;
             inputs.messages = {dummy_msg};
             inputs.use_jinja = true;
+            inputs.enable_thinking = supports_thinking;
+            // CRITICAL: Set reasoning_format BEFORE applying templates. The PEG parser
+            // is built during common_chat_templates_apply() and checks this value to
+            // decide whether to include reasoning extraction in the grammar.
+            inputs.reasoning_format = COMMON_REASONING_FORMAT_DEEPSEEK;
 
             try {
                 auto chat_params = common_chat_templates_apply(g_chat_templates.get(), inputs);
@@ -244,9 +258,7 @@ int main(int argc, char **argv) {
                     g_chat_syntax.parser.load(chat_params.parser);
                 }
 
-                // Enable reasoning extraction for all chat models, like llama.cpp CLI/server does.
-                // Parsers handle models without think mode gracefully - if there's no <think> or
-                // similar tags in the output, no reasoning gets extracted.
+                // Copy reasoning format to chat syntax for use by the parser at runtime
                 g_chat_syntax.reasoning_format = COMMON_REASONING_FORMAT_DEEPSEEK;
                 g_chat_syntax.reasoning_in_content = false;
 
@@ -295,13 +307,180 @@ int main(int argc, char **argv) {
     llama_free(g_ctx);
     clear_ephemeral();
 
-    print_ephemeral("freeing model...");
-    llama_model_free(g_model);
+    // Only free the model if we own it
+    if (g_owns_model) {
+        print_ephemeral("freeing model...");
+        llama_model_free(g_model);
+        clear_ephemeral();
+
+        print_ephemeral("freeing backend...");
+        llama_backend_free();
+        clear_ephemeral();
+    }
+
+    return 0;
+}
+
+// Entry point for combined mode: uses a shared model
+// The caller is responsible for:
+// - Initializing llama_backend
+// - Loading the model
+// - Freeing the model and backend after this returns
+int main_with_model(llama_model *model, const common_params &params) {
+    signal(SIGPIPE, SIG_IGN);
+
+    // Use the provided model (we don't own it)
+    g_model = model;
+    g_owns_model = false;
+
+    // Copy params to static storage
+    s_params = params;
+    g_params = &s_params;
+
+    // Set default prompt if not provided
+    if (g_params->prompt.empty()) {
+        g_params->prompt = DEFAULT_SYSTEM_PROMPT;
+    }
+
+    // Adjust context size
+    if (g_params->n_ctx <= 0 || g_params->n_ctx > (int)llama_model_n_ctx_train(g_model))
+        g_params->n_ctx = llama_model_n_ctx_train(g_model);
+    if (g_params->n_ctx < g_params->n_batch)
+        g_params->n_batch = g_params->n_ctx;
+
+    // Print logo and info
+    // Create a minimal argv for logo() - it checks for --nologo/--ascii
+    char *fake_argv[] = {const_cast<char*>("llamafile"), nullptr};
+    if (!FLAG_nologo) {
+        logo(fake_argv);
+        printf(BOLD "software" UNBOLD ": llamafile " LLAMAFILE_VERSION_STRING "\n"
+               BOLD "model" UNBOLD ":    %s\n",
+               basename(g_params->model.path).c_str());
+        if (is_base_model())
+            printf(BOLD "mode" UNBOLD ":     RAW TEXT COMPLETION (base model)\n");
+        printf(BOLD "compute" UNBOLD ":  %s\n", describe_compute().c_str());
+    }
+
+    // Create our own context from the shared model
+    print_ephemeral("initializing context...");
+    llama_context_params ctx_params = common_context_params_to_llama(*g_params);
+    g_ctx = llama_init_from_model(g_model, ctx_params);
+    clear_ephemeral();
+    if (!g_ctx) {
+        fprintf(stderr, "error: failed to initialize context\n");
+        return 1;
+    }
+
+    if (llama_model_has_encoder(g_model))
+        fprintf(stderr, "warning: this model has an encoder\n");
+
+    // Initialize sampler
+    g_sampler = common_sampler_init(g_model, g_params->sampling);
+    if (!g_sampler) {
+        fprintf(stderr, "error: failed to initialize sampler\n");
+        llama_free(g_ctx);
+        return 2;
+    }
+
+    // Initialize multimodal if mmproj is specified
+    if (!g_params->mmproj.path.empty()) {
+        print_ephemeral("initializing vision model...");
+        mtmd_context_params mparams = mtmd_context_params_default();
+        mparams.use_gpu = g_params->mmproj_use_gpu;
+        mparams.n_threads = g_params->cpuparams.n_threads;
+        mparams.print_timings = g_params->verbosity > 0;
+        g_mtmd = mtmd_init_from_file(g_params->mmproj.path.c_str(), g_model, mparams);
+        clear_ephemeral();
+        if (!g_mtmd) {
+            fprintf(stderr, "%s: failed to initialize multimodal model\n",
+                    g_params->mmproj.path.c_str());
+            common_sampler_free(g_sampler);
+            llama_free(g_ctx);
+            return 3;
+        }
+    }
+
+    // Initialize chat templates
+    if (!is_base_model()) {
+        g_chat_templates = common_chat_templates_init(g_model, g_params->chat_template);
+        if (g_chat_templates) {
+            common_chat_msg dummy_msg;
+            dummy_msg.role = "user";
+            dummy_msg.content = "test";
+
+            // Check if the template supports enable_thinking (like llama.cpp server does).
+            // This is needed for models like Qwen3.5 that check enable_thinking in their
+            // template - without this, the template outputs a closed thinking block.
+            bool supports_thinking = common_chat_templates_support_enable_thinking(g_chat_templates.get());
+
+            common_chat_templates_inputs inputs;
+            inputs.messages = {dummy_msg};
+            inputs.use_jinja = true;
+            inputs.enable_thinking = supports_thinking;
+            // CRITICAL: Set reasoning_format BEFORE applying templates. The PEG parser
+            // is built during common_chat_templates_apply() and checks this value to
+            // decide whether to include reasoning extraction in the grammar.
+            inputs.reasoning_format = COMMON_REASONING_FORMAT_DEEPSEEK;
+
+            try {
+                auto chat_params = common_chat_templates_apply(g_chat_templates.get(), inputs);
+                g_chat_syntax.format = chat_params.format;
+                g_chat_syntax.thinking_forced_open = chat_params.thinking_forced_open;
+
+                if (!chat_params.parser.empty()) {
+                    g_chat_syntax.parser.load(chat_params.parser);
+                }
+
+                // Copy reasoning format to chat syntax for use by the parser at runtime
+                g_chat_syntax.reasoning_format = COMMON_REASONING_FORMAT_DEEPSEEK;
+                g_chat_syntax.reasoning_in_content = false;
+
+                if (!FLAG_nologo && g_chat_syntax.format != COMMON_CHAT_FORMAT_CONTENT_ONLY) {
+                    printf(BOLD "format" UNBOLD ":   %s\n", common_chat_format_name(g_chat_syntax.format));
+                }
+            } catch (const std::exception &e) {
+                LOG_DBG("chat template application failed: %s\n", e.what());
+            }
+        }
+    }
+
+    if (!FLAG_nologo) {
+        printf("\n");
+    }
+
+    // Run the REPL
+    repl();
+
+    // Synchronize before cleanup
+    if (g_ctx) {
+        llama_synchronize(g_ctx);
+    }
+
+    // Cleanup (but not model - we don't own it)
+    if (g_mtmd) {
+        print_ephemeral("freeing vision model...");
+        mtmd_free(g_mtmd);
+        g_mtmd = nullptr;
+        clear_ephemeral();
+    }
+
+    if (g_sampler) {
+        common_sampler_free(g_sampler);
+        g_sampler = nullptr;
+    }
+
+    if (g_interrupted_exit) {
+        _exit(0);
+    }
+
+    print_ephemeral("freeing context...");
+    llama_free(g_ctx);
+    g_ctx = nullptr;
     clear_ephemeral();
 
-    print_ephemeral("freeing backend...");
-    llama_backend_free();
-    clear_ephemeral();
+    // Reset state for potential reuse
+    g_model = nullptr;
+    g_owns_model = true;
 
     return 0;
 }

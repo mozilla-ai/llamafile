@@ -91,17 +91,12 @@ These patches integrate llamafile's file handling APIs for loading models from b
 |-------|-------------|
 | `tools_server_server.cpp.patch` | Refactors `main()` to `server_main()` for llamafile integration; adds Metal backend trigger, cosmo_args support, TUI mode handling, and proper exit for Metal async logging |
 
-### Vendor Library Fixes
-
-| Patch | Description |
-|-------|-------------|
-| `vendor_miniaudio_miniaudio.h.patch` | Removes `__COSMOPOLITAN__` from Windows platform detection (Cosmopolitan handles this at runtime) |
-
 ### Miscellaneous
 
 | Patch | Description |
 |-------|-------------|
 | `common_chat.cpp.patch` | Fixes C++ type conversion: explicitly wraps `inputs.messages` in `std::optional<json>()` for Deepseek v3.1 template |
+| `ggml_src_ggml-backend-reg.cpp.patch` | Suppresses debug log noise for non-existent backend search paths (irrelevant for llamafile's DSO loading approach) |
 
 ## Creating New Patches
 

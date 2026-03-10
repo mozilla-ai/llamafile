@@ -127,6 +127,8 @@ LLAMAFILE_SRCS_C := \
 	llamafile/zip.c
 
 LLAMAFILE_SRCS_CPP := \
+	llamafile/args.cpp \
+	llamafile/chatbot_cli.cpp \
 	llamafile/chatbot_comm.cpp \
 	llamafile/chatbot_comp.cpp \
 	llamafile/chatbot_eval.cpp \
@@ -287,9 +289,10 @@ o/$(MODE)/llamafile/server.cpp.o: llama.cpp/tools/server/server.cpp $(SERVER_ASS
 # Main executable
 # ==============================================================================
 
+# main.cpp now includes server-context.h for combined mode
 o/$(MODE)/llamafile/main.o: llamafile/main.cpp
 	@mkdir -p $(@D)
-	$(CXX) $(CXXFLAGS) $(LLAMAFILE_CPPFLAGS) -c -o $@ $<
+	$(CXX) $(CXXFLAGS) $(LLAMAFILE_CPPFLAGS) $(LLAMAFILE_SERVER_INCS) -c -o $@ $<
 
 o/$(MODE)/llamafile/llamafile: \
 		o/$(MODE)/llamafile/main.o \

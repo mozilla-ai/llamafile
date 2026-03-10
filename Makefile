@@ -99,6 +99,7 @@ setup: # Initialize and configure all dependencies (submodules, patches, etc.)
 		git submodule update --init third_party/zipalign; \
 	fi
 	@echo "Setup complete!"
+	@$(MAKE) cosmocc
 
 .PHONY: reset-repo
 reset-repo: # Reset all submodules to their original state (removes patches or any other change)
