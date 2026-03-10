@@ -8,9 +8,6 @@
 #   # With pre-built llamafile
 #   ./run_tests.sh --executable ./Qwen-QwQ.llamafile
 #
-#   # Using environment variables
-#   LLAMAFILE_EXECUTABLE=./o/llamafile/llamafile LLAMAFILE_MODEL=model.gguf ./run_tests.sh
-#
 #   # Run specific test categories
 #   ./run_tests.sh --executable ./model.llamafile -m "cli"
 #   ./run_tests.sh --executable ./model.llamafile -m "server"
@@ -18,11 +15,14 @@
 #
 #   # Skip slow tests
 #   ./run_tests.sh --executable ./model.llamafile -m "not slow"
+#
+#   # Show model outputs (debug level logging)
+#   ./run_tests.sh --executable ./model.llamafile --log-cli-level=DEBUG
 
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
 
-# Run pytest using uv (tests/ path required for conftest.py discovery)
+# Run pytest using uv
 exec uv run pytest tests/ "$@"

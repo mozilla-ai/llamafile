@@ -1,6 +1,7 @@
 """Llamafile process runner for integration tests."""
 
 import base64
+import logging
 import os
 import platform
 import subprocess
@@ -9,6 +10,8 @@ from pathlib import Path
 from typing import Any
 
 import requests
+
+logger = logging.getLogger(__name__)
 
 
 class LlamafileRunner:
@@ -91,12 +94,18 @@ class LlamafileRunner:
         if extra_args:
             args.extend(extra_args)
 
-        return subprocess.run(
+        logger.info("CLI command: %s", " ".join(args))
+        result = subprocess.run(
             args,
             capture_output=True,
             text=True,
             timeout=timeout,
         )
+        logger.info("CLI exit code: %d", result.returncode)
+        logger.debug("CLI stdout:\n%s", result.stdout)
+        if result.stderr:
+            logger.debug("CLI stderr:\n%s", result.stderr)
+        return result
 
     def run_tui(
         self,
@@ -123,13 +132,20 @@ class LlamafileRunner:
         with open(input_file, "r") as f:
             input_data = f.read()
 
-        return subprocess.run(
+        logger.info("TUI command: %s", " ".join(args))
+        logger.debug("TUI input:\n%s", input_data)
+        result = subprocess.run(
             args,
             input=input_data,
             capture_output=True,
             text=True,
             timeout=timeout,
         )
+        logger.info("TUI exit code: %d", result.returncode)
+        logger.debug("TUI stdout:\n%s", result.stdout)
+        if result.stderr:
+            logger.debug("TUI stderr:\n%s", result.stderr)
+        return result
 
     def start_server(
         self,
@@ -151,6 +167,7 @@ class LlamafileRunner:
         if extra_args:
             args.extend(extra_args)
 
+        logger.info("Starting server: %s", " ".join(args))
         return subprocess.Popen(
             args,
             stdout=subprocess.PIPE,
@@ -178,6 +195,7 @@ class LlamafileRunner:
         if extra_args:
             args.extend(extra_args)
 
+        logger.info("Starting combined mode: %s", " ".join(args))
         return subprocess.Popen(
             args,
             stdin=subprocess.PIPE,
@@ -247,9 +265,13 @@ class LlamafileRunner:
             **kwargs,
         }
 
+        logger.info("POST %s", url)
+        logger.debug("Request payload: %s", payload)
         response = requests.post(url, json=payload, timeout=timeout)
         response.raise_for_status()
-        return response.json()
+        result = response.json()
+        logger.debug("Response: %s", result)
+        return result
 
     @staticmethod
     def chat_completion_with_image(
