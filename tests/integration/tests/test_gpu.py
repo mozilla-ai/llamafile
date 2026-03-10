@@ -105,7 +105,7 @@ class TestCPUExecution:
         runner = LlamafileRunner(
             executable=executable,
             model=model,
-            gpu=None,  # No GPU
+            gpu="disable",
         )
 
         result = runner.run_cli("Say hello")
@@ -118,7 +118,7 @@ class TestCPUExecution:
         runner = LlamafileRunner(
             executable=executable,
             model=model,
-            gpu=None,
+            gpu="disable",
         )
 
         proc = runner.start_server(port=server_port)

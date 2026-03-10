@@ -26,8 +26,8 @@ def pytest_addoption(parser):
         "--gpu",
         action="store",
         default=None,
-        choices=["auto", "apple", "amd", "nvidia"],
-        help="GPU mode to use",
+        choices=["auto", "apple", "amd", "nvidia", "disable"],
+        help="GPU mode to use (disable for CPU-only)",
     )
 
 
@@ -65,16 +65,9 @@ def model(request) -> str | None:
 def gpu_mode(request) -> str | None:
     """Get the GPU mode.
 
-    Priority: --gpu flag > LLAMAFILE_GPU env var
+    Use --gpu disable for CPU-only execution.
     """
-    gpu = request.config.getoption("--gpu")
-    if gpu:
-        return gpu
-
-    gpu = os.environ.get("LLAMAFILE_GPU")
-    if gpu == "disable":
-        return None
-    return gpu
+    return request.config.getoption("--gpu")
 
 
 @pytest.fixture(scope="session")
