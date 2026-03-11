@@ -1,6 +1,74 @@
 --- llama.cpp/grammar-parser.cpp
 +++ llama.cpp/grammar-parser.cpp
-@@ -369,9 +369,6 @@ namespace grammar_parser {
+@@ -137,19 +137,24 @@ namespace grammar_parser {
+         throw std::runtime_error("unexpected end of input");
+     }
+
++    // Maximum nesting depth for grammar parentheses to prevent stack overflow
++    static constexpr int GRAMMAR_MAX_NESTING_DEPTH = 1000;
++
+     const char * parse_alternates(
+             parse_state       & state,
+             const char        * src,
+             const std::string & rule_name,
+             uint32_t            rule_id,
+-            bool                is_nested);
++            bool                is_nested,
++            int                 depth);
+
+     static const char * parse_sequence(
+             parse_state                        & state,
+             const char                         * src,
+             const std::string                  & rule_name,
+             std::vector<llama_grammar_element> & out_elements,
+-            bool                                 is_nested) {
++            bool                                 is_nested,
++            int                                  depth) {
+         size_t last_sym_start = out_elements.size();
+         const char * pos = src;
+
+@@ -257,8 +262,12 @@ namespace grammar_parser {
+             } else if (*pos == '(') { // grouping
+                 // parse nested alternates into synthesized rule
+                 pos = parse_space(pos + 1, true);
++                int new_depth = depth + 1;
++                if (new_depth > GRAMMAR_MAX_NESTING_DEPTH) {
++                    throw std::runtime_error("grammar nesting depth exceeded (max " + std::to_string(GRAMMAR_MAX_NESTING_DEPTH) + ")");
++                }
+                 uint32_t sub_rule_id = generate_symbol_id(state, rule_name);
+-                pos = parse_alternates(state, pos, rule_name, sub_rule_id, true);
++                pos = parse_alternates(state, pos, rule_name, sub_rule_id, true, new_depth);
+                 last_sym_start = out_elements.size();
+                 // output reference to synthesized rule
+                 out_elements.push_back({LLAMA_GRETYPE_RULE_REF, sub_rule_id});
+@@ -323,13 +332,14 @@ namespace grammar_parser {
+             const char        * src,
+             const std::string & rule_name,
+             uint32_t            rule_id,
+-            bool                is_nested) {
++            bool                is_nested,
++            int                 depth) {
+         std::vector<llama_grammar_element> rule;
+-        const char * pos = parse_sequence(state, src, rule_name, rule, is_nested);
++        const char * pos = parse_sequence(state, src, rule_name, rule, is_nested, depth);
+         while (*pos == '|') {
+             rule.push_back({LLAMA_GRETYPE_ALT, 0});
+             pos = parse_space(pos + 1, true);
+-            pos = parse_sequence(state, pos, rule_name, rule, is_nested);
++            pos = parse_sequence(state, pos, rule_name, rule, is_nested, depth);
+         }
+         rule.push_back({LLAMA_GRETYPE_END, 0});
+         add_rule(state, rule_id, rule);
+@@ -348,7 +358,7 @@ namespace grammar_parser {
+         }
+         pos = parse_space(pos + 3, true);
+
+-        pos = parse_alternates(state, pos, name, rule_id, false);
++        pos = parse_alternates(state, pos, name, rule_id, false, 0);
+
+         if (*pos == '\r') {
+             pos += pos[1] == '\n' ? 2 : 1;
+@@ -369,9 +379,6 @@ namespace grammar_parser {
              }
              // Validate the state to ensure that all rules are defined
              for (const auto & rule : state.rules) {
@@ -10,5 +78,3 @@
                  for (const auto & elem : rule) {
                      if (elem.type == LLAMA_GRETYPE_RULE_REF) {
                          // Ensure that the rule at that location exists
-diff --git llama.cpp/imatrix/imatrix.cpp llama.cpp/imatrix/imatrix.cpp
-index 83b85d7..201c517 100644
