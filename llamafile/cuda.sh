@@ -132,6 +132,24 @@ ARCH_FLAGS="\
   -gencode arch=compute_89,code=sm_89 \
   -gencode arch=compute_90,code=sm_90"
 
+# Enabling Blackwell native codegen requires CUDA 13.x
+CUDA_VERSION=$("$NVCC" --version | sed -n 's/^.*release \([0-9]\+\.[0-9]\+\).*$/\1/p')
+HOST_ARCH=$(uname -m)
+
+# Blackwell aarch64 non-server platforms (sm_110: Jetson Thor & family, sm_121: DGX Spark GB10)
+if [ "$HOST_ARCH" = "aarch64" ] && [ "${CUDA_VERSION%%.*}" = "13" ]; then
+    ARCH_FLAGS="\
+  -gencode arch=compute_110f,code=sm_110f \
+  -gencode arch=compute_121a,code=sm_121a \
+  --compress-mode=size"
+
+# Blackwell GPUs: CUDA 13.x append sm_120 family GPU support (RTX 5000 series, RTX PRO Blackwell)
+elif [ "${CUDA_VERSION%%.*}" = "13" ]; then
+    ARCH_FLAGS="$ARCH_FLAGS \
+  -gencode arch=compute_120f,code=sm_120f \
+  --compress-mode=size"
+fi
+
 # NVCC compiler flags
 COMMON_FLAGS="\
   --use_fast_math \
