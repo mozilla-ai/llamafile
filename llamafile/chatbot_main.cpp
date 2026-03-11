@@ -215,6 +215,10 @@ int main(int argc, char **argv) {
         mparams.use_gpu = g_params->mmproj_use_gpu;
         mparams.n_threads = g_params->cpuparams.n_threads;
         mparams.print_timings = g_params->verbosity > 0;
+        mparams.flash_attn_type = g_params->flash_attn_type;
+        mparams.warmup = g_params->warmup;
+        mparams.image_min_tokens = g_params->image_min_tokens;
+        mparams.image_max_tokens = g_params->image_max_tokens;
         g_mtmd = mtmd_init_from_file(g_params->mmproj.path.c_str(), g_model, mparams);
         clear_ephemeral();
         if (!g_mtmd) {
@@ -389,6 +393,10 @@ int main_with_model(llama_model *model, const common_params &params) {
         mparams.use_gpu = g_params->mmproj_use_gpu;
         mparams.n_threads = g_params->cpuparams.n_threads;
         mparams.print_timings = g_params->verbosity > 0;
+        mparams.flash_attn_type = g_params->flash_attn_type;
+        mparams.warmup = g_params->warmup;
+        mparams.image_min_tokens = g_params->image_min_tokens;
+        mparams.image_max_tokens = g_params->image_max_tokens;
         g_mtmd = mtmd_init_from_file(g_params->mmproj.path.c_str(), g_model, mparams);
         clear_ephemeral();
         if (!g_mtmd) {
