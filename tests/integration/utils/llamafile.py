@@ -396,6 +396,84 @@ class LlamafileRunner:
         return result
 
     @staticmethod
+    def chat_completion_streaming(
+        port: int,
+        messages: list[dict[str, Any]],
+        host: str = "127.0.0.1",
+        collect_timeout: float = 20.0,
+        include_reasoning: bool = True,
+        **kwargs,
+    ) -> str:
+        """Send a streaming chat completion and collect content up to a time limit.
+
+        Useful for testing with large/slow models where you want to compare
+        partial outputs without waiting for full completion.
+
+        Args:
+            port: Server port
+            messages: List of message dicts with "role" and "content"
+            host: Server host
+            collect_timeout: Max time to collect streaming content (seconds)
+            include_reasoning: If True, also collect reasoning_content from
+                               thinking models (default True)
+            **kwargs: Additional parameters (temperature, max_tokens, etc.)
+
+        Returns:
+            Collected content string (may be partial if timeout reached)
+        """
+        import json as json_module
+
+        url = f"http://{host}:{port}/v1/chat/completions"
+        payload = {
+            "messages": messages,
+            "stream": True,
+            **kwargs,
+        }
+
+        logger.info(
+            "POST %s (streaming, collect_timeout=%.1fs)", url, collect_timeout
+        )
+        logger.debug("Request payload: %s", payload)
+
+        content = ""
+        start_time = time.time()
+
+        with requests.post(url, json=payload, stream=True, timeout=120) as response:
+            response.raise_for_status()
+            for line in response.iter_lines():
+                if time.time() - start_time > collect_timeout:
+                    logger.info("Collect timeout reached after %.1fs", collect_timeout)
+                    break
+
+                if not line:
+                    continue
+
+                line_str = line.decode("utf-8")
+                if not line_str.startswith("data: "):
+                    continue
+
+                data = line_str[6:]  # Strip "data: " prefix
+                if data == "[DONE]":
+                    break
+
+                try:
+                    chunk = json_module.loads(data)
+                    delta = chunk.get("choices", [{}])[0].get("delta", {})
+                    # Collect both content and reasoning_content (for thinking models)
+                    chunk_content = delta.get("content")
+                    if chunk_content:
+                        content += chunk_content
+                    if include_reasoning:
+                        reasoning = delta.get("reasoning_content")
+                        if reasoning:
+                            content += reasoning
+                except json_module.JSONDecodeError:
+                    continue
+
+        logger.debug("Collected content (len=%d): %s", len(content), content[:200])
+        return content
+
+    @staticmethod
     def chat_completion_with_image(
         port: int,
         prompt: str,

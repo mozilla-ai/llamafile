@@ -74,11 +74,12 @@ class TestServerBasic:
 
 
 @pytest.mark.server
+@pytest.mark.cli
 class TestServerParameters:
     """Test server with various parameters."""
 
-    def test_server_with_temperature(self, llamafile, server_port, timeouts):
-        """Test that temperature parameter is accepted."""
+    def test_server_with_temperature_zero(self, llamafile, server_port, timeouts):
+        """Test that temperature=0 produces consistent output."""
         proc = llamafile.start_server(port=server_port)
 
         try:
@@ -87,14 +88,38 @@ class TestServerParameters:
             )
             assert ready
 
-            response = LlamafileRunner.chat_completion(
+            messages = [
+                {
+                    "role": "user",
+                    "content": "What are the three virtues of the programmer? "
+                    "Answer with a json array of strings.",
+                }
+            ]
+
+            # Use streaming with time limit to handle slow/thinking models
+            content1 = LlamafileRunner.chat_completion_streaming(
                 port=server_port,
-                messages=[{"role": "user", "content": "Say hello"}],
+                messages=messages,
                 temperature=0.0,
-                timeout=timeouts.http_request,
+                collect_timeout=20.0,
+            )
+            content2 = LlamafileRunner.chat_completion_streaming(
+                port=server_port,
+                messages=messages,
+                temperature=0.0,
+                collect_timeout=20.0,
             )
 
-            assert "choices" in response
+            # Compare the shorter response - it should match the prefix of the longer
+            # (they may differ in length if one timed out earlier)
+            min_len = min(len(content1), len(content2))
+            assert min_len > 0, "No content received from either response"
+
+            assert content1[:min_len] == content2[:min_len], (
+                f"Expected consistent output with temperature=0.\n"
+                f"Response 1: {content1[:200]!r}...\n"
+                f"Response 2: {content2[:200]!r}..."
+            )
 
         finally:
             proc.terminate()
