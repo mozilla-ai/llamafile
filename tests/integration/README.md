@@ -57,8 +57,15 @@ Examples:
 | `--executable PATH` | Path to llamafile binary or `.llamafile` |
 | `--model PATH` | Path to model file (for direct builds) |
 | `--gpu MODE` | GPU mode: `auto`, `apple`, `amd`, `nvidia`, `disable` |
+| `--timeout-multiplier N` | Multiply all timeouts by N (e.g., `2.0` for slower models) |
 | `-v` | Verbose output |
 | `-x` | Stop on first failure |
+
+Example with timeout multiplier for large models:
+
+```bash
+./run_tests.sh --executable ~/large-model.llamafile --timeout-multiplier 3.0
+```
 
 ## Viewing Model Outputs
 

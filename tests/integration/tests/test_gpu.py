@@ -57,7 +57,7 @@ def available_gpu():
 class TestGPUAcceleration:
     """GPU acceleration tests."""
 
-    def test_gpu_cli_responds(self, executable, model, available_gpu):
+    def test_gpu_cli_responds(self, executable, model, available_gpu, timeouts):
         """Test that CLI works with GPU acceleration."""
         runner = LlamafileRunner(
             executable=executable,
@@ -65,12 +65,12 @@ class TestGPUAcceleration:
             gpu=available_gpu,
         )
 
-        result = runner.run_cli("Say hello")
+        result = runner.run_cli("Say hello", timeout=timeouts.cli)
 
         assert result.returncode == 0
         assert len(result.stdout.strip()) > 0
 
-    def test_gpu_server_responds(self, executable, model, available_gpu, server_port):
+    def test_gpu_server_responds(self, executable, model, available_gpu, server_port, timeouts):
         """Test that server works with GPU acceleration."""
         runner = LlamafileRunner(
             executable=executable,
@@ -81,12 +81,15 @@ class TestGPUAcceleration:
         proc = runner.start_server(port=server_port)
 
         try:
-            ready = LlamafileRunner.wait_for_server(server_port, timeout=120)
+            ready = LlamafileRunner.wait_for_server(
+                server_port, timeout=timeouts.server_ready
+            )
             assert ready
 
             response = LlamafileRunner.chat_completion(
                 port=server_port,
                 messages=[{"role": "user", "content": "Say hello"}],
+                timeout=timeouts.http_request,
             )
 
             assert len(response["choices"][0]["message"]["content"]) > 0
@@ -100,7 +103,7 @@ class TestGPUAcceleration:
 class TestCPUExecution:
     """CPU-only execution tests."""
 
-    def test_cpu_cli_responds(self, executable, model):
+    def test_cpu_cli_responds(self, executable, model, timeouts):
         """Test that CLI works without GPU (CPU only)."""
         runner = LlamafileRunner(
             executable=executable,
@@ -108,12 +111,12 @@ class TestCPUExecution:
             gpu="disable",
         )
 
-        result = runner.run_cli("Say hello")
+        result = runner.run_cli("Say hello", timeout=timeouts.cli)
 
         assert result.returncode == 0
         assert len(result.stdout.strip()) > 0
 
-    def test_cpu_server_responds(self, executable, model, server_port):
+    def test_cpu_server_responds(self, executable, model, server_port, timeouts):
         """Test that server works without GPU (CPU only)."""
         runner = LlamafileRunner(
             executable=executable,
@@ -124,12 +127,15 @@ class TestCPUExecution:
         proc = runner.start_server(port=server_port)
 
         try:
-            ready = LlamafileRunner.wait_for_server(server_port, timeout=180)
+            ready = LlamafileRunner.wait_for_server(
+                server_port, timeout=timeouts.server_ready
+            )
             assert ready
 
             response = LlamafileRunner.chat_completion(
                 port=server_port,
                 messages=[{"role": "user", "content": "Say hello"}],
+                timeout=timeouts.http_request,
             )
 
             assert len(response["choices"][0]["message"]["content"]) > 0

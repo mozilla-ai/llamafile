@@ -14,6 +14,14 @@ import requests
 logger = logging.getLogger(__name__)
 
 
+# Default timeout constants (in seconds)
+TIMEOUT_CLI = 120
+TIMEOUT_TUI = 120
+TIMEOUT_SERVER_READY = 120
+TIMEOUT_HTTP_REQUEST = 60
+POLL_INTERVAL = 0.5
+
+
 class LlamafileRunner:
     """Wrapper for running llamafile in different modes.
 
@@ -72,7 +80,7 @@ class LlamafileRunner:
         prompt: str,
         nothink: bool = False,
         extra_args: list[str] | None = None,
-        timeout: int = 120,
+        timeout: float = TIMEOUT_CLI,
     ) -> subprocess.CompletedProcess:
         """Run llamafile in CLI mode with a prompt.
 
@@ -94,7 +102,7 @@ class LlamafileRunner:
         if extra_args:
             args.extend(extra_args)
 
-        logger.info("CLI command: %s", " ".join(args))
+        logger.info("CLI command: %s (timeout=%.1fs)", " ".join(args), timeout)
         result = subprocess.run(
             args,
             capture_output=True,
@@ -111,7 +119,7 @@ class LlamafileRunner:
         self,
         input_file: str,
         extra_args: list[str] | None = None,
-        timeout: int = 120,
+        timeout: float = TIMEOUT_TUI,
     ) -> subprocess.CompletedProcess:
         """Run llamafile in TUI/chat mode with piped input.
 
@@ -132,7 +140,7 @@ class LlamafileRunner:
         with open(input_file, "r") as f:
             input_data = f.read()
 
-        logger.info("TUI command: %s", " ".join(args))
+        logger.info("TUI command: %s (timeout=%.1fs)", " ".join(args), timeout)
         logger.debug("TUI input:\n%s", input_data)
         result = subprocess.run(
             args,
@@ -208,8 +216,8 @@ class LlamafileRunner:
     def wait_for_server(
         port: int,
         host: str = "127.0.0.1",
-        timeout: int = 120,
-        poll_interval: float = 0.5,
+        timeout: float = TIMEOUT_SERVER_READY,
+        poll_interval: float = POLL_INTERVAL,
     ) -> bool:
         """Wait for server to become ready.
 
@@ -225,15 +233,18 @@ class LlamafileRunner:
         url = f"http://{host}:{port}/health"
         start_time = time.time()
 
+        logger.info("Waiting for server at %s (timeout=%.1fs)", url, timeout)
         while time.time() - start_time < timeout:
             try:
                 response = requests.get(url, timeout=2)
                 if response.status_code == 200:
+                    logger.info("Server ready")
                     return True
             except requests.RequestException:
                 pass
             time.sleep(poll_interval)
 
+        logger.warning("Server not ready after %.1fs", timeout)
         return False
 
     @staticmethod
@@ -242,7 +253,7 @@ class LlamafileRunner:
         messages: list[dict[str, Any]],
         host: str = "127.0.0.1",
         stream: bool = False,
-        timeout: int = 60,
+        timeout: float = TIMEOUT_HTTP_REQUEST,
         **kwargs,
     ) -> dict[str, Any]:
         """Send a chat completion request to the server.
@@ -265,7 +276,7 @@ class LlamafileRunner:
             **kwargs,
         }
 
-        logger.info("POST %s", url)
+        logger.info("POST %s (timeout=%.1fs)", url, timeout)
         logger.debug("Request payload: %s", payload)
         response = requests.post(url, json=payload, timeout=timeout)
         response.raise_for_status()
@@ -279,7 +290,7 @@ class LlamafileRunner:
         prompt: str,
         image_path: str,
         host: str = "127.0.0.1",
-        timeout: int = 60,
+        timeout: float = TIMEOUT_HTTP_REQUEST,
         **kwargs,
     ) -> dict[str, Any]:
         """Send a multimodal chat completion with an image.

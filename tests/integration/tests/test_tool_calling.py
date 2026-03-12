@@ -1,5 +1,7 @@
 """Tool calling integration tests."""
 
+import json
+
 import pytest
 
 from utils.llamafile import LlamafileRunner
@@ -48,12 +50,14 @@ WEATHER_TOOL = {
 class TestToolCalling:
     """Tool calling tests using server mode."""
 
-    def test_tool_call_basic(self, llamafile, server_port):
+    def test_tool_call_basic(self, llamafile, server_port, timeouts):
         """Test that model can make a tool call."""
         proc = llamafile.start_server(port=server_port)
 
         try:
-            ready = LlamafileRunner.wait_for_server(server_port, timeout=120)
+            ready = LlamafileRunner.wait_for_server(
+                server_port, timeout=timeouts.server_ready
+            )
             assert ready
 
             response = LlamafileRunner.chat_completion(
@@ -63,6 +67,7 @@ class TestToolCalling:
                 ],
                 tools=[CALCULATOR_TOOL],
                 tool_choice="auto",
+                timeout=timeouts.http_request,
             )
 
             # Check if model made a tool call
@@ -80,12 +85,14 @@ class TestToolCalling:
             proc.terminate()
             proc.wait()
 
-    def test_tool_call_correct_function(self, llamafile, server_port):
+    def test_tool_call_correct_function(self, llamafile, server_port, timeouts):
         """Test that model calls the correct tool."""
         proc = llamafile.start_server(port=server_port)
 
         try:
-            ready = LlamafileRunner.wait_for_server(server_port, timeout=120)
+            ready = LlamafileRunner.wait_for_server(
+                server_port, timeout=timeouts.server_ready
+            )
             assert ready
 
             response = LlamafileRunner.chat_completion(
@@ -95,6 +102,7 @@ class TestToolCalling:
                 ],
                 tools=[CALCULATOR_TOOL, WEATHER_TOOL],
                 tool_choice="auto",
+                timeout=timeouts.http_request,
             )
 
             message = response["choices"][0]["message"]
@@ -108,12 +116,14 @@ class TestToolCalling:
             proc.terminate()
             proc.wait()
 
-    def test_tool_call_with_arguments(self, llamafile, server_port):
+    def test_tool_call_with_arguments(self, llamafile, server_port, timeouts):
         """Test that tool calls include correct arguments."""
         proc = llamafile.start_server(port=server_port)
 
         try:
-            ready = LlamafileRunner.wait_for_server(server_port, timeout=120)
+            ready = LlamafileRunner.wait_for_server(
+                server_port, timeout=timeouts.server_ready
+            )
             assert ready
 
             response = LlamafileRunner.chat_completion(
@@ -123,6 +133,7 @@ class TestToolCalling:
                 ],
                 tools=[CALCULATOR_TOOL],
                 tool_choice="required",
+                timeout=timeouts.http_request,
             )
 
             message = response["choices"][0]["message"]
@@ -132,7 +143,6 @@ class TestToolCalling:
             assert tool_call["function"]["name"] == "calculate"
 
             # Arguments should contain the expression
-            import json
             args = json.loads(tool_call["function"]["arguments"])
             assert "expression" in args
 

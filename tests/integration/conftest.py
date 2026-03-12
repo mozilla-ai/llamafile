@@ -5,7 +5,14 @@ from pathlib import Path
 
 import pytest
 
-from utils.llamafile import LlamafileRunner
+from utils.llamafile import (
+    LlamafileRunner,
+    TIMEOUT_CLI,
+    TIMEOUT_TUI,
+    TIMEOUT_SERVER_READY,
+    TIMEOUT_HTTP_REQUEST,
+    POLL_INTERVAL,
+)
 
 
 def pytest_addoption(parser):
@@ -28,6 +35,13 @@ def pytest_addoption(parser):
         default=None,
         choices=["auto", "apple", "amd", "nvidia", "disable"],
         help="GPU mode to use (disable for CPU-only)",
+    )
+    parser.addoption(
+        "--timeout-multiplier",
+        action="store",
+        default=1.0,
+        type=float,
+        help="Multiplier for all timeouts (e.g., 2.0 for slower models)",
     )
 
 
@@ -68,6 +82,30 @@ def gpu_mode(request) -> str | None:
     Use --gpu disable for CPU-only execution.
     """
     return request.config.getoption("--gpu")
+
+
+@pytest.fixture(scope="session")
+def timeout_multiplier(request) -> float:
+    """Get the timeout multiplier for slower models."""
+    return float(request.config.getoption("--timeout-multiplier"))
+
+
+class Timeouts:
+    """Scaled timeout values."""
+
+    def __init__(self, multiplier: float):
+        self.multiplier = multiplier
+        self.cli = TIMEOUT_CLI * multiplier
+        self.tui = TIMEOUT_TUI * multiplier
+        self.server_ready = TIMEOUT_SERVER_READY * multiplier
+        self.http_request = TIMEOUT_HTTP_REQUEST * multiplier
+        self.poll_interval = POLL_INTERVAL * multiplier
+
+
+@pytest.fixture(scope="session")
+def timeouts(timeout_multiplier) -> Timeouts:
+    """Get scaled timeout values."""
+    return Timeouts(timeout_multiplier)
 
 
 @pytest.fixture(scope="session")
