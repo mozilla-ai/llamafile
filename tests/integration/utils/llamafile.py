@@ -85,8 +85,10 @@ class LlamafileRunner:
         runner = LlamafileRunner("./Qwen-QwQ.llamafile")
     """
 
-    # On macOS, llamafiles need to be run via sh due to cosmopolitan format
-    USE_SHELL = platform.system() == "Darwin"
+    # On Unix (macOS, Linux, BSD), run llamafiles via sh for portability.
+    # Direct execution on Linux requires binfmt_misc configured for APE binaries.
+    # On Windows, cosmopolitan binaries run directly (self-extract to .exe).
+    USE_SHELL = platform.system() != "Windows"
 
     def __init__(
         self,
@@ -113,7 +115,8 @@ class LlamafileRunner:
     def _base_args(self) -> list[str]:
         """Build base command arguments.
 
-        On macOS, prepends 'sh' to run llamafiles via shell.
+        On Unix, prepends 'sh' to run llamafiles via shell for compatibility.
+        On Windows, runs directly since cosmopolitan binaries self-extract.
         """
         if self.USE_SHELL:
             args = ["sh", self.executable]
