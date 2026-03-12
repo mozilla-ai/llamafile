@@ -1,17 +1,17 @@
 # llamafile
 
-> **We want to hear from you!**
-Mozilla.ai recently adopted the llamafile project, and we're planning an approach for codebase modernization. Please share what you find most valuable about llamafile and what would make it more useful for your work.
-[Read more via the blog](https://blog.mozilla.ai/llamafile-returns/) and add your voice to the discussion [here](https://github.com/mozilla-ai/llamafile/discussions/809).
-
-
-[![ci status](https://github.com/mozilla-ai/llamafile/actions/workflows/ci.yml/badge.svg)](https://github.com/mozilla-ai/llamafile/actions/workflows/ci.yml)<br/>
-[![](https://dcbadge.vercel.app/api/server/YuMNeuKStr)](https://discord.gg/YuMNeuKStr)<br/><br/>
-
 <img src="images/llamafile-640x640.png" width="320" height="320"
      alt="[line drawing of llama animal head in front of slightly open manilla folder filled with files]">
 
-**llamafile lets you distribute and run LLMs with a single file. ([announcement blog post](https://hacks.mozilla.org/2023/11/introducing-llamafile/))**
+[![llamafile](https://img.shields.io/badge/llamafile-6E6E6E?logo=github&logoColor=white&labelColor=4A4A4A)](https://github.com/mozilla-ai/llamafile)
+[![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](https://github.com/mozilla-ai/llamafile/blob/main/LICENSE)
+[![Discord](https://dcbadge.limes.pink/api/server/YuMNeuKStr?style=flat)](https://discord.gg/YuMNeuKStr)
+[![ci status](https://github.com/mozilla-ai/llamafile/actions/workflows/ci.yml/badge.svg)](https://github.com/mozilla-ai/llamafile/actions/workflows/ci.yml)
+[![Mozilla Builders](https://img.shields.io/badge/Builders-6E6E6E?logo=mozilla&logoColor=white&labelColor=4A4A4A)](https://builders.mozilla.org/)
+
+**llamafile lets you distribute and run LLMs with a single file.**
+
+llamafile is a [Mozilla Builders](https://builders.mozilla.org/) project (see its [announcement blog post](https://hacks.mozilla.org/2023/11/introducing-llamafile/)), now revamped by [Mozilla.ai](https://www.mozilla.ai/open-tools/llamafile). 
 
 Our goal is to make open LLMs much more
 accessible to both developers and end users. We're doing that by
@@ -20,11 +20,11 @@ framework that collapses all the complexity of LLMs down to
 a single-file executable (called a "llamafile") that runs
 locally on most computers, with no installation.
 
-llamafile also includes **[whisperfile](whisperfile/index.md)**, a single-file speech-to-text tool built on [whisper.cpp](https://github.com/ggerganov/whisper.cpp) and the same Cosmopolitan packaging. It supports transcription and translation of audio files across all the same platforms, with no installation required.<br/><br/>
+llamafile also includes **[whisperfile](whisperfile/index.md)**, a single-file speech-to-text tool built on [whisper.cpp](https://github.com/ggerganov/whisper.cpp) and the same Cosmopolitan packaging. It supports transcription and translation of audio files across all the same platforms, with no installation required.
 
-<a href="https://builders.mozilla.org/"><img src="images/mozilla-logo-bw-rgb.png" width="150"></a><br/>
-llamafile is a <a href="https://builders.mozilla.org/">Mozilla Builders</a> project.<br/><br/>
-
+> **We want to hear from you!**
+Whether you are a new user or a long-time fan, please share what you find most valuable about llamafile and what would make it more useful for you.
+[Read more via the blog](https://blog.mozilla.ai/llamafile-returns/) and add your voice to the discussion [here](https://github.com/mozilla-ai/llamafile/discussions/809).
 
 
 ## How llamafile works
