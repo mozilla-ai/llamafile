@@ -1,9 +1,11 @@
 """Llamafile process runner for integration tests."""
 
 import base64
+import fcntl
 import logging
 import os
 import platform
+import select
 import subprocess
 import time
 from pathlib import Path
@@ -12,6 +14,54 @@ from typing import Any
 import requests
 
 logger = logging.getLogger(__name__)
+
+
+def read_until_idle(fd, idle_timeout=1.0, max_timeout=60.0):
+    """Read from file descriptor until output stops (model finished generating).
+
+    Useful for reading streaming TUI output where tokens arrive one at a time.
+
+    Args:
+        fd: File object to read from (e.g., proc.stdout)
+        idle_timeout: Time to wait with no new output before considering done
+        max_timeout: Maximum total time to wait
+
+    Returns:
+        String of all collected output
+    """
+    fileno = fd.fileno()
+    flags = fcntl.fcntl(fileno, fcntl.F_GETFL)
+    fcntl.fcntl(fileno, fcntl.F_SETFL, flags | os.O_NONBLOCK)
+
+    chunks = []
+    start_time = time.time()
+    last_read_time = start_time
+
+    try:
+        while True:
+            elapsed = time.time() - start_time
+            if elapsed > max_timeout:
+                break
+
+            idle_time = time.time() - last_read_time
+            if idle_time > idle_timeout and chunks:
+                # No new output for idle_timeout and we have some output
+                break
+
+            ready, _, _ = select.select([fileno], [], [], 0.1)
+            if ready:
+                try:
+                    chunk = fd.read(4096)
+                    if chunk:
+                        chunks.append(chunk)
+                        last_read_time = time.time()
+                except (BlockingIOError, IOError):
+                    pass
+
+        return "".join(chunks)
+    finally:
+        # Restore blocking mode
+        fcntl.fcntl(fileno, fcntl.F_SETFL, flags)
 
 
 # Default timeout constants (in seconds)

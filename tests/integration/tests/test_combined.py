@@ -1,14 +1,13 @@
 """Combined TUI+Server mode integration tests."""
 
-import time
-
 import pytest
 
-from utils.llamafile import LlamafileRunner
+from utils.llamafile import LlamafileRunner, read_until_idle
 
 
 @pytest.mark.tui
 @pytest.mark.server
+@pytest.mark.combined
 class TestCombinedMode:
     """Tests for simultaneous TUI and Server mode."""
 
@@ -45,7 +44,10 @@ class TestCombinedMode:
             )
             assert ready, "Server did not become ready"
 
-            # Send a request via server API
+            # Clear any startup output from TUI
+            _ = read_until_idle(proc.stdout, idle_timeout=0.5, max_timeout=5.0)
+
+            # Test 1: Send a request via server API
             response1 = LlamafileRunner.chat_completion(
                 port=server_port,
                 messages=[{"role": "user", "content": "What is 1+1?"}],
@@ -53,14 +55,20 @@ class TestCombinedMode:
             )
             assert "2" in response1["choices"][0]["message"]["content"]
 
-            # Send TUI input
+            # Test 2: Send TUI input and verify response
             proc.stdin.write("What is 2+2?\n")
             proc.stdin.flush()
 
-            # Give it time to process
-            time.sleep(2 * timeouts.multiplier)
+            # Read TUI output until model stops generating
+            tui_output = read_until_idle(
+                proc.stdout,
+                idle_timeout=2.0 * timeouts.multiplier,
+                max_timeout=timeouts.cli,
+            )
+            assert len(tui_output) > 0, "TUI produced no output"
+            assert "4" in tui_output, f"Expected '4' in TUI output: {tui_output}"
 
-            # Send another server request (should still work)
+            # Test 3: Server should still work after TUI interaction
             response2 = LlamafileRunner.chat_completion(
                 port=server_port,
                 messages=[{"role": "user", "content": "What is 3+3?"}],

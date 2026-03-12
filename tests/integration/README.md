@@ -31,6 +31,7 @@ Use `-m` to select test categories:
 | `cli` | CLI mode tests |
 | `tui` | TUI/chat mode tests |
 | `server` | Server mode tests |
+| `server` | Combined (TUI/chat + server) mode tests |
 | `multimodal` | Vision/image tests (requires multimodal model) |
 | `tool_calling` | Tool use tests (requires tool-capable model) |
 | `thinking` | Thinking model tests (QwQ, DeepSeek-R1, etc.) |
