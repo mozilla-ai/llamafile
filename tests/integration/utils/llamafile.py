@@ -368,6 +368,8 @@ class LlamafileRunner:
         host: str = "127.0.0.1",
         stream: bool = False,
         timeout: float = TIMEOUT_HTTP_REQUEST,
+        retries: int = 3,
+        retry_delay: float = 1.0,
         **kwargs,
     ) -> dict[str, Any]:
         """Send a chat completion request to the server.
@@ -378,6 +380,8 @@ class LlamafileRunner:
             host: Server host
             stream: Whether to stream the response
             timeout: Request timeout
+            retries: Number of retries on connection errors
+            retry_delay: Delay between retries in seconds
             **kwargs: Additional parameters (temperature, max_tokens, etc.)
 
         Returns:
@@ -392,11 +396,26 @@ class LlamafileRunner:
 
         logger.info("POST %s (timeout=%.1fs)", url, timeout)
         logger.debug("Request payload: %s", payload)
-        response = requests.post(url, json=payload, timeout=timeout)
-        response.raise_for_status()
-        result = response.json()
-        logger.debug("Response: %s", result)
-        return result
+
+        last_error = None
+        for attempt in range(retries + 1):
+            try:
+                response = requests.post(url, json=payload, timeout=timeout)
+                response.raise_for_status()
+                result = response.json()
+                logger.debug("Response: %s", result)
+                return result
+            except requests.exceptions.ConnectionError as e:
+                last_error = e
+                if attempt < retries:
+                    logger.warning(
+                        "Connection error (attempt %d/%d), retrying in %.1fs: %s",
+                        attempt + 1, retries + 1, retry_delay, e
+                    )
+                    time.sleep(retry_delay)
+                else:
+                    raise
+        raise last_error  # Should not reach here, but for type safety
 
     @staticmethod
     def chat_completion_streaming(
