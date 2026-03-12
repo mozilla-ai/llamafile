@@ -131,6 +131,7 @@ class LlamafileRunner:
         nothink: bool = False,
         extra_args: list[str] | None = None,
         timeout: float = TIMEOUT_CLI,
+        log_file: str | None = None,
     ) -> subprocess.CompletedProcess:
         """Run llamafile in CLI mode with a prompt.
 
@@ -139,15 +140,21 @@ class LlamafileRunner:
             nothink: If True, disable thinking output
             extra_args: Additional command-line arguments
             timeout: Timeout in seconds
+            log_file: If provided, adds --log-file flag and stores log content
+                      in result.log_output attribute after execution
 
         Returns:
-            CompletedProcess with stdout, stderr, returncode
+            CompletedProcess with stdout, stderr, returncode.
+            If log_file was provided, also has log_output attribute.
         """
         args = self._base_args()
         args.extend(["--cli", "-p", prompt])
 
         if nothink:
             args.append("--nothink")
+
+        if log_file:
+            args.extend(["--log-file", log_file])
 
         if extra_args:
             args.extend(extra_args)
@@ -163,6 +170,15 @@ class LlamafileRunner:
         logger.debug("CLI stdout:\n%s", result.stdout)
         if result.stderr:
             logger.debug("CLI stderr:\n%s", result.stderr)
+
+        # Read log file if provided
+        if log_file and os.path.exists(log_file):
+            with open(log_file, "r") as f:
+                result.log_output = f.read()
+            logger.debug("Log file contents:\n%s", result.log_output)
+        elif log_file:
+            result.log_output = ""
+
         return result
 
     def run_tui(
@@ -170,6 +186,7 @@ class LlamafileRunner:
         input_file: str,
         extra_args: list[str] | None = None,
         timeout: float = TIMEOUT_TUI,
+        log_file: str | None = None,
     ) -> subprocess.CompletedProcess:
         """Run llamafile in TUI/chat mode with piped input.
 
@@ -177,12 +194,18 @@ class LlamafileRunner:
             input_file: Path to file containing input to pipe to stdin
             extra_args: Additional command-line arguments
             timeout: Timeout in seconds
+            log_file: If provided, adds --log-file flag and stores log content
+                      in result.log_output attribute after execution
 
         Returns:
-            CompletedProcess with stdout, stderr, returncode
+            CompletedProcess with stdout, stderr, returncode.
+            If log_file was provided, also has log_output attribute.
         """
         args = self._base_args()
         args.append("--chat")
+
+        if log_file:
+            args.extend(["--log-file", log_file])
 
         if extra_args:
             args.extend(extra_args)
@@ -203,24 +226,39 @@ class LlamafileRunner:
         logger.debug("TUI stdout:\n%s", result.stdout)
         if result.stderr:
             logger.debug("TUI stderr:\n%s", result.stderr)
+
+        # Read log file if provided
+        if log_file and os.path.exists(log_file):
+            with open(log_file, "r") as f:
+                result.log_output = f.read()
+            logger.debug("Log file contents:\n%s", result.log_output)
+        elif log_file:
+            result.log_output = ""
+
         return result
 
     def start_server(
         self,
         port: int = 8080,
         extra_args: list[str] | None = None,
+        log_file: str | None = None,
     ) -> subprocess.Popen:
         """Start llamafile in server mode.
 
         Args:
             port: Port to listen on
             extra_args: Additional command-line arguments
+            log_file: If provided, adds --log-file flag. Caller should read
+                      the file after terminating the process.
 
         Returns:
             Popen process handle (caller must terminate)
         """
         args = self._base_args()
         args.extend(["--server", "--port", str(port)])
+
+        if log_file:
+            args.extend(["--log-file", log_file])
 
         if extra_args:
             args.extend(extra_args)
@@ -237,18 +275,24 @@ class LlamafileRunner:
         self,
         port: int = 8080,
         extra_args: list[str] | None = None,
+        log_file: str | None = None,
     ) -> subprocess.Popen:
         """Start llamafile in combined TUI+Server mode (default mode).
 
         Args:
             port: Port for the server component
             extra_args: Additional command-line arguments
+            log_file: If provided, adds --log-file flag. Caller should read
+                      the file after terminating the process.
 
         Returns:
             Popen process handle (caller must terminate)
         """
         args = self._base_args()
         args.extend(["--port", str(port)])
+
+        if log_file:
+            args.extend(["--log-file", log_file])
 
         if extra_args:
             args.extend(extra_args)
@@ -261,6 +305,23 @@ class LlamafileRunner:
             stderr=subprocess.PIPE,
             text=True,
         )
+
+    @staticmethod
+    def read_log_file(log_file: str) -> str:
+        """Read contents of a log file.
+
+        Useful for reading log files after Popen processes terminate.
+
+        Args:
+            log_file: Path to the log file
+
+        Returns:
+            Log file contents, or empty string if file doesn't exist
+        """
+        if os.path.exists(log_file):
+            with open(log_file, "r") as f:
+                return f.read()
+        return ""
 
     @staticmethod
     def wait_for_server(
