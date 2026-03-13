@@ -522,12 +522,30 @@ Client::send_response_finish()
 bool
 Client::send_binary(const void* p, size_t n)
 {
-    ssize_t sent;
-    if ((sent = write(fd_, p, n)) != n) {
-        if (sent == -1 && errno != EAGAIN && errno != ECONNRESET)
-            SLOG("write failed %m");
-        close_connection_ = true;
-        return false;
+    size_t total_sent = 0;
+    const char* ptr = (const char*)p;
+
+    while (total_sent < n) {
+        ssize_t sent = write(fd_, ptr + total_sent, n - total_sent);
+
+        if (sent > 0) {
+            total_sent += sent;
+        } else if (sent == 0) {
+            // Connection closed
+            close_connection_ = true;
+            return false;
+        } else {
+            // Error occurred
+            if (errno == EINTR) {
+                // Interrupted by signal, retry
+                continue;
+            }
+            if (errno != EAGAIN && errno != ECONNRESET) {
+                SLOG("write failed %m");
+            }
+            close_connection_ = true;
+            return false;
+        }
     }
     return true;
 }
@@ -775,7 +793,7 @@ Client::dispatcher()
     should_send_error_if_canceled_ = false;
     if (!send(std::string_view(obuf_.p, p - obuf_.p)))
         return false;
-    char buf[512];
+    char buf[16384];
     size_t i, chunk;
     for (i = 0; i < size; i += chunk) {
         chunk = size - i;

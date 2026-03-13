@@ -313,15 +313,39 @@ void llamafile_get_flags(int argc, char **argv) {
         if (!strcmp(flag, "--url-prefix")) {
             if (i == argc)
                 missing("--url-prefix");
-            FLAG_url_prefix = argv[i++];
-            if (!IsAcceptablePath(FLAG_url_prefix, -1)) {
-                tinyprint(2, "error: --url-prefix must not have // or /. or /./ or /../\n", NULL);
+
+            std::string url_prefix = argv[i++];
+
+            // Consolidate consecutive slashes
+            size_t pos = 0;
+            while ((pos = url_prefix.find("//", pos)) != std::string::npos) {
+                url_prefix.replace(pos, 2, "/");
+            }
+
+            // Ensure single slash at start
+            if (url_prefix.empty() || url_prefix[0] != '/') {
+                url_prefix = "/" + url_prefix;
+            }
+
+            // Remove trailing slash if present
+            if (url_prefix.length() > 1 && url_prefix.back() == '/') {
+                url_prefix.pop_back();
+            }
+
+            // If only a single slash remains, convert to empty string
+            if (url_prefix == "/") {
+                url_prefix = "";
+            }
+
+            // Validate the normalized path
+            if (!url_prefix.empty() && !IsAcceptablePath(url_prefix.c_str(), url_prefix.length())) {
+                tinyprint(2, "error: --url-prefix must not have /. or /./ or /../ after normalization\n", NULL);
                 exit(1);
             }
-            if (endswith(FLAG_url_prefix, "/")) {
-                tinyprint(2, "error: --url-prefix must not be slash or end with slash\n", NULL);
-                exit(1);
-            }
+
+            // Store in static storage (persists for program lifetime)
+            static std::string stored_prefix = url_prefix;
+            FLAG_url_prefix = stored_prefix.c_str();
             continue;
         }
 

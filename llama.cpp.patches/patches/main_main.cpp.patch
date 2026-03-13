@@ -107,7 +107,7 @@
 
  static void llama_log_callback_logTee(ggml_log_level level, const char * text, void * user_data) {
      (void) level;
-@@ -128,7 +146,91 @@ static std::string chat_add_and_format(struct llama_model * model, std::vector<l
+@@ -128,7 +146,94 @@ static std::string chat_add_and_format(struct llama_model * model, std::vector<l
      return formatted;
  }
 
@@ -164,6 +164,10 @@
 +        __builtin_unreachable();
 +    }
 +
++    // Load .args file BEFORE determining program type
++    // so that flags like --server --v2 in .args are seen
++    argc = cosmo_args("/zip/.args", &argv);
++
 +    enum Program prog = determine_program(argv);
 +    if (prog == LLAMAFILER)
 +        return lf::server::main(argc, argv);
@@ -172,7 +176,6 @@
 +    mallopt(M_MMAP_THRESHOLD, 16 * 1024 * 1024);
 +    mallopt(M_TRIM_THRESHOLD, 128 * 1024 * 1024);
 +    ShowCrashReports();
-+    argc = cosmo_args("/zip/.args", &argv);
 +
 +    if (prog == SERVER)
 +        return server_cli(argc, argv);
