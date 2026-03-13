@@ -313,13 +313,15 @@ void llamafile_get_flags(int argc, char **argv) {
         if (!strcmp(flag, "--url-prefix")) {
             if (i == argc)
                 missing("--url-prefix");
-            FLAG_url_prefix = argv[i++];
+            // Normalize: strip trailing slashes in-place (so "/" becomes "" and "/llm/" becomes "/llm")
+            char *val = argv[i++];
+            size_t len = strlen(val);
+            while (len > 0 && val[len - 1] == '/') {
+                val[--len] = '\0';
+            }
+            FLAG_url_prefix = val;
             if (!IsAcceptablePath(FLAG_url_prefix, -1)) {
                 tinyprint(2, "error: --url-prefix must not have // or /. or /./ or /../\n", NULL);
-                exit(1);
-            }
-            if (endswith(FLAG_url_prefix, "/")) {
-                tinyprint(2, "error: --url-prefix must not be slash or end with slash\n", NULL);
                 exit(1);
             }
             continue;

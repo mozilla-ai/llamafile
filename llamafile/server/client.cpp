@@ -323,6 +323,21 @@ Client::send_error(int code, const char* reason)
     return false;
 }
 
+// sends an http redirect response
+//
+// @param code must be a redirect status code (e.g. 301, 302, 307, 308)
+// @param location is the URL to redirect to
+bool
+Client::send_redirect(int code, const std::string_view& location)
+{
+    SLOG("redirect %d %.*s", code, (int)location.size(), location.data());
+    char* p = append_http_response_message(obuf_.p, code, nullptr);
+    p = stpcpy(p, "Location: ");
+    p = (char*)mempcpy(p, location.data(), location.size());
+    p = stpcpy(p, "\r\n");
+    return send_response(obuf_.p, p, "");
+}
+
 // appends start of http response message to `p`
 //
 // after this function is called, more header lines may be appended.
@@ -677,11 +692,22 @@ Client::dispatcher()
     std::string_view p1 = path();
     WRITE64LE(method, msg_.method);
     SLOG("%s %.*s", method, (int)p1.size(), p1.data());
-    if (!p1.starts_with(FLAG_url_prefix)) {
-        SLOG("path prefix mismatch");
-        return send_error(404);
+    size_t prefix_len = strlen(FLAG_url_prefix);
+    if (prefix_len > 0) {
+        if (!p1.starts_with(FLAG_url_prefix)) {
+            SLOG("path prefix mismatch");
+            return send_error(404);
+        }
+        // Exact match (e.g. /llm) -> redirect to /llm/
+        if (p1.size() == prefix_len)
+            return send_redirect(301, std::string(FLAG_url_prefix) + "/");
+        // Must have slash after prefix (e.g. /llm/foo not /llmfoo)
+        if (p1[prefix_len] != '/') {
+            SLOG("path prefix mismatch");
+            return send_error(404);
+        }
+        p1 = p1.substr(prefix_len);
     }
-    p1 = p1.substr(strlen(FLAG_url_prefix));
     if (!p1.starts_with("/") || !IsAcceptablePath(p1.data(), p1.size())) {
         SLOG("unacceptable path");
         return send_error(400);

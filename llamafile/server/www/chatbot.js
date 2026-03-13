@@ -58,6 +58,11 @@ let uploadedFiles = [];
 let chatHistory = [];
 let flagz = null;
 
+function getUrlPrefix() {
+    const path = window.location.pathname;
+    return path.substring(0, path.lastIndexOf('/'));
+}
+
 function generateId() {
   return Date.now().toString(36) + Math.random().toString(36).substring(2);
 }
@@ -322,7 +327,7 @@ async function sendMessage() {
       promptTokenCount: 0,  // Number of tokens in the prompt
       reponseTokenCount: 0   // Number of tokens in the response
     };
-    const response = await fetch("/v1/chat/completions", {
+    const response = await fetch(`${getUrlPrefix()}/v1/chat/completions`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -505,7 +510,7 @@ function onKeyDown(e) {
 
 async function fetchFlagz() {
   try {
-    const response = await fetch("/flagz");
+    const response = await fetch(`${getUrlPrefix()}/flagz`);
     return await response.json();
   } catch (error) {
     console.error("Could not fetch /flagz so using defaults", error);
@@ -679,7 +684,7 @@ async function sendCompletion() {
   completionsStopButton.focus();
   const settings = loadSettings();
   try {
-    const response = await fetch("/v1/completions", {
+    const response = await fetch(`${getUrlPrefix()}/v1/completions`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
