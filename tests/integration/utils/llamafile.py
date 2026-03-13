@@ -186,7 +186,8 @@ class LlamafileRunner:
         result = subprocess.run(
             args,
             capture_output=True,
-            text=True,
+            encoding="utf-8",
+            errors="replace",
             timeout=timeout,
         )
         logger.info("CLI exit code: %d", result.returncode)
@@ -196,7 +197,7 @@ class LlamafileRunner:
 
         # Read log file if provided
         if log_file and os.path.exists(log_file):
-            with open(log_file, "r") as f:
+            with open(log_file, "r", errors="replace") as f:
                 result.log_output = f.read()
             logger.debug("Log file contents:\n%s", result.log_output)
         elif log_file:
@@ -242,7 +243,8 @@ class LlamafileRunner:
             args,
             input=input_data,
             capture_output=True,
-            text=True,
+            encoding="utf-8",
+            errors="replace",
             timeout=timeout,
         )
         logger.info("TUI exit code: %d", result.returncode)
@@ -252,7 +254,7 @@ class LlamafileRunner:
 
         # Read log file if provided
         if log_file and os.path.exists(log_file):
-            with open(log_file, "r") as f:
+            with open(log_file, "r", errors="replace") as f:
                 result.log_output = f.read()
             logger.debug("Log file contents:\n%s", result.log_output)
         elif log_file:
@@ -342,7 +344,7 @@ class LlamafileRunner:
             Log file contents, or empty string if file doesn't exist
         """
         if os.path.exists(log_file):
-            with open(log_file, "r") as f:
+            with open(log_file, "r", errors="replace") as f:
                 return f.read()
         return ""
 
