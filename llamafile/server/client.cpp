@@ -33,6 +33,7 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <limits.h>
+#include <poll.h>
 #include <string.h>
 #include <string>
 #include <sys/stat.h>
@@ -520,14 +521,38 @@ Client::send_response_finish()
 //
 // unlike send() this won't fail if binary content is detected.
 bool
-Client::send_binary(const void* p, size_t n)
-{
-    ssize_t sent;
-    if ((sent = write(fd_, p, n)) != n) {
-        if (sent == -1 && errno != EAGAIN && errno != ECONNRESET)
-            SLOG("write failed %m");
-        close_connection_ = true;
-        return false;
+Client::send_binary(const void* p, size_t n) {
+    const char* buf = (const char*)p;
+    size_t written = 0;
+    while (written < n) {
+        ssize_t sent = write(fd_, buf + written, n - written);
+        if (sent == -1) {
+            if (errno == EINTR)
+                continue;
+            if (errno == EAGAIN || errno == EWOULDBLOCK) {
+                struct pollfd pfd = { .fd = fd_, .events = POLLOUT };
+                int ret = poll(&pfd, 1, FLAG_http_write_timeout);
+                if (ret < 0) {
+                    if (errno == EINTR)
+                        continue;
+                    SLOG("poll failed %m");
+                    close_connection_ = true;
+                    return false;
+                }
+                if (ret == 0) {
+                    SLOG("write timed out");
+                    close_connection_ = true;
+                    return false;
+                }
+                continue;
+            }
+            if (errno != ECONNRESET)
+                SLOG("write failed %m");
+            close_connection_ = true;
+            return false;
+        }
+        // sent ≥ 0
+        written += sent;
     }
     return true;
 }
@@ -775,7 +800,7 @@ Client::dispatcher()
     should_send_error_if_canceled_ = false;
     if (!send(std::string_view(obuf_.p, p - obuf_.p)))
         return false;
-    char buf[512];
+    char buf[16384];
     size_t i, chunk;
     for (i = 0; i < size; i += chunk) {
         chunk = size - i;
