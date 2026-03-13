@@ -213,12 +213,15 @@ Client::transport()
         if (is_loopback_ip(client_ip_) || client_ip_trusted_) {
             std::string_view ip_header = get_header(FLAG_ip_header);
             if (!ip_header.empty()) {
-                long ip;
-                if ((ip = parse_ip(ip_header)) == -1) {
+                // Extract the first IP (before any commas)
+                size_t comma = ip_header.find(',');
+                std::string_view first_ip = ip_header.substr(0, comma);
+                long ip = parse_ip(first_ip);
+                if (ip != -1) {
                     effective_ip_ = ip;
                     effective_ip_trusted_ = is_trusted_ip(ip);
                 } else {
-                    SLOG("client's --ip-header wasn't a single ipv4 address");
+                    SLOG("client's --ip-header didn't start with a valid IPv4 address: ", ip_header);
                     effective_ip_trusted_ = false;
                 }
             }
