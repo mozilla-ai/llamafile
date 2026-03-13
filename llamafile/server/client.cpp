@@ -359,6 +359,16 @@ Client::append_http_response_message(char* p, int code, const char* reason)
     // append standard headers
     p = stpcpy(p, STANDARD_RESPONSE_HEADERS);
 
+    // Address CORS (Cross-Origin Resource Sharing) by setting the "Access-Control-Allow-Origin" header.
+    // The behavior aligns with v1 server.cpp, which dynamically sets this header to match the client's origin
+    std::string_view origin_header = get_header("Origin");
+    if (!origin_header.empty()) {
+        p = stpcpy(p, "Access-Control-Allow-Origin: ");
+        p = (char*)mempcpy(p, origin_header.data(), origin_header.size());
+        *p++ = '\r';
+        *p++ = '\n';
+    }
+
     // append date header
     tm tm;
     p = stpcpy(p, "Date: ");
