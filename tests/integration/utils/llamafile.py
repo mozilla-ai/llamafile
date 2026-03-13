@@ -64,6 +64,26 @@ def read_until_idle(fd, idle_timeout=1.0, max_timeout=60.0):
         fcntl.fcntl(fileno, fcntl.F_SETFL, flags)
 
 
+def stop_tui(proc, timeout=30):
+    """Stop a process that has a TUI reading stdin.
+
+    Sends /exit via stdin for a clean shutdown. Falls back to kill
+    if the process doesn't exit in time.
+
+    Args:
+        proc: subprocess.Popen with stdin pipe
+        timeout: Seconds to wait before falling back to kill
+    """
+    try:
+        if proc.stdin and not proc.stdin.closed:
+            proc.stdin.write("/exit\n")
+            proc.stdin.flush()
+        proc.wait(timeout=timeout)
+    except Exception:
+        proc.kill()
+        proc.wait()
+
+
 # Default timeout constants (in seconds)
 TIMEOUT_CLI = 120
 TIMEOUT_TUI = 120

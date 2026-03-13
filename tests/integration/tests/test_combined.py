@@ -2,7 +2,7 @@
 
 import pytest
 
-from utils.llamafile import LlamafileRunner, read_until_idle
+from utils.llamafile import LlamafileRunner, read_until_idle, stop_tui
 
 
 @pytest.mark.tui
@@ -31,8 +31,7 @@ class TestCombinedMode:
             assert len(response["choices"][0]["message"]["content"]) > 0
 
         finally:
-            proc.terminate()
-            proc.wait()
+            stop_tui(proc)
 
     def test_combined_tui_and_server_simultaneously(self, llamafile, server_port, timeouts):
         """Test that both TUI and server can be used at the same time."""
@@ -77,5 +76,4 @@ class TestCombinedMode:
             assert "6" in response2["choices"][0]["message"]["content"]
 
         finally:
-            proc.terminate()
-            proc.wait()
+            stop_tui(proc)
