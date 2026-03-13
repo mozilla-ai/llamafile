@@ -1,3 +1,8 @@
+// Adapted from
+// https://github.com/Mozilla-Ocho/llamafile/blob/0.8.8/llamafile/iqk_mul_mat.inc
+// Copyrigth 2024 Iwan Kawrakow.
+// Copyright(c) 2024 by KVCache.AI, All Rights Reserved.
+
 // -*- mode:c++;indent-tabs-mode:nil;c-basic-offset:4;coding:utf-8 -*-
 // vi: set et ft=cpp fenc=utf-8 :vi
 //
@@ -17,7 +22,7 @@
 
 #include <cstring>
 #include <type_traits>
-#if defined __x86_64__ || defined __aarch64__
+#if defined __x86_64__ || defined __aarch64__ || defined(_M_X64)
 
 #include "llama.cpp/ggml-impl.h"
 #include "llama.cpp/ggml-quants.h"
@@ -220,7 +225,7 @@ bool iqk_mul_mat_moe(long Nx, long Ny, long ne00, int ne11, int typeA, const voi
     return true;
 }
 
-#if defined __x86_64__
+#if defined __x86_64__ || defined(_M_X64)
 
 #if defined HAVE_FANCY_SIMD
     #undef HAVE_FANCY_SIMD
@@ -1407,7 +1412,8 @@ template <typename Dequantizer> void MulMat::set_functions(MulMat& m) {
 
 bool MulMat::set_mul_mat(int typeA, int ne00, MulMat& mm, int& row_size_q8, int) {
 
-    row_size_q8 = ggml_row_size(GGML_TYPE_Q8_K, ne00);
+    if (ne00 % ggml_blck_size(GGML_TYPE_Q8_K) == 0)
+        row_size_q8 = ggml_row_size(GGML_TYPE_Q8_K, ne00);
 
     switch (typeA) {
         case GGML_TYPE_Q2_K:
