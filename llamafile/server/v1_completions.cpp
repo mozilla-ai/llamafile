@@ -18,6 +18,7 @@
 #include "client.h"
 #include "llama.cpp/llama.h"
 #include "llama.cpp/sampling.h"
+#include "llamafile/llamafile.h"
 #include "llamafile/json.h"
 #include "llamafile/llama.h"
 #include "llamafile/macros.h"
@@ -48,9 +49,11 @@ struct V1CompletionParams
     bool stream = false;
     bool stream_include_usage = false;
     long max_tokens = -1;
-    long seed = _rand64();
-    double top_p = 1;
-    double temperature = 1;
+    long seed = FLAG_seed;
+    double top_p = FLAG_top_p;
+    double min_p = FLAG_min_p;
+    long top_k = FLAG_top_k;
+    double temperature = FLAG_temperature;
     double presence_penalty = 0;
     double frequency_penalty = 0;
     std::string user;
@@ -147,6 +150,8 @@ create_sampler(const V1CompletionParams* params)
     llama_sampling_params sparams;
     sparams.temp = params->temperature;
     sparams.top_p = params->top_p;
+    sparams.min_p = params->min_p;
+    sparams.top_k = params->top_k;
     sparams.penalty_freq = params->frequency_penalty;
     sparams.penalty_present = params->presence_penalty;
     sparams.seed = params->seed;
@@ -303,6 +308,26 @@ Client::get_v1_completions_params(V1CompletionParams* params)
         params->top_p = top_p.getNumber();
         if (!(0 <= params->top_p && params->top_p <= 1))
             return send_error(400, "top_p must be between 0 and 1");
+    }
+
+    // min_p: number|null
+    Json& min_p = json["min_p"];
+    if (!min_p.isNull()) {
+        if (!min_p.isNumber())
+            return send_error(400, "min_p must be number");
+        params->min_p = min_p.getNumber();
+        if (!(0 <= params->min_p && params->min_p <= 1))
+            return send_error(400, "min_p must be between 0 and 1");
+    }
+
+    // top_k: integer|null
+    Json& top_k = json["top_k"];
+    if (!top_k.isNull()) {
+        if (!top_k.isNumber())
+            return send_error(400, "top_k must be number");
+        params->top_k = top_k.getNumber();
+        if (params->top_k < 0)
+            return send_error(400, "top_k must be non-negative");
     }
 
     // temperature: number|null

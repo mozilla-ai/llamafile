@@ -72,11 +72,13 @@ float FLAG_presence_penalty = 0;
 float FLAG_reserve_tokens = .15;
 float FLAG_temperature = .8;
 float FLAG_top_p = .95;
+float FLAG_min_p = 0.05;
 int FLAG_batch = 256;
 int FLAG_ctx_size = 8192;
 int FLAG_decay_delay = 60 * 5;
 int FLAG_flash_attn = false;
 int FLAG_gpu = 0;
+int FLAG_top_k = 40;
 int FLAG_http_ibuf_size = 5 * 1024 * 1024;
 int FLAG_http_obuf_size = 1024 * 1024;
 int FLAG_keepalive = 5;
@@ -368,6 +370,20 @@ void llamafile_get_flags(int argc, char **argv) {
             if (i == argc)
                 missing("--top-p");
             FLAG_top_p = atof(argv[i++]);
+            continue;
+        }
+
+        if (!strcmp(flag, "--min-p")) {
+            if (i == argc)
+                missing("--min-p");
+            FLAG_min_p = atof(argv[i++]);
+            continue;
+        }
+
+        if (!strcmp(flag, "--top-k")) {
+            if (i == argc)
+                missing("--top-k");
+            FLAG_top_k = strtol(argv[i++], 0, 0);
             continue;
         }
 
