@@ -275,6 +275,12 @@ static bool ImportCudaImpl(void) {
     return false;
 
 RegisterBackend:
+    // Suppress DSO's ggml logging before backend registration, which triggers
+    // ggml_cuda_init() inside the DSO. Without this, CUDA device enumeration
+    // messages appear even when --verbose is not set.
+    if (!FLAG_verbose && g_cuda.log_set)
+        g_cuda.log_set(llamafile_log_callback_null, NULL);
+
     // Register the CUDA backend with GGML
     if (g_cuda.backend_reg) {
         ggml_backend_reg_t reg = g_cuda.backend_reg();

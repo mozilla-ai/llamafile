@@ -91,8 +91,7 @@ class TestServerParameters:
             messages = [
                 {
                     "role": "user",
-                    "content": "What are the three virtues of the programmer? "
-                    "Answer with a json array of strings.",
+                    "content": "Hello",
                 }
             ]
 

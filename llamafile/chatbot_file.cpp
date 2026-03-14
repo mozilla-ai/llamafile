@@ -65,7 +65,9 @@ void on_upload(const std::vector<std::string> &args) {
     markdown += iso8601(st.st_mtim);
     markdown += "\n\n";
     if (is_image(content)) {
-        if (!g_mtmd) {
+        // In direct mode, need multimodal context loaded locally.
+        // In API mode (g_model==null), the server handles multimodal.
+        if (g_model && !g_mtmd) {
             err("%s: need --mmproj model to process images", path);
             return;
         }

@@ -142,6 +142,7 @@ class TestGPUAcceleration:
                 "Say hello",
                 timeout=timeouts.cli,
                 log_file=log_path,
+                extra_args=["--verbose"],
             )
 
             # Verify response works
@@ -170,7 +171,8 @@ class TestGPUAcceleration:
         ) as f:
             log_path = f.name
 
-        proc = runner.start_server(port=server_port, log_file=log_path)
+        proc = runner.start_server(port=server_port, log_file=log_path,
+                                    extra_args=["--verbose"])
 
         try:
             ready = LlamafileRunner.wait_for_server(
@@ -223,6 +225,7 @@ class TestCPUExecution:
                 "Say hello",
                 timeout=timeouts.cli,
                 log_file=log_path,
+                extra_args=["--verbose"],
             )
 
             # Verify response works
@@ -251,7 +254,8 @@ class TestCPUExecution:
         ) as f:
             log_path = f.name
 
-        proc = runner.start_server(port=server_port, log_file=log_path)
+        proc = runner.start_server(port=server_port, log_file=log_path,
+                                    extra_args=["--verbose"])
 
         try:
             ready = LlamafileRunner.wait_for_server(
