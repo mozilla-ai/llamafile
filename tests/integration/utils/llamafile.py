@@ -291,8 +291,8 @@ class LlamafileRunner:
         logger.info("Starting server: %s", " ".join(args))
         return subprocess.Popen(
             args,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
             text=True,
         )
 
