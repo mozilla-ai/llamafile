@@ -1,7 +1,15 @@
 diff --git a/tools/server/server.cpp b/tools/server/server.cpp
 --- a/llama.cpp/tools/server/server.cpp
 +++ b/llama.cpp/tools/server/server.cpp
-@@ -17,6 +17,11 @@
+@@ -10,6 +10,7 @@
+ #include <atomic>
+ #include <clocale>
+ #include <exception>
++#include <functional>
+ #include <signal.h>
+ #include <thread> // for std::thread::hardware_concurrency
+ 
+@@ -17,6 +18,11 @@
  #include <windows.h>
  #endif
  
@@ -13,17 +21,22 @@ diff --git a/tools/server/server.cpp b/tools/server/server.cpp
  static std::function<void(int)> shutdown_handler;
  static std::atomic_flag is_terminating = ATOMIC_FLAG_INIT;
  
-@@ -67,7 +72,8 @@ static server_http_context::handler_t ex_wrapper(server_http_context::handler_t
+@@ -67,7 +73,13 @@ static server_http_context::handler_t ex_wrapper(server_http_context::handler_t
      };
  }
  
 -int main(int argc, char ** argv) {
 +// Core server logic - can be called from llamafile main.cpp or standalone main()
-+int server_main(int argc, char ** argv) {
++// Optional callbacks for combined mode:
++//   on_ready: called when server is fully loaded and accepting requests
++//   on_shutdown_available: provides a function to trigger server shutdown
++int server_main(int argc, char ** argv,
++                std::function<void(const std::string &)> on_ready,
++                std::function<void(std::function<void()>)> on_shutdown_available) {
      std::setlocale(LC_NUMERIC, "C");
  
      // own arguments required by this example
-@@ -98,6 +104,10 @@ int main(int argc, char ** argv) {
+@@ -98,6 +110,10 @@ int main(int argc, char ** argv) {
          params.model_alias.insert(params.model.name);
      }
  
@@ -34,11 +47,42 @@ diff --git a/tools/server/server.cpp b/tools/server/server.cpp
      common_init();
  
      // struct that contains llama context and inference
-@@ -322,5 +332,43 @@ int main(int argc, char ** argv) {
+@@ -267,6 +283,13 @@ int main(int argc, char ** argv) {
+             // this will unblock start_loop()
+             ctx_server.terminate();
+         };
++
++        // Provide shutdown function to caller (for combined mode)
++        if (on_shutdown_available) {
++            on_shutdown_available([&ctx_server]() {
++                ctx_server.terminate();
++            });
++        }
+     }
+ 
+     // TODO: refactor in common/console
+@@ -298,6 +321,11 @@ int main(int argc, char ** argv) {
+         LOG_INF("%s: server is listening on %s\n", __func__, ctx_http.listening_address.c_str());
+         LOG_INF("%s: starting the main loop...\n", __func__);
+ 
++        // Notify caller that server is ready (for combined mode TUI startup)
++        if (on_ready) {
++            on_ready(ctx_http.listening_address);
++        }
++
+         // optionally, notify router server that this instance is ready
+         const char * router_port = std::getenv("LLAMA_SERVER_ROUTER_PORT");
+         std::thread monitor_thread;
+@@ -322,5 +350,48 @@ int main(int argc, char ** argv) {
          }
      }
  
 +#ifdef LLAMAFILE_TUI
++    // In combined mode (callbacks provided), return normally so the caller
++    // can handle cleanup and TUI thread joining
++    if (on_ready || on_shutdown_available) {
++        return 0;
++    }
 +    // By now the program can safely exit:
 +    // Metal backend has async logging that llama_synchronize() doesn't wait for.
 +    // Without this delay, _exit() might truncate llama_memory_breakdown_print's output
@@ -75,6 +119,6 @@ diff --git a/tools/server/server.cpp b/tools/server/server.cpp
 +        }
 +    }
 +#endif
-+    return server_main(argc, argv);
++    return server_main(argc, argv, nullptr, nullptr);
 +}
 +#endif
