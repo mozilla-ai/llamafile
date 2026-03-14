@@ -16,12 +16,15 @@
 // limitations under the License.
 
 #pragma once
+#include <functional>
+#include <memory>
 #include <string>
 #include <string_view>
 #include <vector>
 #include <signal.h>
 
 #include "chat.h"
+#include "chatbot_backend.h"
 
 #define DEFAULT_SYSTEM_PROMPT \
     "A chat between a curious human and an artificial intelligence assistant. " \
@@ -71,15 +74,21 @@ extern bool g_interrupted_exit;
 extern common_chat_templates_ptr g_chat_templates;
 extern common_chat_parser_params g_chat_syntax;
 extern std::string g_pending_file_content;  // accumulated /upload content awaiting user message
+extern ChatBackend *g_backend;               // active inference backend
 
-// Original entry point: loads its own model
+// Original entry point: loads its own model (--chat mode)
 int main(int argc, char **argv);
 
-// Entry point for combined mode: uses a shared model (does not free it)
-int main_with_model(llama_model *model, const common_params &params);
+// API client entry point for combined mode (HTTP client to local server)
+int api_main(const std::string &server_url, const std::string &system_prompt,
+             const std::string &model_path, std::function<void()> shutdown_fn);
 
 // CLI mode: single prompt -> response, then exit
 int cli_main(int argc, char **argv);
+
+// Backend factories
+std::unique_ptr<ChatBackend> create_direct_backend();
+std::unique_ptr<ChatBackend> create_api_backend(const std::string &server_url);
 
 bool eval_string(std::string_view, bool, bool);
 DataUriExtraction extract_data_uris(std::string_view, const char *marker);
@@ -116,7 +125,7 @@ void on_upload(const std::vector<std::string> &);
 void print(const std::string_view &);
 void print_ephemeral(const std::string_view &);
 void record_undo(void);
-void repl();
+void repl(ChatBackend &backend);
 void rewind(int);
 
 } // namespace chatbot

@@ -16,6 +16,7 @@
 // limitations under the License.
 
 #include "chatbot.h"
+#include "chatbot_backend.h"
 
 #include <cassert>
 #include <sstream>
@@ -27,12 +28,6 @@
 
 namespace lf {
 namespace chatbot {
-
-void on_stats(const std::vector<std::string> &args) {
-    FLAG_log_disable = false;
-    common_perf_print(g_ctx, g_sampler);
-    FLAG_log_disable = true;
-}
 
 // handle irc style commands like: `/arg0 arg1 arg2`
 bool handle_command(const char *command) {
@@ -53,23 +48,34 @@ bool handle_command(const char *command) {
     } else if (args[0] == "help") {
         on_help(args);
     } else if (args[0] == "stats") {
-        on_stats(args);
+        g_backend->print_stats();
     } else if (args[0] == "context") {
-        on_context(args);
+        int used = g_backend->context_used();
+        int max = g_backend->context_max();
+        printf("%d out of %d context tokens used (%d tokens remaining)\n",
+               used, max, max - used);
     } else if (args[0] == "manual") {
-        on_manual(args);
+        if (!g_backend->supports_manual_mode()) {
+            err("manual mode not available in this mode — use --chat for direct model access");
+        } else {
+            on_manual(args);
+        }
     } else if (args[0] == "clear") {
-        on_clear(args);
+        g_backend->on_clear();
     } else if (args[0] == "dump") {
-        on_dump(args);
+        if (!g_backend->supports_dump()) {
+            err("dump not available in this mode — use --chat for direct model access");
+        } else {
+            on_dump(args);
+        }
     } else if (args[0] == "push") {
-        on_push(args);
+        g_backend->on_push();
     } else if (args[0] == "pop") {
-        on_pop(args);
+        g_backend->on_pop();
     } else if (args[0] == "undo") {
-        on_undo(args);
+        g_backend->on_undo();
     } else if (args[0] == "forget") {
-        on_forget(args);
+        g_backend->on_forget(1);
     } else if (args[0] == "stack") {
         on_stack(args);
     } else if (args[0] == "upload") {
