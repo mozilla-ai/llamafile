@@ -41,6 +41,9 @@ struct LlamafileArgs {
     // parsing excludes -p)
     std::string system_prompt;
 
+    // Model path captured from -m (for display in combined mode TUI)
+    std::string model_path;
+
     // Note: Llamafile-specific flags are stored in FLAG_* globals (llamafile.h):
     //   --verbose  -> FLAG_verbose
     //   --nothink  -> FLAG_nothink

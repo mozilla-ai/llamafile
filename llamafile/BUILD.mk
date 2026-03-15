@@ -128,9 +128,11 @@ LLAMAFILE_SRCS_C := \
 
 LLAMAFILE_SRCS_CPP := \
 	llamafile/args.cpp \
+	llamafile/chatbot_api.cpp \
 	llamafile/chatbot_cli.cpp \
 	llamafile/chatbot_comm.cpp \
 	llamafile/chatbot_comp.cpp \
+	llamafile/chatbot_direct.cpp \
 	llamafile/chatbot_eval.cpp \
 	llamafile/chatbot_file.cpp \
 	llamafile/chatbot_help.cpp \
@@ -289,10 +291,10 @@ o/$(MODE)/llamafile/server.cpp.o: llama.cpp/tools/server/server.cpp $(SERVER_ASS
 # Main executable
 # ==============================================================================
 
-# main.cpp now includes server-context.h for combined mode
+# main.cpp: no special includes needed (combined mode uses server_main via forward decl)
 o/$(MODE)/llamafile/main.o: llamafile/main.cpp
 	@mkdir -p $(@D)
-	$(CXX) $(CXXFLAGS) $(LLAMAFILE_CPPFLAGS) $(LLAMAFILE_SERVER_INCS) -c -o $@ $<
+	$(CXX) $(CXXFLAGS) $(LLAMAFILE_CPPFLAGS) -c -o $@ $<
 
 o/$(MODE)/llamafile/llamafile: \
 		o/$(MODE)/llamafile/main.o \

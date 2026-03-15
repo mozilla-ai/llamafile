@@ -50,6 +50,9 @@ LlamafileArgs parse_llamafile_args(int argc, char** argv) {
         if ((strcmp(argv[i], "-p") == 0 || strcmp(argv[i], "--prompt") == 0) && i + 1 < argc) {
             args.system_prompt = argv[i + 1];
         }
+        if ((strcmp(argv[i], "-m") == 0 || strcmp(argv[i], "--model") == 0) && i + 1 < argc) {
+            args.model_path = argv[i + 1];
+        }
     }
 
     // Determine execution mode from flags

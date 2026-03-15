@@ -16,6 +16,7 @@
 // limitations under the License.
 
 #include "chatbot.h"
+#include "chatbot_backend.h"
 
 #include <cctype>
 #include <csignal>
@@ -38,6 +39,7 @@ bool g_has_ephemeral;
 bool g_said_something;
 char g_last_printed_char;
 volatile sig_atomic_t g_got_sigint;
+ChatBackend *g_backend = nullptr;
 
 // Replace RESET (\e[0m) with RESET+FAINT (\e[0m\e[2m) to maintain dim styling
 // when markdown highlighting resets attributes inside reasoning content.
@@ -60,7 +62,8 @@ static std::string maintain_faint_styling(const std::string &s) {
 
 // Helper to apply chat template with enable_thinking support for Qwen3.5-style models.
 // common_chat_format_single() doesn't support enable_thinking, so we need this wrapper.
-static std::string apply_chat_template_with_thinking(
+// Only used by DirectBackend path (API backend lets the server handle templates).
+std::string apply_chat_template_with_thinking(
     const std::vector<common_chat_msg> &past_msgs,
     const common_chat_msg &new_msg,
     bool add_generation_prompt) {
@@ -140,37 +143,19 @@ bool out_of_context(int extra) {
     err("error: ran out of context window at %d tokens\n"
         "consider passing `-c %d` at startup for the maximum\n"
         "you can free up more space using /forget or /clear",
-        tokens_used() + extra, llama_model_n_ctx_train(g_model));
+        g_backend->context_used() + extra,
+        g_backend->context_max());
     return false;
 }
 
-void repl() {
+void repl(ChatBackend &backend) {
 
-    // setup conversation
-    const llama_vocab *vocab = llama_model_get_vocab(g_model);
-    if (llama_vocab_get_add_bos(vocab)) {
-        print_ephemeral("loading bos token...");
-        eval_token(llama_vocab_bos(vocab));
-    }
-    record_undo();
-
-    // make base models have no system prompt by default
-    if (is_base_model() && g_params->prompt == DEFAULT_SYSTEM_PROMPT)
-        g_params->prompt = "";
-
-    // setup system prompt
+    // setup system prompt for message history
+    // (Direct backend handles BOS token and system prompt eval in chatbot_main.cpp
+    //  before calling repl(); API backend just needs the message history)
     if (!g_params->prompt.empty()) {
-        if (is_base_model()) {
-            // Base models: evaluate system prompt directly (no template)
-            print_ephemeral("loading system prompt...");
-            std::string msg = g_params->prompt;
-            if (!eval_string(msg, DONT_ADD_SPECIAL, PARSE_SPECIAL))
-                exit(6);
-            llama_synchronize(g_ctx);
-            clear_ephemeral();
-        } else {
+        if (!is_base_model()) {
             // Chat models: add system prompt to messages array
-            // It will be formatted with apply_chat_template_with_thinking() on first user message
             common_chat_msg sys_msg;
             sys_msg.role = "system";
             sys_msg.content = g_params->prompt;
@@ -187,11 +172,16 @@ void repl() {
     ColorBleeder bleeder(is_base_model() ? (Highlight *)&txt : (Highlight *)&markdown);
 
     // Save old signal handler and install ours
+    // NOTE: In combined mode, this overrides the server's SIGINT handler.
+    // Only install if we're NOT in API mode (no local model = API mode).
     struct sigaction sa, old_sa;
-    sa.sa_handler = on_sigint;
-    sa.sa_flags = 0;
-    sigemptyset(&sa.sa_mask);
-    sigaction(SIGINT, &sa, &old_sa);
+    if (g_model) {
+        // Direct mode: install our own handler
+        sa.sa_handler = on_sigint;
+        sa.sa_flags = 0;
+        sigemptyset(&sa.sa_mask);
+        sigaction(SIGINT, &sa, &old_sa);
+    }
 
     // run chatbot
     for (;;) {
@@ -227,8 +217,16 @@ void repl() {
             free(line);
             continue;
         }
+
+        // Manual mode: only available with direct backend
+        if (g_manual_mode && !backend.supports_manual_mode()) {
+            err("manual mode not available in this mode — use --chat for direct model access");
+            free(line);
+            continue;
+        }
+
         bool add_assi = !g_manual_mode;
-        int tokens_used_before = tokens_used();
+        int tokens_before = backend.context_used();
 
         // Combine any pending file content with user's message
         std::string user_content;
@@ -246,18 +244,19 @@ void repl() {
         user_msg.role = get_role_name(g_role);
         user_msg.content = user_content;
 
-        // Format message using template
-        std::string msg;
-        if (is_base_model()) {
-            msg = user_content;
-        } else {
-            // Use our wrapper that supports enable_thinking for Qwen3.5-style models
-            msg = apply_chat_template_with_thinking(g_messages, user_msg, add_assi);
-        }
-
-        if (!eval_string(msg, DONT_ADD_SPECIAL, PARSE_SPECIAL)) {
-            rewind(tokens_used_before);
-            continue;
+        // Direct backend: format and eval the prompt ourselves
+        if (backend.supports_manual_mode()) {
+            std::string msg;
+            if (is_base_model()) {
+                msg = user_content;
+            } else {
+                msg = apply_chat_template_with_thinking(g_messages, user_msg, add_assi);
+            }
+            if (!eval_string(msg, DONT_ADD_SPECIAL, PARSE_SPECIAL)) {
+                rewind(tokens_before);
+                free(line);
+                continue;
+            }
         }
 
         // Track message in history
@@ -270,80 +269,33 @@ void repl() {
             free(line);
             continue;
         }
-        // Check if we should use chat parsing (for think mode models like gpt-oss)
-        const bool use_chat_parser = g_chat_syntax.format != COMMON_CHAT_FORMAT_CONTENT_ONLY;
-        std::string raw_output;           // Accumulates raw token output (for chat parsing)
-        std::string assistant_content;    // Accumulates assistant response content
-        common_chat_msg prev_msg;         // Previous parse result for diff computation
-        bool in_reasoning = false;        // Track if we're currently in reasoning mode
 
-        for (;;) {
-            if (g_got_sigint) {
-                if (in_reasoning) {
-                    print(UNBOLD);
-                    in_reasoning = false;
-                }
-                eval_token(llamafile_token_eot(g_model));
-                break;
-            }
-            llama_token id = common_sampler_sample(g_sampler, g_ctx, -1);
-            common_sampler_accept(g_sampler, id, true);
-            if (!eval_token(id))
-                break;
-            if (llama_vocab_is_eog(llama_model_get_vocab(g_model), id))
-                break;
-
-            if (use_chat_parser) {
-                // For chat parsing, we need special tokens to detect patterns like <|channel|>
-                std::string token_str = token_to_piece(g_ctx, id, /*special=*/true);
-
-                // Accumulate raw output for parsing
-                raw_output += token_str;
-
-                // Parse incrementally
-                auto msg = common_chat_parse(raw_output, /*is_partial=*/true, g_chat_syntax);
-
-                // Compute diffs to find new content
-                auto diffs = common_chat_msg_diff::compute_diffs(prev_msg, msg);
-
-                for (const auto &diff : diffs) {
-                    // Display reasoning content in dim style
-                    if (!diff.reasoning_content_delta.empty()) {
-                        if (!in_reasoning) {
-                            print(FAINT);
-                            in_reasoning = true;
-                        }
-                        std::string s;
-                        bleeder.feed(&s, diff.reasoning_content_delta);
-                        // Maintain FAINT styling even when markdown uses RESET
-                        print(maintain_faint_styling(s));
+        // Generate response via backend
+        bool in_reasoning = false;
+        std::string assistant_content = backend.complete(g_messages,
+            [&](const std::string &content, const std::string &reasoning) -> bool {
+                if (!reasoning.empty()) {
+                    if (!in_reasoning) {
+                        print(FAINT);
+                        in_reasoning = true;
                     }
-                    // Display final content normally
-                    if (!diff.content_delta.empty()) {
-                        if (in_reasoning) {
-                            print(UNBOLD);
-                            print("\n\n");  // Add newline between reasoning and content
-                            in_reasoning = false;
-                        }
-                        assistant_content += diff.content_delta;
-                        std::string s;
-                        bleeder.feed(&s, diff.content_delta);
-                        print(s);
-                    }
+                    std::string s;
+                    bleeder.feed(&s, reasoning);
+                    print(maintain_faint_styling(s));
                 }
-
-                prev_msg = msg;
+                if (!content.empty()) {
+                    if (in_reasoning) {
+                        print(UNBOLD);
+                        print("\n\n");
+                        in_reasoning = false;
+                    }
+                    std::string s;
+                    bleeder.feed(&s, content);
+                    print(s);
+                }
                 fflush(stdout);
-            } else {
-                // No chat parsing - direct output
-                std::string token_str = token_to_piece(g_ctx, id, g_params->special);
-                assistant_content += token_str;
-                std::string s;
-                bleeder.feed(&s, token_str);
-                print(s);
-                fflush(stdout);
-            }
-        }
+                return !g_got_sigint;
+            });
 
         // End reasoning mode if still active
         if (in_reasoning) {
@@ -367,7 +319,9 @@ void repl() {
     }
 
     // Restore original signal handler before cleanup
-    sigaction(SIGINT, &old_sa, nullptr);
+    if (g_model) {
+        sigaction(SIGINT, &old_sa, nullptr);
+    }
 }
 
 } // namespace chatbot

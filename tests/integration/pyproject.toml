@@ -1,0 +1,29 @@
+[project]
+name = "llamafile-integration-tests"
+version = "0.1.0"
+requires-python = ">=3.10"
+dependencies = [
+    "pytest>=7.0.0",
+    "requests>=2.28.0",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_functions = ["test_*"]
+log_cli = true
+log_cli_level = "WARNING"
+log_cli_format = "%(asctime)s [%(levelname)s] %(message)s"
+log_cli_date_format = "%H:%M:%S"
+markers = [
+    "slow: marks tests as slow (deselect with '-m \"not slow\"')",
+    "multimodal: requires a vision-capable model",
+    "tool_calling: requires a tool-capable model",
+    "thinking: requires a thinking model (QwQ, DeepSeek-R1, etc.)",
+    "gpu: tests GPU acceleration",
+    "cpu: tests CPU-only execution",
+    "server: tests server mode",
+    "tui: tests TUI mode",
+    "cli: tests CLI mode",
+    "combined: tests combined (TUI+server) mode",
+]

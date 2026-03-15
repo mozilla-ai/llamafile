@@ -15,3 +15,8 @@
 
 .claude
 CLAUDE.md
+
+# python
+*.pyc
+__init__.py
+uv.lock
