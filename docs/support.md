@@ -13,8 +13,7 @@ stock install:
 
 On Windows, llamafile runs as a native portable executable. On UNIX
 systems, llamafile extracts a small loader program named `ape` to
-`$TMPDIR/.llamafile` or `~/.ape-1.9` which is used to map your model
-into memory.
+`$TMPDIR/.ape-1.10` which is used to map your model into memory.
 
 [1] Darwin kernel versions 15.6+ *should* be supported, but we currently
     have no way of testing that.
@@ -81,3 +80,7 @@ you may need to qualify which one you want used, by passing either
 In the event that GPU support couldn't be compiled and dynamically
 linked on the fly for any reason, llamafile will fall back to CPU
 inference.
+
+**NOTE** that the 0.10.0 build of llamafile has not been tested on all
+GPUs/platforms yet, so we welcome your feedback both whether there are
+any issues or if everything runs smoothly on your specific setup!
