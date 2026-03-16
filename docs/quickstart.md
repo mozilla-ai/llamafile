@@ -1,13 +1,13 @@
 # Getting Started with llamafile 
 
-The easiest way to try it for yourself is to download our example
-llamafile for the [LLaVA](https://llava-vl.github.io/) model (license: [LLaMA 2](https://ai.meta.com/resources/models-and-libraries/llama-downloads/),
-[OpenAI](https://openai.com/policies/terms-of-use)). LLaVA is a new LLM that can do more
-than just chat; you can also upload images and ask it questions
-about them. With llamafile, this all happens locally; no data
-ever leaves your computer.
+The easiest way to try it for yourself is to download our example llamafile
+for the [Qwen3.5](https://huggingface.co/Qwen/Qwen3.5-0.8B/) model (license: 
+[Apache 2.0](https://huggingface.co/Qwen/Qwen3.5-0.8B/blob/main/LICENSE)).
+Qwen3.5 is a recent LLM that can do more than just chat; you can also upload
+images and ask it questions about them. With llamafile, this all happens
+locally: no data ever leaves your computer.
 
-1. Download [llava-v1.5-7b-q4.llamafile](https://huggingface.co/Mozilla/llava-v1.5-7b-llamafile/resolve/main/llava-v1.5-7b-q4.llamafile?download=true) (4.29 GB).
+1. Download [Qwen3.5-0.8B-Q8_0.llamafile](https://huggingface.co/mozilla-ai/llamafile_0.10.0/resolve/main/Qwen3.5-0.8B-Q8_0.llamafile) (1.77 GB).
 
 2. Open your computer's terminal.
 
@@ -15,39 +15,42 @@ ever leaves your computer.
 for your computer to execute this new file. (You only need to do this
 once.)
 
-```sh
-chmod +x llava-v1.5-7b-q4.llamafile
-```
+    ```sh
+    chmod +x Qwen3.5-0.8B-Q8_0.llamafile
+    ```
 
 4. If you're on Windows, rename the file by adding ".exe" on the end.
 
 5. Run the llamafile. e.g.:
 
-```sh
-./llava-v1.5-7b-q4.llamafile
-```
+    ```sh
+    ./Qwen3.5-0.8B-Q8_0.llamafile
+    ```
 
-6. Your browser should open automatically and display a chat interface.
-(If it doesn't, just open your browser and point it at http://localhost:8080)
+6. A chat interface will open in the terminal window. That's it: you can immediately
+start writing. You can also upload an image by using the `/upload` command, or write
+`/help` to see the available commands).
 
-7. When you're done chatting, return to your terminal and hit
-`Control-C` to shut down llamafile.
+7. Note that when llamafile is running, you can also chat with it using
+[llama.cpp](https://github.com/ggml-org/llama.cpp)'s Web UI: just open a
+browser window and connect to <http://localhost:8080/>. 
+
+8. When you're done chatting, `Control-C` to shut down llamafile.
+
 
 **Having trouble? See the [Troubleshooting](troubleshooting.md) page.**
 
 ## JSON API Quickstart
 
-When llamafile is started, in addition to hosting a web
-UI chat server at <http://127.0.0.1:8080/>, an [OpenAI
-API](https://platform.openai.com/docs/api-reference/chat) compatible
-chat completions endpoint is provided too. It's designed to support the
-most common OpenAI API use cases, in a way that runs entirely locally.
-We've also extended it to include llama.cpp specific features (e.g.
-mirostat) that may also be used. For further details on what fields and
-endpoints are available, refer to both the [OpenAI
-documentation](https://platform.openai.com/docs/api-reference/chat/create)
-and the [llamafile server
-README](https://github.com/mozilla-ai/llamafile/blob/HEAD/llamafile/server/README.md#api-endpoints).
+As llamafile relies on llama.cpp for serving models, it comes with all its
+features. When it is started, in addition to hosting a web UI chat server at 
+<http://127.0.0.1:8080/>, it also exposes an [OpenAI API](https://platform.openai.com/docs/api-reference/chat)
+compatible chat completions endpoint, a [...](...), and a [...](...) ### TODO ####
+
+For further details on what fields and endpoints are available, refer to the [OpenAI
+documentation](https://platform.openai.com/docs/api-reference/chat/create) and the
+[llama.cpp documentation](...) ### TODO ###
+
 
 <details>
 <summary>Curl API Client Example</summary>
@@ -83,28 +86,39 @@ The response that's printed should look like the following:
 
 ```json
 {
-   "choices" : [
-      {
-         "finish_reason" : "stop",
-         "index" : 0,
-         "message" : {
-            "content" : "There once was a programmer named Mike\nWho wrote code that would often choke\nHe used try and except\nTo handle each step\nAnd his program ran without any hike.",
-            "role" : "assistant"
-         }
+  "choices": [
+    {
+      "finish_reason": "stop",
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "In the world of Python, where magic breaks and errors occur,\nA script fails when it should not have failed.\nWith a `KeyError`, I can't access the key,\nSo I tell you to use the `except` clause!"
       }
-   ],
-   "created" : 1704199256,
-   "id" : "chatcmpl-Dt16ugf3vF8btUZj9psG7To5tc4murBU",
-   "model" : "LLaMA_CPP",
-   "object" : "chat.completion",
-   "usage" : {
-      "completion_tokens" : 38,
-      "prompt_tokens" : 78,
-      "total_tokens" : 116
-   }
+    }
+  ],
+  "created": 1773659260,
+  "model": "Qwen3.5-0.8B-Q8_0.gguf",
+  "system_fingerprint": "b1773565177-7f5ee5496",
+  "object": "chat.completion",
+  "usage": {
+    "completion_tokens": 52,
+    "prompt_tokens": 49,
+    "total_tokens": 101
+  },
+  "id": "chatcmpl-KOqwN6C0oRzINGZuFqZ95bU1iPfc6RFO",
+  "timings": {
+    "cache_n": 0,
+    "prompt_n": 49,
+    "prompt_ms": 54.944,
+    "prompt_per_token_ms": 1.1213061224489795,
+    "prompt_per_second": 891.8171228887594,
+    "predicted_n": 52,
+    "predicted_ms": 405.856,
+    "predicted_per_token_ms": 7.804923076923076,
+    "predicted_per_second": 128.1242608215722
+  }
 }
 ```
-
 </details>
 
 <details>
@@ -139,25 +153,9 @@ print(completion.choices[0].message)
 The above code will return a Python object like this:
 
 ```python
-ChatCompletionMessage(content='There once was a programmer named Mike\nWho wrote code that would often strike\nAn error would occur\nAnd he\'d shout "Oh no!"\nBut Python\'s exceptions made it all right.', role='assistant', function_call=None, tool_calls=None)
+ChatCompletionMessage(content="A script that crashes like a ghost,\nWhen it tries to solve the problem deep and fast.\nThe error message pops up in a bright light,\nAnd tells us what's wrong when we try to fix it.", refusal=None, role='assistant', annotations=None, audio=None, function_call=None, tool_calls=None)
 ```
-
 </details>
-
-
-## New v2 Server
-
-We have a new server that has a better web gui. It also implements
-OpenAI API compatible endpoints, including embeddings. It's designed to
-be more reliable. It's better able to recycle context windows across
-multiple slots. To try it, run:
-
-```bash
-llamafile --server --v2 --help
-llamafile --server --v2
-```
-
-
 
 ## Using llamafile with external weights
 
@@ -168,17 +166,15 @@ You can then use it alongside any external weights you may have on hand.
 External weights are particularly useful for Windows users because they
 enable you to work around Windows' 4GB executable file size limit.
 
-For Windows users, here's an example for the Mistral LLM:
+For Windows users, here's an example for the gpt-oss LLM (whose size is >12GB):
 
 ```sh
-curl -L -o llamafile.exe https://github.com/Mozilla-Ocho/llamafile/releases/download/0.8.17/llamafile-0.8.17
-curl -L -o mistral.gguf https://huggingface.co/TheBloke/Mistral-7B-Instruct-v0.1-GGUF/resolve/main/mistral-7b-instruct-v0.1.Q4_K_M.gguf
-./llamafile.exe -m mistral.gguf
+curl -L -o llamafile.exe https://huggingface.co/mozilla-ai/llamafile_0.10.0/resolve/main/llamafile_0.10.0
+curl -L -o gpt-oss.gguf https://huggingface.co/unsloth/gpt-oss-20b-GGUF/resolve/main/gpt-oss-20b-Q5_K_S.gguf
+./llamafile.exe -m gpt-oss.gguf
 ```
 
-Windows users may need to change `./llamafile.exe` to `.\llamafile.exe`
-when running the above command.
-
+Windows users may need to change `./llamafile.exe` to `.\llamafile.exe` when running the above command.
 
 
 ## Running llamafile with models downloaded by third-party applications
@@ -186,13 +182,10 @@ when running the above command.
 This section answers the question *"I already have a model downloaded locally by application X, can I use it with llamafile?"*. The general answer is "yes, as long as those models are locally stored in GGUF format" but its implementation can be more or less hacky depending on the application. A few examples (tested on a Mac) follow.
 
 ### LM Studio
-[LM Studio](https://lmstudio.ai/) stores downloaded models in `~/.cache/lm-studio/models`, in subdirectories with the same name of the models (following HuggingFace's `account_name/model_name` format), with the same filename you saw when you chose to download the file.
-
- So if you have downloaded e.g. the `llama-2-7b.Q2_K.gguf` file for `TheBloke/Llama-2-7B-GGUF`, you can run llamafile as follows:
+[LM Studio](https://lmstudio.ai/) stores downloaded models in `~/.cache/lm-studio/models/lmstudio-community`, in subdirectories with the same name of the models, minus their quantization level. So if you have downloaded e.g. the `gpt-oss-20b-MXFP4.gguf` file, it will be stored in `~/.cache/lm-studio/models/lmstudio-community/gpt-oss-20b-GGUF/` and you can run llamafile as follows:
 
 ```bash
-cd ~/.cache/lm-studio/models/TheBloke/Llama-2-7B-GGUF
-llamafile -m llama-2-7b.Q2_K.gguf
+llamafile -m ~/.cache/lm-studio/models/lmstudio-community/gpt-oss-20b-GGUF/gpt-oss-20b-MXFP4.gguf
 ```
 
 ### Ollama
@@ -207,3 +200,4 @@ Each sha256 digest is also used as a filename in the `~/.ollama/models/blobs` di
 cd ~/.ollama/models/blobs
 llamafile -m sha256-00e1317cbf74d901080d7100f57580ba8dd8de57203072dc6f668324ba545f29
 ```
+**Note** that Ollama's GGUF weights do not always work with llama.cpp and llamafile, thus this trick might not always work for you.
