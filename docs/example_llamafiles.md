@@ -157,26 +157,6 @@ here's a list of llamafiles bundled with the older server executable.
 | mxbai-embed-large-v1    | 0.7 GB   | [Apache 2.0](https://choosealicense.com/licenses/apache-2.0/)                                                                      | [mxbai-embed-large-v1-f16.llamafile](https://huggingface.co/Mozilla/mxbai-embed-large-v1-llamafile/resolve/main/mxbai-embed-large-v1-f16.llamafile?download=true)                              | [See HF Repo](https://huggingface.co/Mozilla/mxbai-embed-large-v1-llamafile)        |
 
 
-## Running llamafile in CLI mode
-
-Here is an example for the Mistral command-line llamafile:
-
-```sh
-./mistral-7b-instruct-v0.2.Q5_K_M.llamafile --temp 0.7 -p '[INST]Write a story about llamas[/INST]'
-```
-
-And here is an example for WizardCoder-Python command-line llamafile:
-
-```sh
-./wizardcoder-python-13b.llamafile --temp 0 -e -r '```\n' -p '```c\nvoid *memcpy_sse2(char *dst, const char *src, size_t size) {\n'
-```
-
-And here's an example for the LLaVA command-line llamafile:
-
-```sh
-./llava-v1.5-7b-q4.llamafile --temp 0.2 --image lemurs.jpg -e -p '### User: What do you see?\n### Assistant:'
-```
-
 As described in the [Getting Started](quickstart.md) section, 
 macOS, Linux, and BSD users will need to use the "chmod"
 command to grant execution permissions to the file before running these
