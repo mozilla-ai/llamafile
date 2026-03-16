@@ -26,6 +26,7 @@
 //
 // Usage: llamafile -m model.gguf --cli -p "Your prompt here"
 //        llamafile -m model.gguf --cli --nothink -p "Your prompt here"
+//        llamafile -m model.gguf --cli --mmproj mmproj.gguf --image photo.jpg -p "Describe this image"
 //
 
 #include "chatbot.h"
@@ -43,6 +44,8 @@
 #include "common.h"
 #include "llama.h"
 #include "log.h"
+#include "mtmd.h"
+#include "mtmd-helper.h"
 #include "sampling.h"
 
 #include "llamafile.h"
@@ -188,6 +191,53 @@ int cli_main(int argc, char **argv) {
         return 4;
     }
 
+    // Initialize multimodal context if mmproj is specified
+    mtmd_context *mtmd_ctx = nullptr;
+    bool has_images = !params.image.empty();
+    if (!params.mmproj.path.empty()) {
+        mtmd_context_params mparams = mtmd_context_params_default();
+        mparams.use_gpu = params.mmproj_use_gpu;
+        mparams.n_threads = params.cpuparams.n_threads;
+        mparams.print_timings = false;
+        mparams.flash_attn_type = params.flash_attn_type;
+        mparams.warmup = params.warmup;
+        mparams.image_min_tokens = params.image_min_tokens;
+        mparams.image_max_tokens = params.image_max_tokens;
+        mtmd_helper_log_set((ggml_log_callback)llamafile_log_callback_null, NULL);
+        mtmd_ctx = mtmd_init_from_file(params.mmproj.path.c_str(), model, mparams);
+        if (!mtmd_ctx) {
+            fprintf(stderr, "error: failed to load vision model: %s\n",
+                    params.mmproj.path.c_str());
+            common_sampler_free(sampler);
+            llama_free(ctx);
+            llama_model_free(model);
+            return 5;
+        }
+    } else if (has_images) {
+        fprintf(stderr, "error: --image requires --mmproj to specify a vision model\n");
+        common_sampler_free(sampler);
+        llama_free(ctx);
+        llama_model_free(model);
+        return 5;
+    }
+
+    // Load image bitmaps if specified
+    mtmd::bitmaps bitmaps;
+    if (has_images) {
+        for (const auto &image_path : params.image) {
+            mtmd::bitmap bmp(mtmd_helper_bitmap_init_from_file(mtmd_ctx, image_path.c_str()));
+            if (!bmp.ptr) {
+                fprintf(stderr, "error: failed to load image: %s\n", image_path.c_str());
+                mtmd_free(mtmd_ctx);
+                common_sampler_free(sampler);
+                llama_free(ctx);
+                llama_model_free(model);
+                return 5;
+            }
+            bitmaps.entries.push_back(std::move(bmp));
+        }
+    }
+
     // Initialize chat templates
     common_chat_templates_ptr chat_templates;
     bool is_chat_model = llama_model_meta_val_str(model, "tokenizer.chat_template", 0, 0) != -1
@@ -198,6 +248,16 @@ int cli_main(int argc, char **argv) {
     }
 
     // Build the prompt
+    // If images are provided, prepend image markers to the prompt
+    std::string user_prompt = params.prompt;
+    if (has_images && user_prompt.find(mtmd_default_marker()) == std::string::npos) {
+        std::string markers;
+        for (size_t i = 0; i < params.image.size(); i++) {
+            markers += mtmd_default_marker();
+        }
+        user_prompt = markers + user_prompt;
+    }
+
     std::string formatted_prompt;
     common_chat_parser_params parser_params;  // For parsing output
     bool enable_thinking = false;
@@ -216,7 +276,7 @@ int cli_main(int argc, char **argv) {
 
         common_chat_msg user_msg;
         user_msg.role = "user";
-        user_msg.content = params.prompt;
+        user_msg.content = user_prompt;
         messages.push_back(user_msg);
 
         // Apply chat template with enable_thinking based on --nothink flag
@@ -229,37 +289,75 @@ int cli_main(int argc, char **argv) {
         parser_params = template_result.parser_params;
     } else {
         // Base model: use prompt as-is
-        formatted_prompt = params.prompt;
+        formatted_prompt = user_prompt;
     }
 
-    // Tokenize
-    std::vector<llama_token> tokens = llamafile_tokenize(model, formatted_prompt, false, true);
+    // Tokenize and evaluate prompt
+    llama_pos n_past = 0;
+    if (has_images) {
+        // Use mtmd pipeline for multimodal prompt evaluation
+        mtmd_input_text text;
+        text.text = formatted_prompt.c_str();
+        text.add_special = true;
+        text.parse_special = true;
 
-    // Add BOS if needed
-    if (llama_vocab_get_add_bos(vocab)) {
-        tokens.insert(tokens.begin(), llama_vocab_bos(vocab));
-    }
-
-    // Check context
-    if ((int)tokens.size() > params.n_ctx) {
-        fprintf(stderr, "error: prompt too long (%zu tokens, context is %d)\n",
-                tokens.size(), params.n_ctx);
-        common_sampler_free(sampler);
-        llama_free(ctx);
-        llama_model_free(model);
-        return 5;
-    }
-
-    // Evaluate prompt
-    for (int i = 0; i < (int)tokens.size(); i += params.n_batch) {
-        int n_eval = std::min(params.n_batch, (int)tokens.size() - i);
-        if (llama_decode(ctx, llama_batch_get_one(&tokens[i], n_eval))) {
-            fprintf(stderr, "error: failed to evaluate prompt\n");
+        mtmd::input_chunks chunks(mtmd_input_chunks_init());
+        auto bitmaps_c_ptr = bitmaps.c_ptr();
+        int32_t res = mtmd_tokenize(mtmd_ctx, chunks.ptr.get(), &text,
+                                    bitmaps_c_ptr.data(), bitmaps_c_ptr.size());
+        if (res != 0) {
+            fprintf(stderr, "error: failed to tokenize prompt with images (error %d)\n", res);
+            mtmd_free(mtmd_ctx);
             common_sampler_free(sampler);
             llama_free(ctx);
             llama_model_free(model);
             return 6;
         }
+
+        llama_pos new_n_past = 0;
+        if (mtmd_helper_eval_chunks(mtmd_ctx, ctx, chunks.ptr.get(),
+                                    0, 0, params.n_batch, true, &new_n_past)) {
+            fprintf(stderr, "error: failed to evaluate prompt with images\n");
+            mtmd_free(mtmd_ctx);
+            common_sampler_free(sampler);
+            llama_free(ctx);
+            llama_model_free(model);
+            return 6;
+        }
+        n_past = new_n_past;
+    } else {
+        // Plain text tokenization
+        std::vector<llama_token> tokens = llamafile_tokenize(model, formatted_prompt, false, true);
+
+        // Add BOS if needed
+        if (llama_vocab_get_add_bos(vocab)) {
+            tokens.insert(tokens.begin(), llama_vocab_bos(vocab));
+        }
+
+        // Check context
+        if ((int)tokens.size() > params.n_ctx) {
+            fprintf(stderr, "error: prompt too long (%zu tokens, context is %d)\n",
+                    tokens.size(), params.n_ctx);
+            if (mtmd_ctx) mtmd_free(mtmd_ctx);
+            common_sampler_free(sampler);
+            llama_free(ctx);
+            llama_model_free(model);
+            return 5;
+        }
+
+        // Evaluate prompt
+        for (int i = 0; i < (int)tokens.size(); i += params.n_batch) {
+            int n_eval = std::min(params.n_batch, (int)tokens.size() - i);
+            if (llama_decode(ctx, llama_batch_get_one(&tokens[i], n_eval))) {
+                fprintf(stderr, "error: failed to evaluate prompt\n");
+                if (mtmd_ctx) mtmd_free(mtmd_ctx);
+                common_sampler_free(sampler);
+                llama_free(ctx);
+                llama_model_free(model);
+                return 6;
+            }
+        }
+        n_past = tokens.size();
     }
 
     // Install signal handler for graceful interrupt
@@ -271,7 +369,7 @@ int cli_main(int argc, char **argv) {
 
     // Generate response
     // When thinking is enabled, we parse the output to show <think>...</think> and content.
-    int n_cur = tokens.size();
+    int n_cur = n_past;
     const bool use_chat_parser = enable_thinking &&
                                  parser_params.format != COMMON_CHAT_FORMAT_CONTENT_ONLY;
     std::string raw_output;           // Accumulates raw token output for parsing
@@ -347,6 +445,7 @@ int cli_main(int argc, char **argv) {
     sigaction(SIGINT, &old_sa, nullptr);
 
     // Cleanup
+    if (mtmd_ctx) mtmd_free(mtmd_ctx);
     common_sampler_free(sampler);
     llama_free(ctx);
     llama_model_free(model);
