@@ -22,6 +22,18 @@ locally on most computers, with no installation.
 
 llamafile also includes **[whisperfile](whisperfile/index.md)**, a single-file speech-to-text tool built on [whisper.cpp](https://github.com/ggerganov/whisper.cpp) and the same Cosmopolitan packaging. It supports transcription and translation of audio files across all the same platforms, with no installation required.
 
+
+## v0.10.0
+
+**llamafile versions starting from 0.10.0 use a new build system**, aimed at keeping our code more easily 
+aligned with the latest versions of llama.cpp. This means they support more recent models and functionalities,
+but at the same time they might be missing some of the features you were accustomed to. If you liked
+the "classic experience" more, you will always be able to access the previous versions from our
+[releases](https://github.com/mozilla-ai/llamafile/releases) page. Our pre-built llamafiles always
+show which version of the server they have been bundled with ([0.9.* example](https://huggingface.co/mozilla-ai/llava-v1.5-7b-llamafile), [0.10.* example](https://huggingface.co/mozilla-ai/llamafile_0.10.0)), so you will always know
+which version of the software you are downloading.
+
+
 > **We want to hear from you!**
 Whether you are a new user or a long-time fan, please share what you find most valuable about llamafile and what would make it more useful for you.
 [Read more via the blog](https://blog.mozilla.ai/llamafile-returns/) and add your voice to the discussion [here](https://github.com/mozilla-ai/llamafile/discussions/809).
