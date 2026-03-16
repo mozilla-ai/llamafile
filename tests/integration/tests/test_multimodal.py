@@ -6,12 +6,44 @@ from utils.llamafile import LlamafileRunner
 
 
 @pytest.mark.multimodal
+@pytest.mark.cli
 class TestMultimodalCLI:
-    """Multimodal tests using CLI mode."""
+    """Multimodal tests using CLI mode with --image flag.
 
-    # Note: CLI multimodal would need --image flag or similar
-    # This depends on how llamafile CLI handles images
-    pass
+    Works with both pre-built llamafiles (mmproj bundled) and
+    separate executable + model (requires --mmproj).
+    """
+
+    def _image_args(self, mmproj, image_path):
+        """Build extra args for image CLI invocation."""
+        args = ["--image", str(image_path)]
+        if mmproj:
+            args.extend(["--mmproj", mmproj])
+        return args
+
+    def test_cli_describe_image(self, llamafile, mmproj, test_image, timeouts):
+        """Test that CLI can describe an image."""
+        result = llamafile.run_cli(
+            "Describe this image briefly.",
+            extra_args=self._image_args(mmproj, test_image),
+            timeout=timeouts.cli,
+        )
+
+        assert result.returncode == 0, f"CLI failed: {result.stderr}"
+        assert len(result.stdout.strip()) > 0, "No output generated"
+
+    def test_cli_image_question(self, llamafile, mmproj, test_image, timeouts):
+        """Test asking a specific question about an image."""
+        result = llamafile.run_cli(
+            "What colors do you see in this image?",
+            extra_args=self._image_args(mmproj, test_image),
+            timeout=timeouts.cli,
+        )
+
+        assert result.returncode == 0, f"CLI failed: {result.stderr}"
+        output_lower = result.stdout.lower()
+        color_words = ["red", "blue", "green", "white", "black", "yellow", "color"]
+        assert any(color in output_lower for color in color_words)
 
 
 @pytest.mark.multimodal

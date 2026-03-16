@@ -30,6 +30,12 @@ def pytest_addoption(parser):
         help="Path to model file (not needed for pre-built llamafiles)",
     )
     parser.addoption(
+        "--mmproj",
+        action="store",
+        default=None,
+        help="Path to multimodal projector model file (for vision tests)",
+    )
+    parser.addoption(
         "--gpu",
         action="store",
         default=None,
@@ -82,6 +88,19 @@ def gpu_mode(request) -> str | None:
     Use --gpu disable for CPU-only execution.
     """
     return request.config.getoption("--gpu")
+
+
+@pytest.fixture(scope="session")
+def mmproj(request) -> str | None:
+    """Get the multimodal projector model path.
+
+    Priority: --mmproj flag > LLAMAFILE_MMPROJ env var
+    """
+    mmproj_path = request.config.getoption("--mmproj")
+    if mmproj_path:
+        return mmproj_path
+
+    return os.environ.get("LLAMAFILE_MMPROJ")
 
 
 @pytest.fixture(scope="session")
