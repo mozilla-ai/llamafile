@@ -35,7 +35,7 @@ once.)
     ```
 
 6. A chat interface will open in the terminal window. That's it: you can immediately
-start writing. You can also upload an image by using the `/upload` command, or write
+start writing. You can also upload an image by using the `/upload` command and specifying the path to the image, or write
 `/help` to see the available commands).
 
 7. Note that when llamafile is running, you can also chat with it using
