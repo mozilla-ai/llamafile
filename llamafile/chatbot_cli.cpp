@@ -119,6 +119,14 @@ static cli_chat_template_result cli_apply_chat_template_full(llama_model *model,
     return result;
 }
 
+static void cleanup(mtmd_context *mtmd_ctx, common_sampler *sampler,
+                    llama_context *ctx, llama_model *model) {
+    if (mtmd_ctx) mtmd_free(mtmd_ctx);
+    if (sampler) common_sampler_free(sampler);
+    if (ctx) llama_free(ctx);
+    if (model) llama_model_free(model);
+}
+
 int cli_main(int argc, char **argv) {
     signal(SIGPIPE, SIG_IGN);
 
@@ -178,7 +186,7 @@ int cli_main(int argc, char **argv) {
     llama_context *ctx = llama_init_from_model(model, ctx_params);
     if (!ctx) {
         fprintf(stderr, "error: failed to create context\n");
-        llama_model_free(model);
+        cleanup(nullptr, nullptr, nullptr, model);
         return 3;
     }
 
@@ -186,8 +194,7 @@ int cli_main(int argc, char **argv) {
     common_sampler *sampler = common_sampler_init(model, params.sampling);
     if (!sampler) {
         fprintf(stderr, "error: failed to initialize sampler\n");
-        llama_free(ctx);
-        llama_model_free(model);
+        cleanup(nullptr, nullptr, ctx, model);
         return 4;
     }
 
@@ -208,16 +215,12 @@ int cli_main(int argc, char **argv) {
         if (!mtmd_ctx) {
             fprintf(stderr, "error: failed to load vision model: %s\n",
                     params.mmproj.path.c_str());
-            common_sampler_free(sampler);
-            llama_free(ctx);
-            llama_model_free(model);
+            cleanup(nullptr, sampler, ctx, model);
             return 5;
         }
     } else if (has_images) {
         fprintf(stderr, "error: --image requires --mmproj to specify a vision model\n");
-        common_sampler_free(sampler);
-        llama_free(ctx);
-        llama_model_free(model);
+        cleanup(nullptr, sampler, ctx, model);
         return 5;
     }
 
@@ -228,10 +231,7 @@ int cli_main(int argc, char **argv) {
             mtmd::bitmap bmp(mtmd_helper_bitmap_init_from_file(mtmd_ctx, image_path.c_str()));
             if (!bmp.ptr) {
                 fprintf(stderr, "error: failed to load image: %s\n", image_path.c_str());
-                mtmd_free(mtmd_ctx);
-                common_sampler_free(sampler);
-                llama_free(ctx);
-                llama_model_free(model);
+                cleanup(mtmd_ctx, sampler, ctx, model);
                 return 5;
             }
             bitmaps.entries.push_back(std::move(bmp));
@@ -307,21 +307,34 @@ int cli_main(int argc, char **argv) {
                                     bitmaps_c_ptr.data(), bitmaps_c_ptr.size());
         if (res != 0) {
             fprintf(stderr, "error: failed to tokenize prompt with images (error %d)\n", res);
-            mtmd_free(mtmd_ctx);
-            common_sampler_free(sampler);
-            llama_free(ctx);
-            llama_model_free(model);
+            cleanup(mtmd_ctx, sampler, ctx, model);
             return 6;
+        }
+
+        // Check context using n_tokens (actual KV cache entries needed)
+        size_t total_tokens = mtmd_helper_get_n_tokens(chunks.ptr.get());
+        if ((int)total_tokens > params.n_ctx) {
+            size_t text_tokens = 0, image_tokens = 0;
+            for (size_t i = 0; i < mtmd_input_chunks_size(chunks.ptr.get()); i++) {
+                auto chunk = mtmd_input_chunks_get(chunks.ptr.get(), i);
+                if (mtmd_input_chunk_get_type(chunk) == MTMD_INPUT_CHUNK_TYPE_TEXT)
+                    text_tokens += mtmd_input_chunk_get_n_tokens(chunk);
+                else
+                    image_tokens += mtmd_input_chunk_get_n_tokens(chunk);
+            }
+            fprintf(stderr, "error: prompt too long (%zu tokens, context is %d)\n"
+                    "  text: %zu tokens, image: %zu tokens\n"
+                    "  hint: use --image-max-tokens to reduce image token count\n",
+                    total_tokens, params.n_ctx, text_tokens, image_tokens);
+            cleanup(mtmd_ctx, sampler, ctx, model);
+            return 5;
         }
 
         llama_pos new_n_past = 0;
         if (mtmd_helper_eval_chunks(mtmd_ctx, ctx, chunks.ptr.get(),
                                     0, 0, params.n_batch, true, &new_n_past)) {
             fprintf(stderr, "error: failed to evaluate prompt with images\n");
-            mtmd_free(mtmd_ctx);
-            common_sampler_free(sampler);
-            llama_free(ctx);
-            llama_model_free(model);
+            cleanup(mtmd_ctx, sampler, ctx, model);
             return 6;
         }
         n_past = new_n_past;
@@ -338,10 +351,7 @@ int cli_main(int argc, char **argv) {
         if ((int)tokens.size() > params.n_ctx) {
             fprintf(stderr, "error: prompt too long (%zu tokens, context is %d)\n",
                     tokens.size(), params.n_ctx);
-            if (mtmd_ctx) mtmd_free(mtmd_ctx);
-            common_sampler_free(sampler);
-            llama_free(ctx);
-            llama_model_free(model);
+            cleanup(mtmd_ctx, sampler, ctx, model);
             return 5;
         }
 
@@ -350,10 +360,7 @@ int cli_main(int argc, char **argv) {
             int n_eval = std::min(params.n_batch, (int)tokens.size() - i);
             if (llama_decode(ctx, llama_batch_get_one(&tokens[i], n_eval))) {
                 fprintf(stderr, "error: failed to evaluate prompt\n");
-                if (mtmd_ctx) mtmd_free(mtmd_ctx);
-                common_sampler_free(sampler);
-                llama_free(ctx);
-                llama_model_free(model);
+                cleanup(mtmd_ctx, sampler, ctx, model);
                 return 6;
             }
         }
@@ -445,10 +452,7 @@ int cli_main(int argc, char **argv) {
     sigaction(SIGINT, &old_sa, nullptr);
 
     // Cleanup
-    if (mtmd_ctx) mtmd_free(mtmd_ctx);
-    common_sampler_free(sampler);
-    llama_free(ctx);
-    llama_model_free(model);
+    cleanup(mtmd_ctx, sampler, ctx, model);
     llama_backend_free();
 
     return 0;
