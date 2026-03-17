@@ -132,6 +132,33 @@ int main(int argc, char **argv) {
     // This also handles GPU initialization via llamafile_early_gpu_init()
     lf::LlamafileArgs args = lf::parse_llamafile_args(argc, argv);
 
+    // All modes require a model file (but let --help/-h pass through).
+    if (args.model_path.empty() &&
+        !llamafile_has(argv, "--help") && !llamafile_has(argv, "-h")) {
+        fprintf(stderr, "usage: llamafile -m MODEL.gguf [options]\n"
+                        "\n"
+                        "modes:\n"
+                        "  (default)   combined TUI chat + HTTP server\n"
+                        "  --server    HTTP server only\n"
+                        "  --chat      TUI chat only\n"
+                        "  --cli       single prompt/response (requires -p)\n"
+                        "\n"
+                        "options:\n"
+                        "  -m FILE     path to GGUF model file (required)\n"
+                        "  -p TEXT     system prompt\n"
+                        "  --gpu MODE  GPU mode (auto, nvidia, amd, apple, disable)\n"
+                        "  -ngl N      number of layers to offload to GPU\n"
+                        "  --verbose   enable verbose logging\n"
+                        "\n"
+                        "example:\n"
+                        "  llamafile -m model.gguf\n"
+                        "  llamafile -m model.gguf --server --port 8080\n"
+                        "  llamafile -m model.gguf --cli -p \"explain quantum computing\"\n"
+                        "\n"
+                        "run llamafile --help for full documentation\n");
+        return 1;
+    }
+
     // Suppress GPU and backend logging unless --verbose was specified.
     // Order matters: llama_log_set must come FIRST because llamafile_cuda_log_set
     // triggers DSO loading which calls ggml_backend_register() in the main exe.
