@@ -1,107 +1,34 @@
-This branch is a work in progress.
+llamafile 0.10.0 has been a work in progress for a while. Now that we are merging
+its code with main, we want to leave this document available to document both the
+reasons and the process behind it.
 
-It started with the goal of replicating a cosmopolitan llama.cpp build from scratch,
+Everything started with the goal of replicating a cosmopolitan llama.cpp build from scratch,
 so we could get the best of two worlds. On the one hand, some of the characteristic
 features of llamafiles, that is portability across different systems and architectures
 and the possibility of bundling model weights within llamafile executables. On the
 other hand, the features and the model support made available by the most recent
 versions of llama.cpp.
 
-We realise that what makes a llamafile is not just an APE executable, so we are now
-bringing back other of its features. We have started with the llamafile TUI and the
-latest PR introduces dynamic GPU support (starting with Metal first). 
+We realise that what makes a llamafile is not just an APE executable, so before
+merging this code with main we wanted to bring back other of its features into the
+new build. We believe there's still work to do, but now that the main features are
+there we can let you play with a more modern llamafile and directly ask you what
+you'd like to see the most in its future versions.
 
-While we are adding llamafile features back, some parts of the build might fail
-(for instance, the current build does not support whisperfile and stable diffusion
-yet... but [we are working on it](https://github.com/mozilla-ai/llamafile/pull/880)!).
-If you want the more stable build with older code you can still use the code
-(and the instructions) you can find in the main branch, while here you'll find the 
-most recent stuff.
-
-# Building llamafile v0.10.0(alpha)
-
-The code in this branch allows you to build a llamafile from a recent version
-of llama.cpp (commit f47edb8, Jan 8 2026), and has the following features:
-
-- llamafile TUI, with support for multimodal models (add images with the `/upload` command)
-- all the features already present in llama.cpp server, including tool calling support
-and Anthropic messages API
-- Metal GPU support
-- CUDA GPU support (tested on Linux)
-- Optimizations for different CPU architectures
-
-### 1. Clone the Repository
-
-```
-git clone https://github.com/mozilla-ai/llamafile.git
-cd llamafile
-``` 
-
-### 2. Checkout the New Build Branch
-
-Make sure you are working in this branch:
-
-```
-git checkout new_build_wip
-```
-
-### 3. Initialize Submodules and Apply Patches
-
-```
-make setup
-```
-
-This initializes the git submodules (llama.cpp, whisper.cpp, stable-diffusion.cpp) and applies llamafile-specific patches to them.
-
-### 4. Download the Cosmopolitan Toolchain
-
-```
-build/download-cosmocc.sh .cosmocc/4.0.2 4.0.2 85b8c37a406d862e656ad4ec14be9f6ce474c1b436b9615e91a55208aced3f44
-```
-
-### 5. Build Everything
-
-```
-.cosmocc/4.0.2/bin/make -j8
-```
-
-Build outputs will appear in the `./o` directory, e.g.:
-
-- `./o/llama.cpp/server/llama-server`: the original llama.cpp inference server, compiled with cosmocc
-- `o/llamafile/llamafile`: the llamafile executable, running both as a TUI and a server (with the `--server` flag)
-- `o/third_party/zipalign/zipalign`: the zipalign tool used to bundle llamafile executable, model weights, and default args into llamafiles
-
-### 6. Verify the Build (Optional)
-
-```
-.cosmocc/4.0.2/bin/make check
-```
-
-This runs the test suite to ensure everything built correctly.
-
-
-### 7. Run llamafile
-
-After the build, you can run the llamafile TUI as
-
-```
-./o/llamafile/llamafile --model <gguf_model>
-```
-
-or the llama.cpp server as
-
-```
-./o/llamafile/llamafile --model <gguf_model> --server
-```
-
-> [!NOTE]
-> If you want, you can build just the vanilla llama.cpp server as an APE with:
-> 
-> ```
-> make -j8 o//llama.cpp/server/llama-server
-> ```
+Older builds (and llamafiles built on them) will still be available, check out our
+[releases](https://github.com/mozilla-ai/llamafile/releases) and our 
+[Example Llamafiles](/docs/example_llamafiles.md) page.
 
 # What's new
+
+20260317
+- Updates to [skill documents](https://github.com/mozilla-ai/llamafile/pull/886)
+- Added [whisper](https://github.com/mozilla-ai/llamafile/pull/880)
+- Added support for [chat, cli, server](https://github.com/mozilla-ai/llamafile/pull/896) modalities
+- [Updated llama.cpp](https://github.com/mozilla-ai/llamafile/pull/901) to 7f5ee54 (with support for qwen3.5 models)
+- Added [integration tests](https://github.com/mozilla-ai/llamafile/pull/906)
+- Added [`--image` support to CLI](https://github.com/mozilla-ai/llamafile/pull/912)
+
 
 20260219
 - Added [CPU optimizations](https://github.com/mozilla-ai/llamafile/pull/868)
@@ -143,3 +70,11 @@ functionalities)
 20251124
 - first version, relying on cmake for the build
 
+# What's missing
+
+- GPU support for Windows
+- stable diffusion (the code is there, but has not been ported to the new build format yet)
+- some features triggered by extra arguments in CLI mode
+- pledge() SECCOMP sandboxing
+- llamafiler for embeddings (we rolled back to llama.cpp's embeddings endpoint instead)
+- ... please help us track if there's anything missing you wish to see in the new build!

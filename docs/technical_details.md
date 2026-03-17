@@ -16,7 +16,7 @@ the local file is aligned on a page size boundary. That way, assuming
 the zip file is uncompressed, once it's mmap()'d into memory we can pass
 pointers directly to GPUs like Apple Metal, which require that data be
 page size aligned. Since no existing ZIP archiving tool has an alignment
-flag, we had to write about [500 lines of code](https://github.com/Mozilla-Ocho/llamafile/blob/HEAD/llamafile/zipalign.c) to
+flag, we had to write about [500 lines of code](https://github.com/jart/zipalign/blob/main/zipalign.c) to
 insert the ZIP files ourselves. However, once there, every existing ZIP
 program should be able to read them, provided they support ZIP64. This
 makes the weights much more easily accessible than they otherwise would
