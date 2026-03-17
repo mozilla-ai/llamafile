@@ -198,10 +198,18 @@ int cli_main(int argc, char **argv) {
         return 4;
     }
 
-    // Initialize multimodal context if mmproj is specified
+    // Initialize multimodal context and load images if provided
     mtmd_context *mtmd_ctx = nullptr;
+    mtmd::bitmaps bitmaps;
     bool has_images = !params.image.empty();
-    if (!params.mmproj.path.empty()) {
+    if (has_images) {
+        if (params.mmproj.path.empty()) {
+            fprintf(stderr, "error: --image requires --mmproj to specify a vision model\n");
+            cleanup(nullptr, sampler, ctx, model);
+            return 5;
+        }
+
+        // Initialize vision model
         mtmd_context_params mparams = mtmd_context_params_default();
         mparams.use_gpu = params.mmproj_use_gpu;
         mparams.n_threads = params.cpuparams.n_threads;
@@ -218,15 +226,8 @@ int cli_main(int argc, char **argv) {
             cleanup(nullptr, sampler, ctx, model);
             return 5;
         }
-    } else if (has_images) {
-        fprintf(stderr, "error: --image requires --mmproj to specify a vision model\n");
-        cleanup(nullptr, sampler, ctx, model);
-        return 5;
-    }
 
-    // Load image bitmaps if specified
-    mtmd::bitmaps bitmaps;
-    if (has_images) {
+        // Load image bitmaps
         for (const auto &image_path : params.image) {
             mtmd::bitmap bmp(mtmd_helper_bitmap_init_from_file(mtmd_ctx, image_path.c_str()));
             if (!bmp.ptr) {
@@ -236,6 +237,8 @@ int cli_main(int argc, char **argv) {
             }
             bitmaps.entries.push_back(std::move(bmp));
         }
+    } else if (!params.mmproj.path.empty()) {
+        LOG_INF("--mmproj specified without --image, vision model will not be loaded\n");
     }
 
     // Initialize chat templates
