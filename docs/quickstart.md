@@ -206,4 +206,5 @@ Each sha256 digest is also used as a filename in the `~/.ollama/models/blobs` di
 cd ~/.ollama/models/blobs
 llamafile -m sha256-00e1317cbf74d901080d7100f57580ba8dd8de57203072dc6f668324ba545f29
 ```
-**Note** that Ollama's GGUF weights do not always work with llama.cpp and llamafile, thus this trick might not always work for you.
+**Note** that Ollama's GGUF weights do not always work with llama.cpp (see e.g. [here](https://forums.developer.nvidia.com/t/nemotron-3-super-120b-on-gb10-llama-cpp-sm-121-build-ollama-gguf-incompatibility-fix/363459)), 
+and as llamafile relies on llama.cpp this trick might not always work for you.

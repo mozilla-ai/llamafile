@@ -4,130 +4,21 @@ available version of the server (v0.10.0). The smaller the file is, the more eas
 run on your computer, even if no GPU is present (as a reference, Qwen3.5 0.8B Q8 generates
 text on a Raspberry Pi5 at ~8 tokens/sec).
 
-<table id="model-table">
-  <thead>
-    <tr>
-      <th onclick="sortTable(0)" style="cursor:pointer">Model ⬍</th>
-      <th onclick="sortTable(1)" style="cursor:pointer">Size ⬍</th>
-      <th>License</th>
-      <th>llamafile</th>
-    </tr>
-  </thead>
-  <tbody>
-    <tr>
-        <td><a href="https://huggingface.co/swiss-ai/Apertus-8B-Instruct-2509">Apertus 8B Instruct 2509</a></td>
-        <td data-val="5.9">5.9 GB</td>
-        <td><a href="https://choosealicense.com/licenses/apache-2.0/">Apache 2.0</a></td>
-        <td><a href="https://huggingface.co/mozilla-ai/llamafile_0.10.0/resolve/main/Apertus-8B-Instruct-2509.llamafile">Apertus-8B-Instruct-2509.llamafile</a></td>
-    </tr>
-    <tr>
-        <td><a href="https://huggingface.co/openai/gpt-oss-20b">gpt-oss 20b</a> mxfp4</td>
-        <td data-val="12">12 GB</td>
-        <td><a href="https://choosealicense.com/licenses/apache-2.0/">Apache 2.0</a></td>
-        <td><a href="https://huggingface.co/mozilla-ai/llamafile_0.10.0/resolve/main/gpt-oss-20b-mxfp4.llamafile">gpt-oss-20b-mxfp4.llamafile</a></td>
-    </tr>
-    <tr>
-        <td><a href="https://huggingface.co/openai/gpt-oss-20b">gpt-oss 20b</a> Q5_K_S</td>
-        <td data-val="12">12 GB</td>
-        <td><a href="https://choosealicense.com/licenses/apache-2.0/">Apache 2.0</a></td>
-        <td><a href="https://huggingface.co/mozilla-ai/llamafile_0.10.0/resolve/main/gpt-oss-20b-Q5_K_S.llamafile">gpt-oss-20b-Q5_K_S.llamafile</a></td>
-    </tr>
-    <tr>
-        <td><a href="https://huggingface.co/LiquidAI/LFM2-24B-A2B">LFM2 24B A2B</a> Q5_K_M</td>
-        <td data-val="16">16 GB</td>
-        <td><a href="https://huggingface.co/LiquidAI/LFM2-24B-A2B/blob/main/LICENSE">lfm1.0</a></td>
-        <td><a href="https://huggingface.co/mozilla-ai/llamafile_0.10.0/resolve/main/LFM2-24B-A2B-Q5_K_M.llamafile">LFM2-24B-A2B-Q5_K_M.llamafile</a></td>
-    </tr>
-    <tr>
-        <td><a href="https://huggingface.co/liuhaotian/llava-v1.6-mistral-7b">llava v1.6 mistral 7b</a> Q4_K_M</td>
-        <td data-val="5.3">5.3 GB</td>
-        <td><a href="https://choosealicense.com/licenses/apache-2.0/">Apache 2.0</a></td>
-        <td><a href="https://huggingface.co/mozilla-ai/llamafile_0.10.0/resolve/main/llava-v1.6-mistral-7b-Q4_K_M.llamafile">llava-v1.6-mistral-7b-Q4_K_M.llamafile</a></td>
-    </tr>
-    <tr>
-        <td><a href="https://huggingface.co/liuhaotian/llava-v1.6-mistral-7b">llava v1.6 mistral 7b</a> Q8_0</td>
-        <td data-val="8.4">8.4 GB</td>
-        <td><a href="https://choosealicense.com/licenses/apache-2.0/">Apache 2.0</a></td>
-        <td><a href="https://huggingface.co/mozilla-ai/llamafile_0.10.0/resolve/main/llava-v1.6-mistral-7b-Q8_0.llamafile">llava-v1.6-mistral-7b-Q8_0.llamafile</a></td>
-    </tr>
-    <tr>
-        <td><a href="https://huggingface.co/mistralai/Ministral-3-3B-Instruct-2512">Ministral 3 3B Instruct 2512</a> Q4_K_M</td>
-        <td data-val="3.4">3.4 GB</td>
-        <td><a href="https://choosealicense.com/licenses/apache-2.0/">Apache 2.0</a></td>
-        <td><a href="https://huggingface.co/mozilla-ai/llamafile_0.10.0/resolve/main/Ministral-3-3B-Instruct-2512-Q4_K_M.llamafile">Ministral-3-3B-Instruct-2512-Q4_K_M.llamafile</a></td>
-    </tr>
-    <tr>
-        <td><a href="https://huggingface.co/mistralai/Ministral-3-3B-Instruct-2512">Ministral 3 3B Instruct 2512</a> BF16</td>
-        <td data-val="7.8">7.8 GB</td>
-        <td><a href="https://choosealicense.com/licenses/apache-2.0/">Apache 2.0</a></td>
-        <td><a href="https://huggingface.co/mozilla-ai/llamafile_0.10.0/resolve/main/Ministral-3-3B-Instruct-2512-BF16.llamafile">Ministral-3-3B-Instruct-2512-BF16.llamafile</a></td>
-    </tr>
-    <tr>
-        <td><a href="https://huggingface.co/Qwen/Qwen3.5-0.8B">Qwen3.5 0.8B</a> Q8_0</td>
-        <td data-val="1.6">1.6 GB</td>
-        <td><a href="https://choosealicense.com/licenses/apache-2.0/">Apache 2.0</a></td>
-        <td><a href="https://huggingface.co/mozilla-ai/llamafile_0.10.0/resolve/main/Qwen3.5-0.8B-Q8_0.llamafile">Qwen3.5-0.8B-Q8_0.llamafile</a></td>
-    </tr>
-    <tr>
-        <td><a href="https://huggingface.co/Qwen/Qwen3.5-2B">Qwen3.5 2B</a> Q8_0</td>
-        <td data-val="3.2">3.2 GB</td>
-        <td><a href="https://choosealicense.com/licenses/apache-2.0/">Apache 2.0</a></td>
-        <td><a href="https://huggingface.co/mozilla-ai/llamafile_0.10.0/resolve/main/Qwen3.5-2B-Q8_0.llamafile">Qwen3.5-2B-Q8_0.llamafile</a></td>
-    </tr>
-    <tr>
-        <td><a href="https://huggingface.co/Qwen/Qwen3.5-4B">Qwen3.5 4B</a> Q5_K_S</td>
-        <td data-val="4.1">4.1 GB</td>
-        <td><a href="https://choosealicense.com/licenses/apache-2.0/">Apache 2.0</a></td>
-        <td><a href="https://huggingface.co/mozilla-ai/llamafile_0.10.0/resolve/main/Qwen3.5-4B-Q5_K_S.llamafile">Qwen3.5-4B-Q5_K_S.llamafile</a></td>
-    </tr>
-    <tr>
-        <td><a href="https://huggingface.co/Qwen/Qwen3.5-9B">Qwen3.5 9B</a> Q5_K_S</td>
-        <td data-val="7.4">7.4 GB</td>
-        <td><a href="https://choosealicense.com/licenses/apache-2.0/">Apache 2.0</a></td>
-        <td><a href="https://huggingface.co/mozilla-ai/llamafile_0.10.0/resolve/main/Qwen3.5-9B-Q5_K_S.llamafile">Qwen3.5-9B-Q5_K_S.llamafile</a></td>
-    </tr>
-    <tr>
-        <td><a href="https://huggingface.co/Qwen/Qwen3.5-27B">Qwen3.5 27B</a> Q5_K_S</td>
-        <td data-val="19">19 GB</td>
-        <td><a href="https://choosealicense.com/licenses/apache-2.0/">Apache 2.0</a></td>
-        <td><a href="https://huggingface.co/mozilla-ai/llamafile_0.10.0/resolve/main/Qwen3.5-27B-Q5_K_S.llamafile">Qwen3.5-27B-Q5_K_S.llamafile</a></td>
-    </tr>
-  </tbody>
-</table>
-
-<style>
-#model-table th[onclick] { cursor: pointer; user-select: none; }
-#model-table th[onclick]:hover { opacity: 0.8; }
-</style>
-
-<script>
-(function () {
-  let sortCol = -1, sortDir = 1;
-  const labels = ['Model', 'Size', 'License', 'llamafile'];
-  function sortTable(col) {
-    const table = document.getElementById('model-table');
-    const tbody = table.querySelector('tbody');
-    const rows = Array.from(tbody.querySelectorAll('tr'));
-    const ths = table.querySelectorAll('th');
-    if (sortCol === col) sortDir *= -1; else { sortCol = col; sortDir = 1; }
-    ths.forEach((th, i) => {
-      if (i === 0 || i === 1) {
-        th.textContent = labels[i] + (i === col ? (sortDir === 1 ? ' ▲' : ' ▼') : ' ⬍');
-      }
-    });
-    rows.sort((a, b) => {
-      const ac = a.cells[col], bc = b.cells[col];
-      const av = col === 1 ? parseFloat(ac.dataset.val) : ac.innerText.trim();
-      const bv = col === 1 ? parseFloat(bc.dataset.val) : bc.innerText.trim();
-      return (typeof av === 'number' ? av - bv : av.localeCompare(bv)) * sortDir;
-    });
-    rows.forEach(r => tbody.appendChild(r));
-  }
-  window.sortTable = sortTable;
-  sortTable(1);
-})();
-</script>
-
+| Model | Size | License | llamafile |
+| --- | --- | --- | --- |
+| [Qwen3.5 0.8B](https://huggingface.co/Qwen/Qwen3.5-0.8B) Q8_0 | 1.6 GB | [Apache 2.0](https://choosealicense.com/licenses/apache-2.0/) | [Qwen3.5-0.8B-Q8_0.llamafile](https://huggingface.co/mozilla-ai/llamafile_0.10.0/resolve/main/Qwen3.5-0.8B-Q8_0.llamafile) |
+| [Qwen3.5 2B](https://huggingface.co/Qwen/Qwen3.5-2B) Q8_0 | 3.2 GB | [Apache 2.0](https://choosealicense.com/licenses/apache-2.0/) | [Qwen3.5-2B-Q8_0.llamafile](https://huggingface.co/mozilla-ai/llamafile_0.10.0/resolve/main/Qwen3.5-2B-Q8_0.llamafile) |
+| [Ministral 3 3B Instruct 2512](https://huggingface.co/mistralai/Ministral-3-3B-Instruct-2512) Q4_K_M | 3.4 GB | [Apache 2.0](https://choosealicense.com/licenses/apache-2.0/) | [Ministral-3-3B-Instruct-2512-Q4_K_M.llamafile](https://huggingface.co/mozilla-ai/llamafile_0.10.0/resolve/main/Ministral-3-3B-Instruct-2512-Q4_K_M.llamafile) |
+| [Qwen3.5 4B](https://huggingface.co/Qwen/Qwen3.5-4B) Q5_K_S | 4.1 GB | [Apache 2.0](https://choosealicense.com/licenses/apache-2.0/) | [Qwen3.5-4B-Q5_K_S.llamafile](https://huggingface.co/mozilla-ai/llamafile_0.10.0/resolve/main/Qwen3.5-4B-Q5_K_S.llamafile) |
+| [llava v1.6 mistral 7b](https://huggingface.co/liuhaotian/llava-v1.6-mistral-7b) Q4_K_M | 5.3 GB | [Apache 2.0](https://choosealicense.com/licenses/apache-2.0/) | [llava-v1.6-mistral-7b-Q4_K_M.llamafile](https://huggingface.co/mozilla-ai/llamafile_0.10.0/resolve/main/llava-v1.6-mistral-7b-Q4_K_M.llamafile) |
+| [Apertus 8B Instruct 2509](https://huggingface.co/swiss-ai/Apertus-8B-Instruct-2509) | 5.9 GB | [Apache 2.0](https://choosealicense.com/licenses/apache-2.0/) | [Apertus-8B-Instruct-2509.llamafile](https://huggingface.co/mozilla-ai/llamafile_0.10.0/resolve/main/Apertus-8B-Instruct-2509.llamafile) |
+| [Qwen3.5 9B](https://huggingface.co/Qwen/Qwen3.5-9B) Q5_K_S | 7.4 GB | [Apache 2.0](https://choosealicense.com/licenses/apache-2.0/) | [Qwen3.5-9B-Q5_K_S.llamafile](https://huggingface.co/mozilla-ai/llamafile_0.10.0/resolve/main/Qwen3.5-9B-Q5_K_S.llamafile) |
+| [Ministral 3 3B Instruct 2512](https://huggingface.co/mistralai/Ministral-3-3B-Instruct-2512) BF16 | 7.8 GB | [Apache 2.0](https://choosealicense.com/licenses/apache-2.0/) | [Ministral-3-3B-Instruct-2512-BF16.llamafile](https://huggingface.co/mozilla-ai/llamafile_0.10.0/resolve/main/Ministral-3-3B-Instruct-2512-BF16.llamafile) |
+| [llava v1.6 mistral 7b](https://huggingface.co/liuhaotian/llava-v1.6-mistral-7b) Q8_0 | 8.4 GB | [Apache 2.0](https://choosealicense.com/licenses/apache-2.0/) | [llava-v1.6-mistral-7b-Q8_0.llamafile](https://huggingface.co/mozilla-ai/llamafile_0.10.0/resolve/main/llava-v1.6-mistral-7b-Q8_0.llamafile) |
+| [gpt-oss 20b](https://huggingface.co/openai/gpt-oss-20b) mxfp4 | 12 GB | [Apache 2.0](https://choosealicense.com/licenses/apache-2.0/) | [gpt-oss-20b-mxfp4.llamafile](https://huggingface.co/mozilla-ai/llamafile_0.10.0/resolve/main/gpt-oss-20b-mxfp4.llamafile) |
+| [gpt-oss 20b](https://huggingface.co/openai/gpt-oss-20b) Q5_K_S | 12 GB | [Apache 2.0](https://choosealicense.com/licenses/apache-2.0/) | [gpt-oss-20b-Q5_K_S.llamafile](https://huggingface.co/mozilla-ai/llamafile_0.10.0/resolve/main/gpt-oss-20b-Q5_K_S.llamafile) |
+| [LFM2 24B A2B](https://huggingface.co/LiquidAI/LFM2-24B-A2B) Q5_K_M | 16 GB | [lfm1.0](https://huggingface.co/LiquidAI/LFM2-24B-A2B/blob/main/LICENSE) | [LFM2-24B-A2B-Q5_K_M.llamafile](https://huggingface.co/mozilla-ai/llamafile_0.10.0/resolve/main/LFM2-24B-A2B-Q5_K_M.llamafile) |
+| [Qwen3.5 27B](https://huggingface.co/Qwen/Qwen3.5-27B) Q5_K_S | 19 GB | [Apache 2.0](https://choosealicense.com/licenses/apache-2.0/) | [Qwen3.5-27B-Q5_K_S.llamafile](https://huggingface.co/mozilla-ai/llamafile_0.10.0/resolve/main/Qwen3.5-27B-Q5_K_S.llamafile) |
 
 ## Legacy llamafiles
 
@@ -135,8 +26,8 @@ If you prefer the "classic llamafile experience" from previous versions (0.9.*),
 here's a list of llamafiles bundled with the older server executable.
 
 
-| Model                   | Size     | License                                                                                                                            | llamafile                                                                                                                                                                                      | other quants                                                                        |
-| ---                     | ---      | ---                                                                                                                                | ---                                                                                                                                                                                            | ---                                                                                 |
+| Model | Size | License | llamafile | other quants |
+| --- | --- | --- | --- | --- |
 | LLaMA 3.2 1B Instruct   | 1.11 GB  | [LLaMA 3.2](https://huggingface.co/Mozilla/Llama-3.2-1B-Instruct-llamafile/blob/main/LICENSE)                                      | [Llama-3.2-1B-Instruct-Q6\_K.llamafile](https://huggingface.co/Mozilla/Llama-3.2-1B-Instruct-llamafile/blob/main/Llama-3.2-1B-Instruct-Q6_K.llamafile?download=true)                           | [See HF repo](https://huggingface.co/Mozilla/Llama-3.2-1B-Instruct-llamafile)       |
 | LLaMA 3.2 3B Instruct   | 2.62 GB  | [LLaMA 3.2](https://huggingface.co/Mozilla/Llama-3.2-3B-Instruct-llamafile/blob/main/LICENSE)                                      | [Llama-3.2-3B-Instruct.Q6\_K.llamafile](https://huggingface.co/Mozilla/Llama-3.2-3B-Instruct-llamafile/blob/main/Llama-3.2-3B-Instruct.Q6_K.llamafile?download=true)                           | [See HF repo](https://huggingface.co/Mozilla/Llama-3.2-3B-Instruct-llamafile)       |
 | LLaMA 3.1 8B Instruct   | 5.23 GB  | [LLaMA 3.1](https://huggingface.co/Mozilla/Meta-Llama-3.1-8B-Instruct-llamafile/blob/main/LICENSE)                                 | [Llama-3.1-8B-Instruct.Q4\_K\_M.llamafile](https://huggingface.co/Mozilla/Meta-Llama-3.1-8B-Instruct-llamafile/resolve/main/Meta-Llama-3.1-8B-Instruct.Q4_K_M.llamafile?download=true)         | [See HF repo](https://huggingface.co/Mozilla/Meta-Llama-3.1-8B-Instruct-llamafile)  |

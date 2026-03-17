@@ -17,7 +17,7 @@ accessible to both developers and end users. We're doing that by
 combining [llama.cpp](https://github.com/ggerganov/llama.cpp) with [Cosmopolitan Libc](https://github.com/jart/cosmopolitan) into one
 framework that collapses all the complexity of LLMs down to
 a single-file executable (called a "llamafile") that runs
-locally on most computers, with no installation.
+locally on most operating systems and CPU archiectures, with no installation.
 
 llamafile also includes **[whisperfile](whisperfile/index.md)**, a single-file speech-to-text tool built on [whisper.cpp](https://github.com/ggerganov/whisper.cpp) and the same Cosmopolitan packaging. It supports transcription and translation of audio files across all the same platforms, with no installation required.
 
