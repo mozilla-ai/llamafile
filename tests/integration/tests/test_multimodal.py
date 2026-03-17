@@ -45,6 +45,30 @@ class TestMultimodalCLI:
         color_words = ["red", "blue", "green", "white", "black", "yellow", "color"]
         assert any(color in output_lower for color in color_words)
 
+    def test_cli_multiple_images_with_markers(self, llamafile, mmproj, test_image, timeouts):
+        """Test multiple images with explicit markers in the prompt."""
+        two_images = f"{test_image},{test_image}"
+        result = llamafile.run_cli(
+            "<__media__> Describe the first image. <__media__> Describe the second image.",
+            extra_args=self._image_args(mmproj, two_images),
+            timeout=timeouts.cli,
+        )
+
+        assert result.returncode == 0, f"CLI failed: {result.stderr}"
+        assert len(result.stdout.strip()) > 0, "No output generated"
+
+    def test_cli_multiple_images_marker_mismatch(self, llamafile, mmproj, test_image, timeouts):
+        """Test that mismatched marker count and image count gives a clear error."""
+        two_images = f"{test_image},{test_image}"
+        result = llamafile.run_cli(
+            "<__media__> Only one marker but two images.",
+            extra_args=self._image_args(mmproj, two_images),
+            timeout=timeouts.cli,
+        )
+
+        assert result.returncode != 0, "Should fail with marker/image mismatch"
+        assert "markers" in result.stderr.lower() or "match" in result.stderr.lower()
+
 
 @pytest.mark.multimodal
 @pytest.mark.tui
