@@ -8,15 +8,9 @@ This tutorial will explain how to turn speech from audio files into plain text, 
 git clone https://github.com/mozilla-ai/llamafile.git
 cd llamafile
 
-# checkout the current working branch
-git checkout new_build_wip
-
 # initialise all submodules - this step is required,
 # as the submodules need to be pulled and patched first!
 make setup
-
-# download cosmocc compiler
-build/download-cosmocc.sh .cosmocc/4.0.2 4.0.2 85b8c37a406d862e656ad4ec14be9f6ce474c1b436b9615e91a55208aced3f44
 ```
 
 ## (1) Download Model
