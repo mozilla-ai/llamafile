@@ -7,19 +7,26 @@ Qwen3.5 is a recent LLM that can do more than just chat; you can also upload
 images and ask it questions about them. With llamafile, this all happens
 locally: no data ever leaves your computer.
 
+> **NOTE**: we chose this model because that's the smallest one we have
+built a llamafile for, so most likely to work out-of-the-box for you.
+Please let us know if you are still having issues with that! If, on the
+other hand, you have powerful hardware and/or GPUs, [feel free to choose](example_llamafiles.md)
+larger and more expressive models which should provide more accurate
+responses.
+
 1. Download [Qwen3.5-0.8B-Q8_0.llamafile](https://huggingface.co/mozilla-ai/llamafile_0.10.0/resolve/main/Qwen3.5-0.8B-Q8_0.llamafile) (1.77 GB).
 
 2. Open your computer's terminal.
 
-3. If you're using macOS, Linux, or BSD, you'll need to grant permission
+    - If you're using macOS, Linux, or BSD, you'll need to grant permission
 for your computer to execute this new file. (You only need to do this
 once.)
 
-    ```sh
-    chmod +x Qwen3.5-0.8B-Q8_0.llamafile
-    ```
+      ```sh
+      chmod +x Qwen3.5-0.8B-Q8_0.llamafile
+      ```
 
-4. If you're on Windows, rename the file by adding ".exe" on the end.
+    - If you're on Windows, rename the file by adding ".exe" on the end.
 
 5. Run the llamafile. e.g.:
 
@@ -44,13 +51,12 @@ browser window and connect to <http://localhost:8080/>.
 
 As llamafile relies on llama.cpp for serving models, it comes with all its
 features. When it is started, in addition to hosting a web UI chat server at 
-<http://127.0.0.1:8080/>, it also exposes an [OpenAI API](https://platform.openai.com/docs/api-reference/chat)
-compatible chat completions endpoint, a [...](...), and a [...](...) ### TODO ####
-
-For further details on what fields and endpoints are available, refer to the [OpenAI
-documentation](https://platform.openai.com/docs/api-reference/chat/create) and the
-[llama.cpp documentation](...) ### TODO ###
-
+<http://127.0.0.1:8080/>, it also exposes an endpoint compatible with
+[OpenAI API](https://platform.openai.com/docs/api-reference/chat)
+and [Anthropic's Messages API](https://platform.claude.com/docs/en/api/messages).
+For further details on what fields and endpoints are available, refer to the
+APIs documentation and llama.cpp server's
+[README](https://github.com/ggml-org/llama.cpp/tree/master/tools/server).
 
 <details>
 <summary>Curl API Client Example</summary>

@@ -70,3 +70,11 @@ functionalities)
 20251124
 - first version, relying on cmake for the build
 
+# What's missing
+
+- GPU support for Windows
+- stable diffusion (the code is there, but has not been ported to the new build format yet)
+- some features triggered by extra arguments in CLI mode
+- pledge() SECCOMP sandboxing
+- llamafiler for embeddings (we rolled back to llama.cpp's embeddings endpoint instead)
+- ... please help us track if there's anything missing you wish to see in the new build!

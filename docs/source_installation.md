@@ -22,8 +22,8 @@ C compiler for you, saving it under the `.cosmocc` directory.
 ### Building
 
 ```sh
-make -j8
-sudo make install PREFIX=/usr/local
+.cosmocc/4.0.2/bin/make -j8
+sudo .cosmocc/4.0.2/bin/make install PREFIX=/usr/local
 ```
 
 Build outputs will appear in the `./o` directory, e.g.:

@@ -3,10 +3,9 @@
 <img src="images/llamafile-640x640.png" width="320" height="320"
      alt="[line drawing of llama animal head in front of slightly open manilla folder filled with files]">
 
-[![llamafile](https://img.shields.io/badge/llamafile-6E6E6E?logo=github&logoColor=white&labelColor=4A4A4A)](https://github.com/mozilla-ai/llamafile)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](https://github.com/mozilla-ai/llamafile/blob/main/LICENSE)
-[![Discord](https://dcbadge.limes.pink/api/server/YuMNeuKStr?style=flat)](https://discord.gg/YuMNeuKStr)
 [![ci status](https://github.com/mozilla-ai/llamafile/actions/workflows/ci.yml/badge.svg)](https://github.com/mozilla-ai/llamafile/actions/workflows/ci.yml)
+[![Discord](https://dcbadge.limes.pink/api/server/YuMNeuKStr?style=flat)](https://discord.gg/YuMNeuKStr)
 [![Mozilla Builders](https://img.shields.io/badge/Builders-6E6E6E?logo=mozilla&logoColor=white&labelColor=4A4A4A)](https://builders.mozilla.org/)
 
 **llamafile lets you distribute and run LLMs with a single file.**
@@ -27,7 +26,8 @@ llamafile also includes **[whisperfile](whisperfile/index.md)**, a single-file s
 
 **llamafile versions starting from 0.10.0 use a new build system**, aimed at keeping our code more easily 
 aligned with the latest versions of llama.cpp. This means they support more recent models and functionalities,
-but at the same time they might be missing some of the features you were accustomed to. If you liked
+but at the same time they might be [missing](https://github.com/mozilla-ai/llamafile/blob/main/README_0.10.0.md) some of
+the features you were accustomed to (check out this README for a high-level description of what has been done). If you liked
 the "classic experience" more, you will always be able to access the previous versions from our
 [releases](https://github.com/mozilla-ai/llamafile/releases) page. Our pre-built llamafiles always
 show which version of the server they have been bundled with ([0.9.* example](https://huggingface.co/mozilla-ai/llava-v1.5-7b-llamafile), [0.10.* example](https://huggingface.co/mozilla-ai/llamafile_0.10.0)), so you will always know
