@@ -309,7 +309,12 @@ int cli_main(int argc, char **argv) {
         int32_t res = mtmd_tokenize(mtmd_ctx, chunks.ptr.get(), &text,
                                     bitmaps_c_ptr.data(), bitmaps_c_ptr.size());
         if (res != 0) {
-            fprintf(stderr, "error: failed to tokenize prompt with images (error %d)\n", res);
+            if (res == 1)
+                fprintf(stderr, "error: number of images doesn't match number of markers in prompt\n");
+            else if (res == 2)
+                fprintf(stderr, "error: image preprocessing failed\n");
+            else
+                fprintf(stderr, "error: failed to tokenize prompt with images (error %d)\n", res);
             cleanup(mtmd_ctx, sampler, ctx, model);
             return 6;
         }
