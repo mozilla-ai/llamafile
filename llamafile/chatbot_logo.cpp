@@ -46,12 +46,11 @@ static void print_logo(const char16_t *s) {
     }
 }
 
-void logo(char **argv) {
-    if (llamafile_has(argv, "--nologo")) {
-        FLAG_nologo = true;
+void logo(char **) {
+    if (FLAG_nologo) {
         return;
     }
-    if (llamafile_has(argv, "--ascii")) {
+    if (FLAG_ascii) {
         printf("\
  _ _                        __ _ _\n\
 | | | __ _ _ __ ___   __ _ / _(_) | ___\n\

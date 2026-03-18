@@ -34,6 +34,8 @@ o/$(MODE)/:	o/$(MODE)/llamafile	\
 install: o/$(MODE)/llamafile/llamafile
 	mkdir -p $(PREFIX)/bin
 	$(INSTALL) o/$(MODE)/llamafile/llamafile $(PREFIX)/bin/llamafile
+	$(INSTALL) o/$(MODE)/whisperfile/whisperfile $(PREFIX)/bin/whisperfile
+	$(INSTALL) o/$(MODE)/third_party/zipalign/zipalign $(PREFIX)/bin/zipalign
 
 .PHONY: check
 check: o/$(MODE)/tests

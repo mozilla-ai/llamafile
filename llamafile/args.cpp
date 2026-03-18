@@ -2,6 +2,7 @@
 // vi: set et ft=cpp ts=4 sts=4 sw=4 fenc=utf-8 :vi
 //
 // Copyright 2024 Mozilla Foundation
+// Copyright 2026 Mozilla.ai
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -32,7 +33,10 @@ static bool is_llamafile_flag(const char* arg) {
            strcmp(arg, "--chat") == 0 ||
            strcmp(arg, "--cli") == 0 ||
            strcmp(arg, "--gpu") == 0 ||
-           strcmp(arg, "--nothink") == 0;
+           strcmp(arg, "--ascii") == 0 ||
+           strcmp(arg, "--nologo") == 0 ||
+           strcmp(arg, "--nothink") == 0 ||
+           strcmp(arg, "--version") == 0;
 }
 
 LlamafileArgs parse_llamafile_args(int argc, char** argv) {
@@ -73,6 +77,10 @@ LlamafileArgs parse_llamafile_args(int argc, char** argv) {
 
     // Check --nothink flag (filters thinking/reasoning content in CLI mode)
     FLAG_nothink = llamafile_has(argv, "--nothink");
+
+    // Check logo flags
+    FLAG_nologo = llamafile_has(argv, "--nologo");
+    FLAG_ascii = llamafile_has(argv, "--ascii");
 
     // Filter out llamafile-specific arguments
     // These are not recognized by llama.cpp and would cause errors

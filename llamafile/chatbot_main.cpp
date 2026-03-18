@@ -2,6 +2,7 @@
 // vi: set et ft=cpp ts=4 sts=4 sw=4 fenc=utf-8 :vi
 //
 // Copyright 2024 Mozilla Foundation
+// Copyright 2026 Mozilla.ai
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -43,10 +44,7 @@
 #include <cpp-httplib/httplib.h>
 #include "llamafile.h"
 
-// Version string - should be defined by build system
-#ifndef LLAMAFILE_VERSION_STRING
-#define LLAMAFILE_VERSION_STRING "0.10.0-dev"
-#endif
+#include "version.h"
 
 namespace lf {
 namespace chatbot {
@@ -141,7 +139,12 @@ int main(int argc, char **argv) {
     // parse flags
     print_ephemeral("loading backend...");
     llama_backend_init();
+    // Pause common_log BEFORE common_init() to suppress llama.cpp build info line
+    if (!verbose)
+        common_log_pause(common_log_main());
     common_init();
+    if (!verbose)
+        common_log_resume(common_log_main());
 
     // NOTE that we are currently using llama.cpp flags parser here, so
     // either we create a new kind of example for a custom set of flags

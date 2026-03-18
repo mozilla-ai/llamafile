@@ -2,6 +2,7 @@
 // vi: set et ft=c ts=4 sts=4 sw=4 fenc=utf-8 :vi
 //
 // Copyright 2023 Mozilla Foundation
+// Copyright 2026 Mozilla.ai
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -16,6 +17,7 @@
 // limitations under the License.
 
 #include "llamafile.h"
+#include "version.h"
 #include "zip.h"
 #include <cosmo.h>
 #include <libc/assert.h>
@@ -425,6 +427,7 @@ void llamafile_close(struct llamafile *file) {
 // FLAG variable definitions
 // ==============================================================================
 
+bool FLAG_ascii = false;
 bool FLAG_log_disable = false;
 bool FLAG_nocompile = false;
 bool FLAG_nologo = false;
@@ -460,9 +463,9 @@ static const char *llamafile_get_home_dir(void) {
 void llamafile_get_app_dir(char *path, size_t size) {
     snprintf(path, size, "%s/.llamafile/v/%d.%d.%d/",
              llamafile_get_home_dir(),
-             LLAMAFILE_VERSION_MAJOR,
-             LLAMAFILE_VERSION_MINOR,
-             LLAMAFILE_VERSION_PATCH);
+             LLAMAFILE_MAJOR,
+             LLAMAFILE_MINOR,
+             LLAMAFILE_PATCH);
 }
 
 static int copy_file_contents(int fdin, int fdout) {

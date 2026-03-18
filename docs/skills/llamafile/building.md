@@ -6,7 +6,8 @@ Complete guide to the llamafile build system and toolchain.
 
 ### Cosmopolitan Toolchain
 
-Llamafile uses Cosmopolitan C/C++ compiler (cosmocc) to create Actually Portable Executables (APE). The toolchain is downloaded automatically but can be fetched manually:
+Llamafile uses Cosmopolitan C/C++ compiler (cosmocc) to create Actually Portable Executables (APE). The toolchain 
+is downloaded automatically when `make setup` is called but can be fetched manually too with:
 
 ```sh
 build/download-cosmocc.sh .cosmocc/4.0.2 4.0.2 85b8c37a406d862e656ad4ec14be9f6ce474c1b436b9615e91a55208aced3f44
@@ -47,10 +48,11 @@ This command:
 ### Full Build
 
 ```sh
-.cosmocc/4.0.2/bin/make -j8
+.cosmocc/4.0.2/bin/make -j $(nproc)  # or: llamafile:build
 ```
 
-The `-j8` flag enables parallel compilation (adjust based on CPU cores).
+The `-j $(nproc)` flag enables parallel compilation (adjust based on CPU cores).
+Adapt `nproc` to the OS where you are building, (e.g. `sysctl -n hw.physicalcpu` on mac)
 
 **Critical:** Always use `.cosmocc/4.0.2/bin/make`, not system make. The cosmocc toolchain includes its own make with Cosmopolitan-specific behavior.
 
@@ -59,18 +61,18 @@ The `-j8` flag enables parallel compilation (adjust based on CPU cores).
 Remove build outputs:
 
 ```sh
-.cosmocc/4.0.2/bin/make clean
+.cosmocc/4.0.2/bin/make clean  # or: llamafile:clean
 ```
 
 This removes the `o/` directory containing all compiled objects and binaries.
 
-### Install (Old Llamafile Only)
+### Install compiled binaries
 
 ```sh
-sudo make install PREFIX=/usr/local
+sudo .cosmocc/4.0.2/bin/make install PREFIX=/usr/local
 ```
 
-Installs binaries and man pages. Note: This refers to old llamafile; the new version will add this functionality later.
+Installs binaries and man pages.
 
 ## Build System Architecture
 
@@ -168,10 +170,13 @@ Ensure using the cosmocc make:
 
 ```sh
 # Wrong
-make -j8
+make -j $(nproc)
 
 # Correct
-.cosmocc/4.0.2/bin/make -j8
+.cosmocc/4.0.2/bin/make -j $(nproc)
+
+# Or use the command directly:
+# llamafile:build
 ```
 
 ### Submodule Not Initialized
@@ -187,8 +192,8 @@ make setup
 After significant changes, clean and rebuild:
 
 ```sh
-.cosmocc/4.0.2/bin/make clean
-.cosmocc/4.0.2/bin/make -j8
+.cosmocc/4.0.2/bin/make clean          # or: llamafile:clean
+.cosmocc/4.0.2/bin/make -j $(nproc)   # or: llamafile:build
 ```
 
 ### Toolchain Checksum Mismatch

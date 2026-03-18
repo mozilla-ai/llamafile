@@ -1,5 +1,18 @@
-#-*-mode:makefile-gmake;indent-tabs-mode:t;tab-width:8;coding:utf-8-*-┐
-#── vi: set noet ft=make ts=8 sw=8 fenc=utf-8 :vi ────────────────────┘
+#
+# Copyright 2024 Mozilla Foundation
+# Copyright 2026 Mozilla.ai
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 
 PKGS += LLAMAFILE
 
@@ -19,15 +32,6 @@ PKGS += LLAMAFILE
 LLAMAFILE_HDRS := \
 	llamafile/llamafile.h \
 	llamafile/sgemm.h
-
-# ==============================================================================
-# Version information
-# ==============================================================================
-
-LLAMAFILE_VERSION_MAJOR := 0
-LLAMAFILE_VERSION_MINOR := 10
-LLAMAFILE_VERSION_PATCH := 0
-LLAMAFILE_VERSION_STRING := $(LLAMAFILE_VERSION_MAJOR).$(LLAMAFILE_VERSION_MINOR).$(LLAMAFILE_VERSION_PATCH)-dev
 
 # ==============================================================================
 # Include paths
@@ -55,10 +59,6 @@ LLAMAFILE_INCLUDES := \
 
 LLAMAFILE_CPPFLAGS := \
 	$(LLAMAFILE_INCLUDES) \
-	-DLLAMAFILE_VERSION_MAJOR=$(LLAMAFILE_VERSION_MAJOR) \
-	-DLLAMAFILE_VERSION_MINOR=$(LLAMAFILE_VERSION_MINOR) \
-	-DLLAMAFILE_VERSION_PATCH=$(LLAMAFILE_VERSION_PATCH) \
-	-DLLAMAFILE_VERSION_STRING=\"$(LLAMAFILE_VERSION_STRING)\" \
 	-DLLAMAFILE_TUI \
 	-DCOSMOCC=1
 
