@@ -139,7 +139,12 @@ int main(int argc, char **argv) {
     // parse flags
     print_ephemeral("loading backend...");
     llama_backend_init();
+    // Pause common_log BEFORE common_init() to suppress llama.cpp build info line
+    if (!verbose)
+        common_log_pause(common_log_main());
     common_init();
+    if (!verbose)
+        common_log_resume(common_log_main());
 
     // NOTE that we are currently using llama.cpp flags parser here, so
     // either we create a new kind of example for a custom set of flags

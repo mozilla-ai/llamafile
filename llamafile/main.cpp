@@ -51,6 +51,102 @@ extern int server_main(int argc, char **argv,
                        std::function<void(const std::string &)> on_ready,
                        std::function<void(std::function<void()>)> on_shutdown_available);
 
+static void print_general_help() {
+    printf("llamafile v" LLAMAFILE_VERSION_STRING " - run LLMs locally\n"
+           "\n"
+           "usage: llamafile -m MODEL.gguf [options]\n"
+           "\n"
+           "modes:\n"
+           "  (default)   combined TUI chat + HTTP server\n"
+           "  --server    HTTP server only (OpenAI-compatible API)\n"
+           "  --chat      TUI chat only (no server)\n"
+           "  --cli       single prompt/response (requires -p)\n"
+           "\n"
+           "common options:\n"
+           "  -m FILE          path to GGUF model file (required)\n"
+           "  -p TEXT          system prompt (in --cli mode: user prompt)\n"
+           "  --gpu MODE       GPU backend (auto, nvidia, amd, apple, disable)\n"
+           "  -ngl N           number of layers to offload to GPU (default: auto)\n"
+           "  --verbose        enable verbose logging\n"
+           "  --version        show version information\n"
+           "  --help           show this help\n"
+           "\n"
+           "for mode-specific help and options:\n"
+           "  llamafile --server --help\n"
+           "  llamafile --chat --help\n"
+           "  llamafile --cli --help\n"
+           "\n"
+           "examples:\n"
+           "  llamafile -m model.gguf\n"
+           "  llamafile -m model.gguf --server --port 8080\n"
+           "  llamafile -m model.gguf --chat\n"
+           "  llamafile -m model.gguf --cli -p \"explain quantum computing\"\n");
+}
+
+static void print_chat_help() {
+    printf("llamafile --chat - TUI chat mode\n"
+           "\n"
+           "usage: llamafile -m MODEL.gguf --chat [options]\n"
+           "\n"
+           "Interactive terminal chat with a local LLM. The model is loaded\n"
+           "directly into memory (no server). Supports syntax highlighting,\n"
+           "multiline input, and conversation management.\n"
+           "\n"
+           "chat-specific options:\n"
+           "  -p TEXT          system prompt\n"
+           "  --nologo         suppress the startup logo\n"
+           "  --ascii          use ASCII art instead of Unicode for logo\n"
+           "\n"
+           "multimodal options:\n"
+           "  --mmproj FILE    path to vision model (mmproj GGUF)\n"
+           "  --image FILE     image file(s) to include\n"
+           "\n"
+           "interactive commands (type during chat):\n"
+           "  /help            show available commands\n"
+           "  /clear           restart conversation\n"
+           "  /context         show token usage\n"
+           "  /stats           show performance metrics\n"
+           "  /dump [FILE]     save conversation to file\n"
+           "  /upload FILE     share files with assistant\n"
+           "  /push, /pop      save/restore conversation state\n"
+           "  /undo            erase last exchange\n"
+           "  /forget          erase oldest message\n"
+           "  /exit            quit\n"
+           "\n"
+           "all other llama.cpp options are also accepted.\n"
+           "run llamafile --server --help to see the full list.\n"
+           "\n"
+           "examples:\n"
+           "  llamafile -m model.gguf --chat\n"
+           "  llamafile -m model.gguf --chat -p \"You are a helpful assistant\"\n"
+           "  llamafile -m model.gguf --chat --mmproj mmproj.gguf\n");
+}
+
+static void print_cli_help() {
+    printf("llamafile --cli - single prompt/response mode\n"
+           "\n"
+           "usage: llamafile -m MODEL.gguf --cli -p \"prompt\" [options]\n"
+           "\n"
+           "Send a single prompt, print the response, and exit. Designed for\n"
+           "scripting and programmatic use. Output is clean with no logo or UI.\n"
+           "\n"
+           "cli-specific options:\n"
+           "  -p TEXT          user prompt (required)\n"
+           "  --nothink        suppress <think>...</think> reasoning output\n"
+           "\n"
+           "multimodal options:\n"
+           "  --mmproj FILE    path to vision model (mmproj GGUF)\n"
+           "  --image FILE     image file(s) to include with prompt\n"
+           "\n"
+           "all other llama.cpp options are also accepted.\n"
+           "run llamafile --server --help to see the full list.\n"
+           "\n"
+           "examples:\n"
+           "  llamafile -m model.gguf --cli -p \"explain quantum computing\"\n"
+           "  llamafile -m model.gguf --cli --nothink -p \"write a haiku\"\n"
+           "  llamafile -m model.gguf --cli --mmproj mm.gguf --image photo.jpg -p \"describe this\"\n");
+}
+
 namespace lf {
 
 // Context passed to the TUI thread via pthread
@@ -140,7 +236,25 @@ int main(int argc, char **argv) {
     // This also handles GPU initialization via llamafile_early_gpu_init()
     lf::LlamafileArgs args = lf::parse_llamafile_args(argc, argv);
 
-    // All modes require a model file (but let --help/-h pass through).
+    // Handle --help for llamafile modes.
+    // --server --help falls through to llama.cpp's help system.
+    if (llamafile_has(argv, "--help") || llamafile_has(argv, "-h")) {
+        switch (args.mode) {
+            case lf::ProgramMode::SERVER:
+                break; // fall through to llama.cpp's help
+            case lf::ProgramMode::AUTO:
+                print_general_help();
+                return 0;
+            case lf::ProgramMode::CHAT:
+                print_chat_help();
+                return 0;
+            case lf::ProgramMode::CLI:
+                print_cli_help();
+                return 0;
+        }
+    }
+
+    // All modes require a model file (but let --server --help pass through).
     if (args.model_path.empty() &&
         !llamafile_has(argv, "--help") && !llamafile_has(argv, "-h")) {
         fprintf(stderr, "usage: llamafile -m MODEL.gguf [options]\n"
@@ -164,7 +278,11 @@ int main(int argc, char **argv) {
                         "  llamafile -m model.gguf --server --port 8080\n"
                         "  llamafile -m model.gguf --cli -p \"explain quantum computing\"\n"
                         "\n"
-                        "run llamafile --help for full documentation\n");
+                        "for more details:\n"
+                        "  llamafile --help\n"
+                        "  llamafile --server --help\n"
+                        "  llamafile --chat --help\n"
+                        "  llamafile --cli --help\n");
         return 1;
     }
 

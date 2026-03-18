@@ -33,6 +33,8 @@ static bool is_llamafile_flag(const char* arg) {
            strcmp(arg, "--chat") == 0 ||
            strcmp(arg, "--cli") == 0 ||
            strcmp(arg, "--gpu") == 0 ||
+           strcmp(arg, "--ascii") == 0 ||
+           strcmp(arg, "--nologo") == 0 ||
            strcmp(arg, "--nothink") == 0 ||
            strcmp(arg, "--version") == 0;
 }
@@ -75,6 +77,10 @@ LlamafileArgs parse_llamafile_args(int argc, char** argv) {
 
     // Check --nothink flag (filters thinking/reasoning content in CLI mode)
     FLAG_nothink = llamafile_has(argv, "--nothink");
+
+    // Check logo flags
+    FLAG_nologo = llamafile_has(argv, "--nologo");
+    FLAG_ascii = llamafile_has(argv, "--ascii");
 
     // Filter out llamafile-specific arguments
     // These are not recognized by llama.cpp and would cause errors
