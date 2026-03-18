@@ -34,15 +34,6 @@ LLAMAFILE_HDRS := \
 	llamafile/sgemm.h
 
 # ==============================================================================
-# Version information
-# ==============================================================================
-
-LLAMAFILE_VERSION_MAJOR := 0
-LLAMAFILE_VERSION_MINOR := 10
-LLAMAFILE_VERSION_PATCH := 0
-LLAMAFILE_VERSION_STRING := $(LLAMAFILE_VERSION_MAJOR).$(LLAMAFILE_VERSION_MINOR).$(LLAMAFILE_VERSION_PATCH)-dev
-
-# ==============================================================================
 # Include paths
 # ==============================================================================
 
@@ -68,10 +59,6 @@ LLAMAFILE_INCLUDES := \
 
 LLAMAFILE_CPPFLAGS := \
 	$(LLAMAFILE_INCLUDES) \
-	-DLLAMAFILE_VERSION_MAJOR=$(LLAMAFILE_VERSION_MAJOR) \
-	-DLLAMAFILE_VERSION_MINOR=$(LLAMAFILE_VERSION_MINOR) \
-	-DLLAMAFILE_VERSION_PATCH=$(LLAMAFILE_VERSION_PATCH) \
-	-DLLAMAFILE_VERSION_STRING=\"$(LLAMAFILE_VERSION_STRING)\" \
 	-DLLAMAFILE_TUI \
 	-DCOSMOCC=1
 

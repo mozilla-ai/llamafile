@@ -32,6 +32,7 @@
 #include "args.h"
 #include "chatbot.h"
 #include "llamafile.h"
+#include "version.h"
 
 #include <cstdio>
 #include <cstring>
@@ -129,6 +130,12 @@ int main(int argc, char **argv) {
     argc = cosmo_args("/zip/.args", &argv);
 #endif
 
+    // Handle --version before anything else (ignores all other arguments)
+    if (llamafile_has(argv, "--version")) {
+        puts("llamafile v" LLAMAFILE_VERSION_STRING);
+        return 0;
+    }
+
     // Parse llamafile arguments and determine execution mode
     // This also handles GPU initialization via llamafile_early_gpu_init()
     lf::LlamafileArgs args = lf::parse_llamafile_args(argc, argv);
@@ -150,6 +157,7 @@ int main(int argc, char **argv) {
                         "  --gpu MODE  GPU mode (auto, nvidia, amd, apple, disable)\n"
                         "  -ngl N      number of layers to offload to GPU\n"
                         "  --verbose   enable verbose logging\n"
+                        "  --version   show version information\n"
                         "\n"
                         "example:\n"
                         "  llamafile -m model.gguf\n"
