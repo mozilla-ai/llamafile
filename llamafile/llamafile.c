@@ -427,6 +427,7 @@ void llamafile_close(struct llamafile *file) {
 // FLAG variable definitions
 // ==============================================================================
 
+bool FLAG_ascii = false;
 bool FLAG_log_disable = false;
 bool FLAG_nocompile = false;
 bool FLAG_nologo = false;

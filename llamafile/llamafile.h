@@ -30,6 +30,7 @@ extern "C" {
 
 extern bool FLAG_log_disable;   // Disables logging (chatbot_comm.cpp)
 extern bool FLAG_nocompile;     // Disables GPU library compilation (metal.c)
+extern bool FLAG_ascii;         // Uses ASCII art for logo (chatbot_logo.cpp)
 extern bool FLAG_nologo;        // Suppresses logo display (chatbot_main.cpp)
 extern bool FLAG_nothink;       // Filters thinking/reasoning content (chatbot_cli.cpp)
 extern bool FLAG_precise;       // Forces precise math in tinyblas (tinyblas_cpu.h)
