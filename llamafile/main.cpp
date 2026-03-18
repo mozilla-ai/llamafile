@@ -257,32 +257,21 @@ int main(int argc, char **argv) {
     // All modes require a model file (but let --server --help pass through).
     if (args.model_path.empty() &&
         !llamafile_has(argv, "--help") && !llamafile_has(argv, "-h")) {
-        fprintf(stderr, "usage: llamafile -m MODEL.gguf [options]\n"
-                        "\n"
-                        "modes:\n"
-                        "  (default)   combined TUI chat + HTTP server\n"
-                        "  --server    HTTP server only\n"
-                        "  --chat      TUI chat only\n"
-                        "  --cli       single prompt/response (requires -p)\n"
-                        "\n"
-                        "options:\n"
-                        "  -m FILE     path to GGUF model file (required)\n"
-                        "  -p TEXT     system prompt\n"
-                        "  --gpu MODE  GPU mode (auto, nvidia, amd, apple, disable)\n"
-                        "  -ngl N      number of layers to offload to GPU\n"
-                        "  --verbose   enable verbose logging\n"
-                        "  --version   show version information\n"
-                        "\n"
-                        "example:\n"
-                        "  llamafile -m model.gguf\n"
-                        "  llamafile -m model.gguf --server --port 8080\n"
-                        "  llamafile -m model.gguf --cli -p \"explain quantum computing\"\n"
-                        "\n"
-                        "for more details:\n"
-                        "  llamafile --help\n"
-                        "  llamafile --server --help\n"
-                        "  llamafile --chat --help\n"
-                        "  llamafile --cli --help\n");
+        fprintf(stderr, "error: missing required -m MODEL.gguf\n\n");
+        switch (args.mode) {
+            case lf::ProgramMode::SERVER:
+                print_general_help();
+                break;
+            case lf::ProgramMode::AUTO:
+                print_general_help();
+                break;
+            case lf::ProgramMode::CHAT:
+                print_chat_help();
+                break;
+            case lf::ProgramMode::CLI:
+                print_cli_help();
+                break;
+        }
         return 1;
     }
 
