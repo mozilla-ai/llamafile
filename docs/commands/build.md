@@ -17,7 +17,8 @@ fi
 Then build:
 
 ```bash
-.cosmocc/4.0.2/bin/make -j8
+.cosmocc/4.0.2/bin/make -j $(nproc)
 ```
+Adapt `nproc` to the OS where you are building, (e.g. `sysctl -n hw.physicalcpu` on mac)
 
 Build outputs will be in `o/$(MODE)/`.

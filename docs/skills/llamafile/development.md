@@ -16,8 +16,8 @@ For changes which are not affecting submodules:
 ### Workflow
 
 1. Edit files
-2. Rebuild: `.cosmocc/4.0.2/bin/make -j8`
-3. Test: `.cosmocc/4.0.2/bin/make check`
+2. Rebuild: `llamafile:build`
+3. Test: `llamafile:check`
 4. Commit changes normally with git
 
 ### Key Directories
@@ -71,8 +71,8 @@ vim src/llama.cpp
 
 #### Step 2: Generate Patches
 
-Patches are usually generated after the code has been thoroughly tested and we are
-ready to commit it. To avoid manual errors, we use the script `tools/generate-patches.sh`
+Patches are usually generated after the code has been thoroughly tested and is
+ready to commit. To avoid manual errors, use the script `tools/generate-patches.sh`
 which automatically saves all new files and patches in the specified output directory.
 
 ```sh
@@ -100,8 +100,8 @@ make reset-repo
 make setup
 
 # Rebuild and test
-.cosmocc/4.0.2/bin/make -j8
-.cosmocc/4.0.2/bin/make check
+# llamafile:build
+# llamafile:check
 ```
 
 ### Adding New Files to Submodules
@@ -179,20 +179,13 @@ git add llama.cpp.patches/patches/new-patch.patch
 git commit -m "llama.cpp: Add feature X"
 ```
 
-### Branches
-
-- `main`: Old/classic llamafile (stable)
-- `new_build_wip`: New llamafile (work in progress)
-
-Development typically happens on `new_build_wip` or feature branches.
-
 ### Pull Request Checklist
 
 Before submitting changes:
 
 1. [ ] Patches apply cleanly from fresh clone
-2. [ ] Build succeeds: `.cosmocc/4.0.2/bin/make -j8`
-3. [ ] Tests pass: `.cosmocc/4.0.2/bin/make check`
+2. [ ] Build succeeds: `llamafile:build`
+3. [ ] Tests pass: `llamafile:check`
 4. [ ] Patches are focused and documented
 5. [ ] BUILD.mk updated if adding new files
 

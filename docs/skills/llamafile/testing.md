@@ -47,22 +47,27 @@ test, prefer:
 
 
 
-### Run All Tests
+### Run All Unit Tests
+
+Run `llamafile:check` to run all unit tests from the test suite.
+
+### Run Integration Tests
 
 ```sh
-.cosmocc/4.0.2/bin/make check
+./tests/integration/run_tests.sh --executable model_name.llamafile
 ```
 
-This runs the complete test suite including:
-- Unit tests
-- Integration tests
+- executable can be a pre-bundled llamafile or just the server executable
+- if running the server executable, `--model` (and `--mmproj` for multimodal models) can be specified too
+- different tests are run to verify the model/server capabilities
+- more information and a user manual are available in `tests/integration/README.md`
 
 ### Run Specific Test
 
 Tests are defined as `.runs` targets in BUILD.mk:
 
 ```sh
-.cosmocc/4.0.2/bin/make o/$(MODE)/llamafile/json_test.runs
+.cosmocc/4.0.2/bin/make o/$(MODE)/llamafile/json_test.runs  # run a specific test target
 ```
 
 Replace `$(MODE)` with the actual mode (e.g., `opt`, `dbg`).
@@ -97,7 +102,7 @@ Tests should be run when:
 - Dependencies change
 - `.runs` file is missing
 
-The `make check` target depends on all `.runs` files, ensuring all tests run.
+The `llamafile:check` command depends on all `.runs` files, ensuring all tests run.
 
 ## Test Locations
 
@@ -113,14 +118,13 @@ whisper.cpp/
 └── tests/            # whisper.cpp tests
 ```
 
-Note that we are currently not running those tests (as we assume they are
-valid when we pull from a commit we approved) but we would like to introduce
-them at some point to make sure the cosmo build has the same behavior as the
-native one.
+These tests are currently not run (as they are assumed valid when pulling from
+an approved commit), but future plans include introducing them to verify the
+cosmo build has the same behavior as the native one.
 
 ### llamafile Tests
 
-Currently in the `new_build_wip` branch, these tests are saved in:
+These tests are saved in:
 
 ```
 tests/
@@ -184,7 +188,7 @@ the `tests/BUILD.mk` file, thus they need to be manually compiled and run.
 ### Running Single Test Manually
 
 ```sh
-# Build the test
+# Build a specific test
 .cosmocc/4.0.2/bin/make o//tests/extract_data_uris_test
 
 # Run directly
@@ -251,9 +255,9 @@ Before pushing, run full test suite:
 ```sh
 make reset-repo
 make setup
-.cosmocc/4.0.2/bin/make clean
-.cosmocc/4.0.2/bin/make -j8
-.cosmocc/4.0.2/bin/make check
+# llamafile:clean
+# llamafile:build
+# llamafile:check
 ```
 
 ## Test Coverage

@@ -6,10 +6,6 @@ This file provides guidance to Claude Code when working with this repository.
 
 Llamafile combines llama.cpp, whisper.cpp, and stable-diffusion.cpp with Cosmopolitan Libc to create single-file executables that run LLMs locally across Windows, macOS, Linux, and BSD without installation.
 
-**Branches:**
-- `new_build_wip` - New llamafile (work in progress) - this guide covers this version
-- `main` - Old/classic llamafile
-
 ## Quick Reference
 
 ```sh
@@ -17,7 +13,8 @@ Llamafile combines llama.cpp, whisper.cpp, and stable-diffusion.cpp with Cosmopo
 make setup
 
 # Build (always use cosmocc make, not system make)
-.cosmocc/4.0.2/bin/make -j8
+# Adapt `nproc` to the OS where you are building, (e.g. `sysctl -n hw.physicalcpu` on mac)
+.cosmocc/4.0.2/bin/make -j $(nproc)
 
 # Run tests
 .cosmocc/4.0.2/bin/make check

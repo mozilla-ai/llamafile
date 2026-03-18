@@ -130,9 +130,8 @@ stable-diffusion.cpp.patches/
 3. **Deletions**:
    - Removal of upstream build systems (CMakeLists.txt, Makefiles)
    - Replaced by llamafile's unified build
-   - NOTE that while deletions were common in the original llamafile, we are not bothering
-with them anymore (as we are not redistributing code from the submodules but just pulling
-from them)
+   - NOTE: deletions were common in the original llamafile but are no longer used,
+as submodule code is pulled rather than redistributed
 
 ### Patch Application
 
@@ -141,6 +140,8 @@ from them)
 2. Apply each .patch file in order
 3. Copy llamafile-files/ contents into submodule
 4. Remove conflicting build files
+
+Finally, if cosmocc is not present, it is automatically downloaded at the end of `make setup`.
 
 ## Build Infrastructure
 

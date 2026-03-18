@@ -1,10 +1,10 @@
 # Keeping llamafile updated with upstream llama.cpp
 
 llamafile relies on llama.cpp for many of its functionalities. Keeping it up-to-date
-with the lastest version upstream is generally a good practice, as it brings both
+with the latest version upstream is generally a good practice, as it brings both
 bugfixes and support for recent models and features.
 
-This document describes the steps to keep llamafile update with upstream.
+This document describes the steps to keep llamafile updated with upstream.
 
 ## Step 1: Update the submodule
 
@@ -85,14 +85,12 @@ i.e. the following verification step should return a successful result
 ## Verification
 
 After making changes, verify the build works:
-```bash
-make clean
-make -j\$(nproc)
+```sh
+# llamafile:clean
+# llamafile:build
 ```
 
 
-
-## Step 5:
 
 ## Reference
 
