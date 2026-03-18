@@ -1,7 +1,7 @@
 ---
 name: llamafile
-description: This skill should be used when the user asks to "build llamafile", "rebuild llamafile", "run llamafile tests", "set up llamafile", "update patches", "update llama.cpp", "upstream llama.cpp", "how does llamafile work", "llamafile architecture", or needs guidance on the llamafile build system, patch workflow, submodule integration, or development practices.
-version: 0.1.1
+description: This skill should be used when the user asks to "build llamafile", "rebuild llamafile", "run llamafile", "run llamafile tests", "debug llamafile", "set up llamafile", "update patches", "fix patch conflict", "update llama.cpp", "pull latest llama.cpp", "sync upstream llama.cpp", "reset submodules", "write a test for llamafile", "how does llamafile work", "llamafile architecture", or needs guidance on the llamafile build system, patch workflow, submodule integration, cosmocc toolchain, or development practices.
+version: 0.1.2
 ---
 
 # Llamafile Development Guide
@@ -10,10 +10,10 @@ Llamafile combines llama.cpp, whisper.cpp, and stable-diffusion.cpp with Cosmopo
 
 ## Version Disambiguation
 
-- **New llamafile** (or simply "llamafile"): The work-in-progress rebuild in the `new_build_wip` branch, based on a more recent llama.cpp
-- **Old/Classic llamafile**: The original version currently in the `main` branch
+- **New llamafile** (or simply "llamafile"): The code in the `main` branch, used for releases >=0.10.0
+- **Old/Classic llamafile**: The legacy code, used for releases until 0.9.3 (see commit 7e7d33c).
 
-This guide covers the **new llamafile** build system.
+This guide covers the **new llamafile** project.
 
 ## Quick Reference
 
@@ -23,41 +23,30 @@ This guide covers the **new llamafile** build system.
 make setup
 ```
 
-Immediately after cloning the repo (or after a reset done with `make reset-repo`, this command initializes git submodules and applies llamafile-specific patches.
+Immediately after cloning the repo (or after a reset done with `make reset-repo`), this command initializes git submodules and applies llamafile-specific patches.
 
 ### Building
 
-```sh
-# Download toolchain if needed
-build/download-cosmocc.sh .cosmocc/4.0.2 4.0.2 85b8c37a406d862e656ad4ec14be9f6ce474c1b436b9615e91a55208aced3f44
-
-# Build everything
-.cosmocc/4.0.2/bin/make -j8
-```
+Run `llamafile:build` to build all targets.
 
 ### Testing
 
-```sh
-.cosmocc/4.0.2/bin/make check
-```
+Run `llamafile:check` to run the unit test suite.
 
 ### Cleaning
 
-```sh
-.cosmocc/4.0.2/bin/make clean
-```
+Run `llamafile:clean` to remove all build outputs.
 
 ### Reset Submodules
 
-After `make setup`, the submodules are patched so they are not in a clean state anymore.
-To reset them you can run:
+After `make setup`, submodules contain patches and are no longer in a clean state.
+To reset them, run:
 
 ```sh
 make reset-repo  # Warning: removes all local changes
 ```
 
-WARNING: this command removes all local changes: you don't want to run this if care about
-the changes you have done and have not created patches from them yet.
+WARNING: this command removes all local changes. Do not run it without first generating patches from any modifications.
 
 
 ## Core Workflows
@@ -66,10 +55,9 @@ the changes you have done and have not created patches from them yet.
 
 To build llamafile from a fresh clone:
 
-1. Clone the repository and checkout `new_build_wip` branch
+1. Clone the repository
 2. Run `make setup` to initialize submodules and apply patches
-3. Download cosmocc if not present: `build/download-cosmocc.sh .cosmocc/4.0.2 4.0.2 85b8c37a406d862e656ad4ec14be9f6ce474c1b436b9615e91a55208aced3f44`
-4. Build with `.cosmocc/4.0.2/bin/make -j8`
+3. Build with `llamafile:build`
 
 Build outputs appear in `o/$(MODE)/` directory.
 
@@ -78,16 +66,16 @@ Build outputs appear in `o/$(MODE)/` directory.
 For changes to llamafile's own code (not submodules):
 
 1. Edit files in `llamafile/` directory
-2. Rebuild with `.cosmocc/4.0.2/bin/make -j8`
-3. Run unit tests with `.cosmocc/4.0.2/bin/make check`
+2. Rebuild with `llamafile:build`
+3. Run unit tests with `llamafile:check`
 
 ### Modifying Submodule Code
 
 Submodules (llama.cpp, whisper.cpp, stable-diffusion.cpp) require a patch-based workflow:
 
 1. Make changes directly in the submodule directory
-2. Rebuild with `.cosmocc/4.0.2/bin/make -j8`
-3. Run unit tests with `.cosmocc/4.0.2/bin/make check`
+2. Rebuild with `llamafile:build`
+3. Run unit tests with `llamafile:check`
 
 NOTE: never try to edit patches or generate them manually. This step is 
 done only after rebuild and tests (even manual ones) are successful. See
@@ -101,13 +89,13 @@ Tests use the `.runs` pattern in BUILD.mk files:
 o/$(MODE)/llamafile/json_test.runs
 ```
 
-To run all tests: `.cosmocc/4.0.2/bin/make check`
+To run all tests: `llamafile:check`
 
 ## Key Concepts
 
 ### Cosmopolitan Toolchain
 
-The project uses Cosmopolitan Libc (cosmocc) to create Actually Portable Executables (APE) - single files that run on multiple platforms without modification. Always use `.cosmocc/4.0.2/bin/make` for building, not system make.
+The project uses Cosmopolitan Libc (cosmocc) to create Actually Portable Executables (APE) - single files that run on multiple platforms without modification. Always use the `llamafile:build`, `llamafile:check`, and `llamafile:clean` commands (which use cosmocc's make), not system make.
 
 ### Patch System
 
@@ -138,8 +126,9 @@ After building, find binaries in `o/$(MODE)/`:
 
 | Binary | Purpose |
 |--------|---------|
-| `llamafile/llamafile` | Main LLM inference CLI |
+| `llamafile/llamafile` | Main llamafile executable |
 | `third_party/zipalign/zipalign` | Bundle assets into executables |
+| `whisperfile/whisperfile` | Main whisperfile executable |
 
 ## Troubleshooting
 
@@ -161,11 +150,7 @@ make reset-repo
 
 ### Wrong Make Being Used
 
-Ensure using cosmocc's make, not system make:
-```sh
-.cosmocc/4.0.2/bin/make -j8  # Correct
-make -j8                     # Wrong - uses system make
-```
+Ensure using the `llamafile:build` command (which uses cosmocc's make), not system make.
 
 ## Additional Resources
 
