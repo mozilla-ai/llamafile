@@ -17,6 +17,7 @@
 // limitations under the License.
 
 #include "llamafile.h"
+#include "version.h"
 #include "zip.h"
 #include <cosmo.h>
 #include <libc/assert.h>
@@ -461,9 +462,9 @@ static const char *llamafile_get_home_dir(void) {
 void llamafile_get_app_dir(char *path, size_t size) {
     snprintf(path, size, "%s/.llamafile/v/%d.%d.%d/",
              llamafile_get_home_dir(),
-             LLAMAFILE_VERSION_MAJOR,
-             LLAMAFILE_VERSION_MINOR,
-             LLAMAFILE_VERSION_PATCH);
+             LLAMAFILE_MAJOR,
+             LLAMAFILE_MINOR,
+             LLAMAFILE_PATCH);
 }
 
 static int copy_file_contents(int fdin, int fdout) {

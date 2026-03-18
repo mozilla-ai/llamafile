@@ -33,7 +33,8 @@ static bool is_llamafile_flag(const char* arg) {
            strcmp(arg, "--chat") == 0 ||
            strcmp(arg, "--cli") == 0 ||
            strcmp(arg, "--gpu") == 0 ||
-           strcmp(arg, "--nothink") == 0;
+           strcmp(arg, "--nothink") == 0 ||
+           strcmp(arg, "--version") == 0;
 }
 
 LlamafileArgs parse_llamafile_args(int argc, char** argv) {

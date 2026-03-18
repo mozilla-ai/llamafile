@@ -44,10 +44,7 @@
 #include <cpp-httplib/httplib.h>
 #include "llamafile.h"
 
-// Version string - should be defined by build system
-#ifndef LLAMAFILE_VERSION_STRING
-#define LLAMAFILE_VERSION_STRING "0.10.0-dev"
-#endif
+#include "version.h"
 
 namespace lf {
 namespace chatbot {
