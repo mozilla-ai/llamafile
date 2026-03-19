@@ -19,7 +19,13 @@ Older builds (and llamafiles built on them) will still be available, check out o
 [releases](https://github.com/mozilla-ai/llamafile/releases) and our 
 [Example Llamafiles](/docs/example_llamafiles.md) page.
 
-# What's new
+# Updates
+
+Here are the features we brought into our development branch before merging with main.
+Most of them were brought in from previous versions of llamafile, and all credit goes
+to their original authors <3. Some (including new build for easier sync with upstream
+llama.cpp, mtmd API support, intregration tests, skill docs, HTTP chat client for combined
+mode) are new.
 
 20260317
 - Updates to [skill documents](https://github.com/mozilla-ai/llamafile/pull/886)
@@ -72,9 +78,10 @@ functionalities)
 
 # What's missing
 
-- GPU support for Windows
+- GPU support for Windows (and for whisperfile)
 - stable diffusion (the code is there, but has not been ported to the new build format yet)
 - some features triggered by extra arguments in CLI mode
 - pledge() SECCOMP sandboxing
+- localscore
 - llamafiler for embeddings (we rolled back to llama.cpp's embeddings endpoint instead)
 - ... please help us track if there's anything missing you wish to see in the new build!
