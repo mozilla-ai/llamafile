@@ -12,14 +12,14 @@
         <link rel="prev" href="../source_installation/">
       
       
-        <link rel="next" href="../security/">
+        <link rel="next" href="../support/">
       
       
         
       
       
       <link rel="icon" href="../images/llamafile-640x640.png">
-      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.3">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.5">
     
     
       
@@ -314,14 +314,14 @@
   
   
     <li class="md-nav__item">
-      <a href="../support/" class="md-nav__link">
+      <a href="../example_llamafiles/" class="md-nav__link">
         
   
   
   <span class="md-ellipsis">
     
   
-    Supported Systems
+    Example llamafiles
   
 
     
@@ -341,14 +341,14 @@
   
   
     <li class="md-nav__item">
-      <a href="../example_llamafiles/" class="md-nav__link">
+      <a href="../running_llamafile/" class="md-nav__link">
         
   
   
   <span class="md-ellipsis">
     
   
-    Example llamafiles
+    Running a llamafile
   
 
     
@@ -536,14 +536,14 @@
   
   
     <li class="md-nav__item">
-      <a href="../security/" class="md-nav__link">
+      <a href="../support/" class="md-nav__link">
         
   
   
   <span class="md-ellipsis">
     
   
-    Security
+    Supported Systems
   
 
     
@@ -579,6 +579,235 @@
   
 
       </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_10" >
+        
+          
+          <label class="md-nav__link" for="__nav_10" id="__nav_10_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Whisperfile
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_10_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_10">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Whisperfile
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../whisperfile/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Overview
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../whisperfile/getting-started/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Getting Started
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../whisperfile/packaging/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Packaging
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../whisperfile/gpu/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Using GPUs
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../whisperfile/translate/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Translation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../whisperfile/server/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Server
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
     </li>
   
 
@@ -694,7 +923,7 @@ the local file is aligned on a page size boundary. That way, assuming
 the zip file is uncompressed, once it's mmap()'d into memory we can pass
 pointers directly to GPUs like Apple Metal, which require that data be
 page size aligned. Since no existing ZIP archiving tool has an alignment
-flag, we had to write about <a href="https://github.com/Mozilla-Ocho/llamafile/blob/HEAD/llamafile/zipalign.c">500 lines of code</a> to
+flag, we had to write about <a href="https://github.com/jart/zipalign/blob/main/zipalign.c">500 lines of code</a> to
 insert the ZIP files ourselves. However, once there, every existing ZIP
 program should be able to read them, provided they support ZIP64. This
 makes the weights much more easily accessible than they otherwise would
@@ -805,13 +1034,13 @@ for further details.</p>
         
         
           
-          <a href="../security/" class="md-footer__link md-footer__link--next" aria-label="Next: Security">
+          <a href="../support/" class="md-footer__link md-footer__link--next" aria-label="Next: Supported Systems">
             <div class="md-footer__title">
               <span class="md-footer__direction">
                 Next
               </span>
               <div class="md-ellipsis">
-                Security
+                Supported Systems
               </div>
             </div>
             <div class="md-footer__button md-icon">
