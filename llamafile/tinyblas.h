@@ -7,6 +7,21 @@ typedef enum tinyblasOperation {
     TINYBLAS_OP_T,
 } tinyblasOperation_t;
 
+typedef enum tinyblasSideMode {
+    TINYBLAS_SIDE_LEFT,
+    TINYBLAS_SIDE_RIGHT,
+} tinyblasSideMode_t;
+
+typedef enum tinyblasFillMode {
+    TINYBLAS_FILL_MODE_LOWER,
+    TINYBLAS_FILL_MODE_UPPER,
+} tinyblasFillMode_t;
+
+typedef enum tinyblasDiagType {
+    TINYBLAS_DIAG_NON_UNIT,
+    TINYBLAS_DIAG_UNIT,
+} tinyblasDiagType_t;
+
 typedef enum tinyblasDataType {
     TINYBLAS_R_32F,
     TINYBLAS_R_16F,
@@ -44,6 +59,11 @@ tinyblasStatus_t tinyblasGetStream(tinyblasHandle_t, void **);
 tinyblasStatus_t tinyblasSgemm(tinyblasHandle_t, tinyblasOperation_t, tinyblasOperation_t, int, int,
                                int, const float *, const float *, int, const float *, int,
                                const float *, float *, int);
+
+tinyblasStatus_t tinyblasStrsmBatched(tinyblasHandle_t, tinyblasSideMode_t, tinyblasFillMode_t,
+                                       tinyblasOperation_t, tinyblasDiagType_t, int, int,
+                                       const float *, const float *const[], int,
+                                       float *const[], int, int);
 
 tinyblasStatus_t tinyblasGemmEx(tinyblasHandle_t, tinyblasOperation_t, tinyblasOperation_t, int,
                                 int, int, const void *, const void *, tinyblasDataType_t, int,

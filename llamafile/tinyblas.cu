@@ -979,3 +979,65 @@ tinyblasStatus_t tinyblasGemmStridedBatchedEx(tinyblasHandle_t handle, //
         return TINYBLAS_STATUS_INVALID_VALUE;
     }
 }
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+// TRSM: Triangular Solve (Batched)
+//
+// Solves X * A = alpha * B where A is upper triangular, writing result into B.
+// One thread block per batch element. Threads parallelize over m rows.
+
+static __global__ void tinyblasStrsmBatched_kernel(int m, int n, float alpha,
+                                                    const float *const *Aarray, int lda,
+                                                    float *const *Barray, int ldb) {
+    const int batch = blockIdx.x;
+    const float *A = Aarray[batch];
+    float *B = Barray[batch];
+
+    // Solve X * A = alpha * B for right-side upper triangular (non-unit diagonal).
+    // Process columns left-to-right. For column j:
+    //   B[i][j] = (alpha * B[i][j] - sum_{p<j} B[i][p] * A[p][j]) / A[j][j]
+    for (int j = 0; j < n; j++) {
+        // Column-major: A[p][j] = A[p + j*lda], B[i][j] = B[i + j*ldb]
+        float diag = A[j + j * lda];
+        __syncthreads();
+        for (int i = threadIdx.x; i < m; i += blockDim.x) {
+            float val = alpha * B[i + j * ldb];
+            for (int p = 0; p < j; p++) {
+                val -= B[i + p * ldb] * A[p + j * lda];
+            }
+            B[i + j * ldb] = val / diag;
+        }
+    }
+}
+
+static tinyblasStatus_t tinyblasStrsmBatched_launch(tinyblasHandle_t handle, int m, int n,
+                                                     float alpha, const float *const *Aarray,
+                                                     int lda, float *const *Barray, int ldb,
+                                                     int batchCount) {
+    int threads = std::min(1024, ((m + 31) / 32) * 32);
+    if (threads < 1)
+        threads = 1;
+    tinyblasStrsmBatched_kernel<<<batchCount, threads, 0, handle->stream>>>(m, n, alpha, Aarray,
+                                                                             lda, Barray, ldb);
+    cudaError_t err = cudaGetLastError();
+    if (err != cudaSuccess)
+        return TINYBLAS_STATUS_EXECUTION_FAILED;
+    return TINYBLAS_STATUS_SUCCESS;
+}
+
+tinyblasStatus_t tinyblasStrsmBatched(tinyblasHandle_t handle, tinyblasSideMode_t side,
+                                       tinyblasFillMode_t uplo, tinyblasOperation_t trans,
+                                       tinyblasDiagType_t diag, int m, int n, const float *alpha,
+                                       const float *const Aarray[], int lda, float *const Barray[],
+                                       int ldb, int batchCount) {
+    if (side != TINYBLAS_SIDE_RIGHT || uplo != TINYBLAS_FILL_MODE_UPPER ||
+        trans != TINYBLAS_OP_N || diag != TINYBLAS_DIAG_NON_UNIT)
+        return TINYBLAS_STATUS_NOT_SUPPORTED;
+    if (!handle || !alpha || !Aarray || !Barray)
+        return TINYBLAS_STATUS_INVALID_VALUE;
+    if (m < 0 || n < 0 || lda < n || ldb < m)
+        return TINYBLAS_STATUS_INVALID_VALUE;
+    if (batchCount == 0)
+        return TINYBLAS_STATUS_SUCCESS;
+    return tinyblasStrsmBatched_launch(handle, m, n, *alpha, Aarray, lda, Barray, ldb, batchCount);
+}
