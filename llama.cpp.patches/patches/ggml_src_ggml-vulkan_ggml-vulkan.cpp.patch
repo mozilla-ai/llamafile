@@ -1,0 +1,46 @@
+diff --git a/ggml/src/ggml-vulkan/ggml-vulkan.cpp b/ggml/src/ggml-vulkan/ggml-vulkan.cpp
+--- a/llama.cpp/ggml/src/ggml-vulkan/ggml-vulkan.cpp
++++ b/llama.cpp/ggml/src/ggml-vulkan/ggml-vulkan.cpp
+@@ -13229,6 +13229,14 @@ static void ggml_backend_vk_buffer_free_buffer(ggml_backend_buffer_t buffer) {
+     delete ctx;
+ }
+ 
++// free_struct callback for cross-module memory management
++// When the Vulkan backend is loaded as a dynamic library, the buffer struct
++// is allocated by the dylib's 'new' operator and must be freed by the dylib's
++// 'delete' operator (not the main executable's)
++static void ggml_backend_vk_buffer_free_struct(ggml_backend_buffer_t buffer) {
++    delete buffer;
++}
++
+ static void * ggml_backend_vk_buffer_get_base(ggml_backend_buffer_t buffer) {
+     return vk_ptr_base;
+ 
+@@ -13302,6 +13310,7 @@ static ggml_backend_buffer_i ggml_backend_vk_buffer_interface = {
+     /* .cpy_tensor      = */ ggml_backend_vk_buffer_cpy_tensor,
+     /* .clear           = */ ggml_backend_vk_buffer_clear,
+     /* .reset           = */ NULL,
++    /* .free_struct     = */ ggml_backend_vk_buffer_free_struct,
+ };
+ 
+ // vk buffer type
+@@ -13388,6 +13397,7 @@ static ggml_backend_buffer_t ggml_backend_vk_host_buffer_type_alloc_buffer(ggml_
+     ggml_backend_buffer_t buffer = ggml_backend_cpu_buffer_from_ptr(ptr, size);
+     buffer->buft = buft;
+     buffer->iface.free_buffer = ggml_backend_vk_host_buffer_free_buffer;
++    buffer->iface.free_struct = ggml_backend_vk_buffer_free_struct;
+ 
+     return buffer;
+ 
+@@ -14796,7 +14806,10 @@ void ggml_backend_vk_get_device_memory(int device, size_t * free, size_t * total
+             *total += heap.size;
+ 
+             if (membudget_supported && i < budgetprops.heapUsage.size()) {
+-                *free += budgetprops.heapBudget[i] - budgetprops.heapUsage[i];
++                // heapUsage can exceed heapBudget (permitted by spec); clamp to 0 to avoid underflow
++                if (budgetprops.heapBudget[i] > budgetprops.heapUsage[i]) {
++                    *free += budgetprops.heapBudget[i] - budgetprops.heapUsage[i];
++                }
+             } else {
+                 *free += heap.size;
+             }
