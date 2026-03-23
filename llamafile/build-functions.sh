@@ -98,17 +98,51 @@ setup_build_dir() {
     mkdir -p "$build_dir"
 }
 
-# Collect CUDA/HIP source files
+# Collect CUDA/HIP source files with selective template inclusion
 # Sets: CUDA_SOURCES, NUM_SOURCES
-# Args: $1 = GGML_CUDA_DIR, $2 = extra sources (optional, e.g., tinyblas.cu path)
+# Args: $1 = GGML_CUDA_DIR
+#       $2 = extra sources (optional, e.g., tinyblas.cu path)
+#       $3 = NO_IQ_QUANTS (optional, "1" to exclude IQ quant MMQ templates)
 collect_gpu_sources() {
     local ggml_cuda_dir="$1"
     local extra_sources="$2"
+    local no_iq_quants="${3:-0}"
 
     CUDA_SOURCES="$extra_sources"
 
-    for f in "$ggml_cuda_dir"/*.cu "$ggml_cuda_dir/template-instances"/*.cu; do
+    # 1. Main CUDA sources (always included)
+    for f in "$ggml_cuda_dir"/*.cu; do
+        [ -f "$f" ] && CUDA_SOURCES="$CUDA_SOURCES $f"
+    done
+
+    local ti_dir="$ggml_cuda_dir/template-instances"
+
+    # 2. fattn-mma and fattn-tile instances (always included)
+    for f in "$ti_dir"/fattn-mma-*.cu "$ti_dir"/fattn-tile-*.cu; do
+        [ -f "$f" ] && CUDA_SOURCES="$CUDA_SOURCES $f"
+    done
+
+    # 3. fattn-vec: only the 3 default quant combos (f16-f16, q4_0-q4_0, q8_0-q8_0)
+    #    Full set would be 36 files; the rest are only needed with GGML_CUDA_FA_ALL_QUANTS
+    for f in "$ti_dir"/fattn-vec-instance-f16-f16.cu \
+             "$ti_dir"/fattn-vec-instance-q4_0-q4_0.cu \
+             "$ti_dir"/fattn-vec-instance-q8_0-q8_0.cu; do
+        [ -f "$f" ] && CUDA_SOURCES="$CUDA_SOURCES $f"
+    done
+
+    # 4. mmf instances (always included)
+    for f in "$ti_dir"/mmf-*.cu; do
+        [ -f "$f" ] && CUDA_SOURCES="$CUDA_SOURCES $f"
+    done
+
+    # 5. mmq instances: include all, but optionally exclude IQ quant templates
+    for f in "$ti_dir"/mmq-*.cu; do
         if [ -f "$f" ]; then
+            if [ "$no_iq_quants" = "1" ]; then
+                case "$(basename "$f")" in
+                    mmq-instance-iq*) continue ;;
+                esac
+            fi
             CUDA_SOURCES="$CUDA_SOURCES $f"
         fi
     done
