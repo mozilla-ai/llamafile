@@ -17,6 +17,24 @@ diff --git a/ggml/src/ggml-backend.cpp b/ggml/src/ggml-backend.cpp
  }
  
  size_t ggml_backend_buffer_get_size(ggml_backend_buffer_t buffer) {
+@@ -584,7 +591,7 @@ struct ggml_backend_multi_buffer_context {
+     size_t n_buffers;
+ };
+ 
+-static void ggml_backend_multi_buffer_free_buffer(ggml_backend_buffer_t buffer) {
++static void GGML_CALL ggml_backend_multi_buffer_free_buffer(ggml_backend_buffer_t buffer) {
+     GGML_ASSERT(buffer);
+     ggml_backend_multi_buffer_context * ctx = (ggml_backend_multi_buffer_context *) buffer->context;
+     for (size_t i = 0; i < ctx->n_buffers; i++) {
+@@ -595,7 +602,7 @@ static void ggml_backend_multi_buffer_free_buffer(ggml_backend_buffer_t buffer)
+     free(ctx);
+ }
+ 
+-static void ggml_backend_multi_buffer_clear(ggml_backend_buffer_t buffer, uint8_t value) {
++static void GGML_CALL ggml_backend_multi_buffer_clear(ggml_backend_buffer_t buffer, uint8_t value) {
+     GGML_ASSERT(buffer);
+     ggml_backend_multi_buffer_context * ctx = (ggml_backend_multi_buffer_context *) buffer->context;
+     for (size_t i = 0; i < ctx->n_buffers; i++) {
 @@ -613,6 +620,7 @@ static const struct ggml_backend_buffer_i ggml_backend_multi_buffer_i = {
      /* .cpy_tensor      = */ NULL,
      /* .clear           = */ ggml_backend_multi_buffer_clear,
@@ -25,6 +43,63 @@ diff --git a/ggml/src/ggml-backend.cpp b/ggml/src/ggml-backend.cpp
  };
  
  ggml_backend_buffer_t ggml_backend_multi_buffer_alloc_buffer(ggml_backend_buffer_t * buffers, size_t n_buffers) {
+@@ -2113,7 +2121,7 @@ bool ggml_backend_compare_graph_backend(ggml_backend_t backend1, ggml_backend_t
+ 
+ // CPU backend - buffer
+ 
+-static void * ggml_backend_cpu_buffer_get_base(ggml_backend_buffer_t buffer) {
++static void * GGML_CALL ggml_backend_cpu_buffer_get_base(ggml_backend_buffer_t buffer) {
+     GGML_ASSERT(buffer);
+     uintptr_t data = (uintptr_t)buffer->context;
+ 
+@@ -2125,33 +2133,33 @@ static void * ggml_backend_cpu_buffer_get_base(ggml_backend_buffer_t buffer) {
+     return (void *)data;
+ }
+ 
+-static void ggml_backend_cpu_buffer_free_buffer(ggml_backend_buffer_t buffer) {
++static void GGML_CALL ggml_backend_cpu_buffer_free_buffer(ggml_backend_buffer_t buffer) {
+     GGML_ASSERT(buffer);
+     ggml_aligned_free(buffer->context, buffer->size);
+ }
+ 
+-static void ggml_backend_cpu_buffer_memset_tensor(ggml_backend_buffer_t buffer, struct ggml_tensor * tensor, uint8_t value, size_t offset, size_t size) {
++static void GGML_CALL ggml_backend_cpu_buffer_memset_tensor(ggml_backend_buffer_t buffer, struct ggml_tensor * tensor, uint8_t value, size_t offset, size_t size) {
+     GGML_ASSERT(tensor);
+     memset((char *)tensor->data + offset, value, size);
+ 
+     GGML_UNUSED(buffer);
+ }
+ 
+-static void ggml_backend_cpu_buffer_set_tensor(ggml_backend_buffer_t buffer, struct ggml_tensor * tensor, const void * data, size_t offset, size_t size) {
++static void GGML_CALL ggml_backend_cpu_buffer_set_tensor(ggml_backend_buffer_t buffer, struct ggml_tensor * tensor, const void * data, size_t offset, size_t size) {
+     GGML_ASSERT(tensor);
+     memcpy((char *)tensor->data + offset, data, size);
+ 
+     GGML_UNUSED(buffer);
+ }
+ 
+-static void ggml_backend_cpu_buffer_get_tensor(ggml_backend_buffer_t buffer, const struct ggml_tensor * tensor, void * data, size_t offset, size_t size) {
++static void GGML_CALL ggml_backend_cpu_buffer_get_tensor(ggml_backend_buffer_t buffer, const struct ggml_tensor * tensor, void * data, size_t offset, size_t size) {
+     GGML_ASSERT(tensor);
+     memcpy(data, (const char *)tensor->data + offset, size);
+ 
+     GGML_UNUSED(buffer);
+ }
+ 
+-static bool ggml_backend_cpu_buffer_cpy_tensor(ggml_backend_buffer_t buffer, const struct ggml_tensor * src, struct ggml_tensor * dst) {
++static bool GGML_CALL ggml_backend_cpu_buffer_cpy_tensor(ggml_backend_buffer_t buffer, const struct ggml_tensor * src, struct ggml_tensor * dst) {
+     GGML_ASSERT(src);
+     if (ggml_backend_buffer_is_host(src->buffer)) {
+         memcpy(dst->data, src->data, ggml_nbytes(src));
+@@ -2162,7 +2170,7 @@ static bool ggml_backend_cpu_buffer_cpy_tensor(ggml_backend_buffer_t buffer, con
+     GGML_UNUSED(buffer);
+ }
+ 
+-static void ggml_backend_cpu_buffer_clear(ggml_backend_buffer_t buffer, uint8_t value) {
++static void GGML_CALL ggml_backend_cpu_buffer_clear(ggml_backend_buffer_t buffer, uint8_t value) {
+     GGML_ASSERT(buffer);
+     memset(buffer->context, value, buffer->size);
+ }
 @@ -2177,6 +2185,7 @@ static const struct ggml_backend_buffer_i ggml_backend_cpu_buffer_i = {
      /* .cpy_tensor      = */ ggml_backend_cpu_buffer_cpy_tensor,
      /* .clear           = */ ggml_backend_cpu_buffer_clear,
@@ -33,7 +108,7 @@ diff --git a/ggml/src/ggml-backend.cpp b/ggml/src/ggml-backend.cpp
  };
  
  static const struct ggml_backend_buffer_i ggml_backend_cpu_buffer_from_ptr_i = {
-@@ -2189,6 +2198,7 @@ static const struct ggml_backend_buffer_i ggml_backend_cpu_buffer_from_ptr_i = {
+@@ -2189,19 +2198,20 @@ static const struct ggml_backend_buffer_i ggml_backend_cpu_buffer_from_ptr_i = {
      /* .cpy_tensor      = */ ggml_backend_cpu_buffer_cpy_tensor,
      /* .clear           = */ ggml_backend_cpu_buffer_clear,
      /* .reset           = */ NULL,
@@ -41,3 +116,43 @@ diff --git a/ggml/src/ggml-backend.cpp b/ggml/src/ggml-backend.cpp
  };
  
  // CPU backend buffer type
+ 
+ // this buffer type is defined here to make it available to all backends
+ 
+-static const char * ggml_backend_cpu_buffer_type_get_name(ggml_backend_buffer_type_t buft) {
++static const char * GGML_CALL ggml_backend_cpu_buffer_type_get_name(ggml_backend_buffer_type_t buft) {
+     return "CPU";
+ 
+     GGML_UNUSED(buft);
+ }
+ 
+-static ggml_backend_buffer_t ggml_backend_cpu_buffer_type_alloc_buffer(ggml_backend_buffer_type_t buft, size_t size) {
++static ggml_backend_buffer_t GGML_CALL ggml_backend_cpu_buffer_type_alloc_buffer(ggml_backend_buffer_type_t buft, size_t size) {
+     void * data = ggml_aligned_malloc(size);
+ 
+     if (data == NULL) {
+@@ -2212,13 +2222,13 @@ static ggml_backend_buffer_t ggml_backend_cpu_buffer_type_alloc_buffer(ggml_back
+     return ggml_backend_buffer_init(buft, ggml_backend_cpu_buffer_i, data, size);
+ }
+ 
+-static size_t ggml_backend_cpu_buffer_type_get_alignment(ggml_backend_buffer_type_t buft) {
++static size_t GGML_CALL ggml_backend_cpu_buffer_type_get_alignment(ggml_backend_buffer_type_t buft) {
+     return TENSOR_ALIGNMENT;
+ 
+     GGML_UNUSED(buft);
+ }
+ 
+-static bool ggml_backend_cpu_buffer_type_is_host(ggml_backend_buffer_type_t buft) {
++static bool GGML_CALL ggml_backend_cpu_buffer_type_is_host(ggml_backend_buffer_type_t buft) {
+     return true;
+ 
+     GGML_UNUSED(buft);
+@@ -2241,7 +2251,7 @@ ggml_backend_buffer_type_t ggml_backend_cpu_buffer_type(void) {
+     return &ggml_backend_cpu_buffer_type;
+ }
+ 
+-static const char * ggml_backend_cpu_buffer_from_ptr_type_get_name(ggml_backend_buffer_type_t buft) {
++static const char * GGML_CALL ggml_backend_cpu_buffer_from_ptr_type_get_name(ggml_backend_buffer_type_t buft) {
+     return "CPU_Mapped";
+ 
+     GGML_UNUSED(buft);

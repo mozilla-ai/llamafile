@@ -117,7 +117,6 @@ set "COMMON_FLAGS=%COMMON_FLAGS% --forward-unknown-to-host-compiler"
 set "COMMON_FLAGS=%COMMON_FLAGS% --std=c++17"
 set "COMMON_FLAGS=%COMMON_FLAGS% -Xcompiler="/nologo /EHsc /O2 /GR /MT /std:c++17""
 set "COMMON_FLAGS=%COMMON_FLAGS% -DNDEBUG -DGGML_BUILD=1 -DGGML_SHARED=1 -DGGML_BACKEND_SHARED=1 -DGGML_BACKEND_BUILD=1 -DGGML_MULTIPLATFORM"
-set "COMMON_FLAGS=%COMMON_FLAGS% -DGGML_SYSV_ABI"
 set "COMMON_FLAGS=%COMMON_FLAGS% %BLAS_DEFINE%"
 
 :: -------- extract GGML version --------
@@ -242,26 +241,6 @@ for %%f in (ggml-backend.cpp ggml-threading.cpp) do (
         echo   Skipping: %%f (up to date^)
     )
 )
-
-echo.
-
-:: -------- compile MASM thunks (System V ABI translation) --------
-set "THUNKS_ASM=%GGML_CUDA_DIR%\ggml-cuda-thunks.asm"
-set "THUNKS_OBJ=%BUILD_DIR%\ggml-cuda-thunks.obj"
-if exist "%THUNKS_ASM%" if not exist "%THUNKS_OBJ%" (
-    echo Compiling MASM thunks...
-    set "ML64="
-    for /f "delims=" %%p in ('where ml64.exe 2^>nul') do if not defined ML64 set "ML64=%%p"
-    if not defined ML64 for /f "delims=" %%p in ('dir /s /b "C:\Program Files\Microsoft Visual Studio\ml64.exe" 2^>nul') do if not defined ML64 set "ML64=%%p"
-    if defined ML64 (
-        "!ML64!" /nologo /c /Fo"%THUNKS_OBJ%" "%THUNKS_ASM%"
-        if errorlevel 1 (echo Error compiling MASM thunks & exit /b 1)
-    ) else (
-        echo Error: ml64.exe not found. Run from Developer Command Prompt.
-        exit /b 1
-    )
-)
-if exist "%THUNKS_ASM%" if exist "%THUNKS_OBJ%" echo   ggml-cuda-thunks.asm: up to date
 
 echo.
 

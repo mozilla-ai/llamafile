@@ -1,0 +1,81 @@
+diff --git a/ggml/src/ggml-cpu/amx/amx.cpp b/ggml/src/ggml-cpu/amx/amx.cpp
+--- a/llama.cpp/ggml/src/ggml-cpu/amx/amx.cpp
++++ b/llama.cpp/ggml/src/ggml-cpu/amx/amx.cpp
+@@ -42,29 +42,29 @@ static ggml::cpu::tensor_traits * get_tensor_traits(ggml_backend_buffer_t, struc
+ }  // namespace ggml::cpu::amx
+ 
+ // AMX buffer interface
+-static void ggml_backend_amx_buffer_free_buffer(ggml_backend_buffer_t buffer) {
++static void GGML_CALL ggml_backend_amx_buffer_free_buffer(ggml_backend_buffer_t buffer) {
+     free(buffer->context);
+ }
+ 
+-static void * ggml_backend_amx_buffer_get_base(ggml_backend_buffer_t buffer) {
++static void * GGML_CALL ggml_backend_amx_buffer_get_base(ggml_backend_buffer_t buffer) {
+     return (void *) (buffer->context);
+ }
+ 
+-static enum ggml_status ggml_backend_amx_buffer_init_tensor(ggml_backend_buffer_t buffer, struct ggml_tensor * tensor) {
++static enum ggml_status GGML_CALL ggml_backend_amx_buffer_init_tensor(ggml_backend_buffer_t buffer, struct ggml_tensor * tensor) {
+     tensor->extra = (void *) ggml::cpu::amx::get_tensor_traits(buffer, tensor);
+ 
+     GGML_UNUSED(buffer);
+     return GGML_STATUS_SUCCESS;
+ }
+ 
+-static void ggml_backend_amx_buffer_memset_tensor(ggml_backend_buffer_t buffer, struct ggml_tensor * tensor,
++static void GGML_CALL ggml_backend_amx_buffer_memset_tensor(ggml_backend_buffer_t buffer, struct ggml_tensor * tensor,
+                                                   uint8_t value, size_t offset, size_t size) {
+     memset((char *) tensor->data + offset, value, size);
+ 
+     GGML_UNUSED(buffer);
+ }
+ 
+-static void ggml_backend_amx_buffer_set_tensor(ggml_backend_buffer_t buffer, struct ggml_tensor * tensor,
++static void GGML_CALL ggml_backend_amx_buffer_set_tensor(ggml_backend_buffer_t buffer, struct ggml_tensor * tensor,
+                                                const void * data, size_t offset, size_t size) {
+     if (qtype_has_amx_kernels(tensor->type)) {
+         GGML_LOG_DEBUG("%s: amx repack tensor %s of type %s\n", __func__, tensor->name, ggml_type_name(tensor->type));
+@@ -100,7 +100,7 @@ static bool ggml_backend_amx_buffer_cpy_tensor(ggml_backend_buffer_t buffer, con
+ }
+ */
+ 
+-static void ggml_backend_amx_buffer_clear(ggml_backend_buffer_t buffer, uint8_t value) {
++static void GGML_CALL ggml_backend_amx_buffer_clear(ggml_backend_buffer_t buffer, uint8_t value) {
+     memset(buffer->context, value, buffer->size);
+ }
+ 
+@@ -116,13 +116,13 @@ static ggml_backend_buffer_i ggml_backend_amx_buffer_interface = {
+     /* .reset           = */ nullptr,
+ };
+ 
+-static const char * ggml_backend_amx_buffer_type_get_name(ggml_backend_buffer_type_t buft) {
++static const char * GGML_CALL ggml_backend_amx_buffer_type_get_name(ggml_backend_buffer_type_t buft) {
+     return "AMX";
+ 
+     GGML_UNUSED(buft);
+ }
+ 
+-static ggml_backend_buffer_t ggml_backend_amx_buffer_type_alloc_buffer(ggml_backend_buffer_type_t buft, size_t size) {
++static ggml_backend_buffer_t GGML_CALL ggml_backend_amx_buffer_type_alloc_buffer(ggml_backend_buffer_type_t buft, size_t size) {
+     void * data = ggml_aligned_malloc(size);
+     if (data == NULL) {
+         fprintf(stderr, "%s: failed to allocate buffer of size %zu\n", __func__, size);
+@@ -132,7 +132,7 @@ static ggml_backend_buffer_t ggml_backend_amx_buffer_type_alloc_buffer(ggml_back
+     return ggml_backend_buffer_init(buft, ggml_backend_amx_buffer_interface, data, size);
+ }
+ 
+-static size_t ggml_backend_amx_buffer_type_get_alignment(ggml_backend_buffer_type_t buft) {
++static size_t GGML_CALL ggml_backend_amx_buffer_type_get_alignment(ggml_backend_buffer_type_t buft) {
+     return TENSOR_ALIGNMENT;
+ 
+     GGML_UNUSED(buft);
+@@ -198,7 +198,7 @@ class extra_buffer_type : ggml::cpu::extra_buffer_type {
+ };
+ }  // namespace ggml::cpu::amx
+ 
+-static size_t ggml_backend_amx_buffer_type_get_alloc_size(ggml_backend_buffer_type_t buft, const ggml_tensor * tensor) {
++static size_t GGML_CALL ggml_backend_amx_buffer_type_get_alloc_size(ggml_backend_buffer_type_t buft, const ggml_tensor * tensor) {
+     return ggml_backend_amx_get_alloc_size(tensor);
+ 
+     GGML_UNUSED(buft);

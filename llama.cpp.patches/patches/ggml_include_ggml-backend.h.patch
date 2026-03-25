@@ -1,0 +1,45 @@
+diff --git a/ggml/include/ggml-backend.h b/ggml/include/ggml-backend.h
+--- a/llama.cpp/ggml/include/ggml-backend.h
++++ b/llama.cpp/ggml/include/ggml-backend.h
+@@ -17,6 +17,16 @@
+ #    define GGML_BACKEND_API extern
+ #endif
+ 
++#ifdef GGML_MULTIPLATFORM
++#    ifdef _MSC_VER
++#        define GGML_CALL  /* ms_abi is the default on MSVC */
++#    else
++#        define GGML_CALL __attribute__((__ms_abi__))
++#    endif
++#else
++#    define GGML_CALL
++#endif
++
+ #ifdef  __cplusplus
+ extern "C" {
+ #endif
+@@ -197,19 +207,19 @@ extern "C" {
+     // Common functions that may be obtained using ggml_backend_reg_get_proc_address
+ 
+     // Split buffer type for tensor parallelism
+-    typedef ggml_backend_buffer_type_t   (*ggml_backend_split_buffer_type_t)(int main_device, const float * tensor_split);
++    typedef ggml_backend_buffer_type_t   (GGML_CALL *ggml_backend_split_buffer_type_t)(int main_device, const float * tensor_split);
+     // Set the number of threads for the backend
+-    typedef void                         (*ggml_backend_set_n_threads_t)(ggml_backend_t backend, int n_threads);
++    typedef void                         (GGML_CALL *ggml_backend_set_n_threads_t)(ggml_backend_t backend, int n_threads);
+     // Get additional buffer types provided by the device (returns a NULL-terminated array)
+-    typedef ggml_backend_buffer_type_t * (*ggml_backend_dev_get_extra_bufts_t)(ggml_backend_dev_t device);
++    typedef ggml_backend_buffer_type_t * (GGML_CALL *ggml_backend_dev_get_extra_bufts_t)(ggml_backend_dev_t device);
+     // Set the abort callback for the backend
+-    typedef void                         (*ggml_backend_set_abort_callback_t)(ggml_backend_t backend, ggml_abort_callback abort_callback, void * abort_callback_data);
++    typedef void                         (GGML_CALL *ggml_backend_set_abort_callback_t)(ggml_backend_t backend, ggml_abort_callback abort_callback, void * abort_callback_data);
+     // Get a list of feature flags supported by the backend (returns a NULL-terminated array)
+     struct ggml_backend_feature {
+         const char * name;
+         const char * value;
+     };
+-    typedef struct ggml_backend_feature * (*ggml_backend_get_features_t)(ggml_backend_reg_t reg);
++    typedef struct ggml_backend_feature * (GGML_CALL *ggml_backend_get_features_t)(ggml_backend_reg_t reg);
+ 
+     //
+     // Backend registry
