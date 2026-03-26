@@ -4,6 +4,7 @@
 PKGS += TESTS
 
 include tests/sgemm/BUILD.mk
+include tests/strsm/BUILD.mk
 
 # ==============================================================================
 # Include paths (reuse llamafile includes)
