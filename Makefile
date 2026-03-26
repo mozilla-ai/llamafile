@@ -58,6 +58,10 @@ cublas: # Build CUDA backend with cuBLAS (NVIDIA GPUs, requires cuBLAS at runtim
 rocm: # Build ROCm backend with TinyBLAS (AMD GPUs)
 	GGML_VERSION=$(GGML_VERSION) GGML_COMMIT=$(GGML_COMMIT) llamafile/rocm.sh
 
+.PHONY: vulkan
+vulkan: # Build Vulkan backend (cross-platform GPUs)
+	GGML_VERSION=$(GGML_VERSION) GGML_COMMIT=$(GGML_COMMIT) llamafile/vulkan.sh
+
 .PHONY: cosmocc
 cosmocc: $(COSMOCC) # cosmocc toolchain setup
 

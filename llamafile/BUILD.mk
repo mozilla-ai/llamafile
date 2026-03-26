@@ -123,6 +123,7 @@ LLAMAFILE_SRCS_C := \
 	llamafile/cuda.c \
 	llamafile/llamafile.c \
 	llamafile/metal.c \
+	llamafile/vulkan.c \
 	llamafile/zip.c
 
 LLAMAFILE_SRCS_CPP := \
