@@ -18,3 +18,36 @@ diff --git a/common/common.cpp b/common/common.cpp
  #elif defined(__EMSCRIPTEN__)
          GGML_ABORT("not implemented on this platform");
  #else
+@@ -1050,10 +1060,31 @@ common_init_result::common_init_result(common_params & params) :
+ 
+     if (params.fit_params) {
+         LOG_INF("%s: fitting params to device memory, for bugs during this step try to reproduce them with -fit off, or provide --verbose logs if the bug only occurs with -fit on\n", __func__);
++
++        // if a multimodal projection model is specified and will be loaded on GPU,
++        // add its estimated size to the fit margins so the fit leaves enough room for it
++        std::vector<size_t> fit_params_target = params.fit_params_target;
++        if (!params.mmproj.path.empty() && params.mmproj_use_gpu) {
++            struct gguf_init_params gparams = { /*.no_alloc =*/ true, /*.ctx =*/ nullptr };
++            struct gguf_context * gctx = gguf_init_from_file(params.mmproj.path.c_str(), gparams);
++            if (gctx != nullptr) {
++                size_t mmproj_size = 0;
++                for (int64_t i = 0; i < gguf_get_n_tensors(gctx); i++) {
++                    mmproj_size += gguf_get_tensor_size(gctx, i);
++                }
++                gguf_free(gctx);
++                LOG_INF("%s: reserving %.2f MiB extra for mmproj model '%s'\n", __func__,
++                    mmproj_size / (1024.0 * 1024.0), params.mmproj.path.c_str());
++                for (size_t & target : fit_params_target) {
++                    target += mmproj_size;
++                }
++            }
++        }
++
+         llama_params_fit(params.model.path.c_str(), &mparams, &cparams,
+             params.tensor_split,
+             params.tensor_buft_overrides.data(),
+-            params.fit_params_target.data(),
++            fit_params_target.data(),
+             params.fit_params_min_ctx,
+             params.verbosity >= 4 ? GGML_LOG_LEVEL_DEBUG : GGML_LOG_LEVEL_ERROR);
+     }

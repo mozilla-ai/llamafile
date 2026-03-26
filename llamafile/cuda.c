@@ -69,54 +69,6 @@ static struct CudaBackend {
     void (*log_set)(llamafile_log_callback log_callback, void *user_data);
 } g_cuda;
 
-static const char *GetDsoExtension(void) {
-    if (IsWindows())
-        return "dll";
-    else
-        return "so";
-}
-
-static bool FileExists(const char *path) {
-    struct stat st;
-    return !stat(path, &st);
-}
-
-static int makedirs(const char *path, mode_t mode) {
-    char tmp[PATH_MAX];
-    char *p = NULL;
-    size_t len;
-
-    snprintf(tmp, sizeof(tmp), "%s", path);
-    len = strlen(tmp);
-
-    if (tmp[len - 1] == '/')
-        tmp[len - 1] = '\0';
-
-    if (mkdir(tmp, mode) == 0)
-        return 0;
-
-    if (errno == EEXIST) {
-        struct stat st;
-        if (stat(tmp, &st) == 0 && S_ISDIR(st.st_mode))
-            return 0;
-        return -1;
-    }
-
-    if (errno != ENOENT)
-        return -1;
-
-    for (p = tmp + 1; *p; p++) {
-        if (*p == '/') {
-            *p = '\0';
-            if (mkdir(tmp, mode) != 0 && errno != EEXIST)
-                return -1;
-            *p = '/';
-        }
-    }
-
-    return mkdir(tmp, mode);
-}
-
 static bool LinkCuda(const char *dso) {
     // Load dynamic shared object using Cosmopolitan's dlopen
     void *lib = cosmo_dlopen(dso, RTLD_LAZY);
@@ -160,72 +112,6 @@ static bool LinkCuda(const char *dso) {
     return true;
 }
 
-static bool TryLoadPrebuiltDso(const char *name) {
-    char dso[PATH_MAX];
-    char app_dir[PATH_MAX];
-
-    // Try loading from /zip/ (bundled in executable)
-    snprintf(dso, PATH_MAX, "/zip/%s", name);
-    if (FileExists(dso)) {
-        // Extract to app dir first (cosmo_dlopen can't load from /zip/)
-        llamafile_get_app_dir(app_dir, PATH_MAX);
-        if (makedirs(app_dir, 0755) != 0) {
-            perror(app_dir);
-            return false;
-        }
-        char extracted[PATH_MAX];
-        if (snprintf(extracted, PATH_MAX, "%s%s", app_dir, name) >= PATH_MAX) {
-            fprintf(stderr, "cuda: path too long: %s%s\n", app_dir, name);
-            return false;
-        }
-        // Check if extraction needed
-        switch (llamafile_is_file_newer_than(dso, extracted)) {
-        case -1:
-            return false;
-        case 0:
-            // Already extracted and up to date
-            break;
-        case 1:
-            if (!llamafile_extract(dso, extracted)) {
-                return false;
-            }
-            break;
-        }
-
-        if (LinkCuda(extracted)) {
-            if (FLAG_verbose)
-                fprintf(stderr, "cuda: loaded bundled %s\n", name);
-            return true;
-        }
-    }
-
-    // Try loading from app directory
-    llamafile_get_app_dir(app_dir, PATH_MAX);
-    snprintf(dso, PATH_MAX, "%s%s", app_dir, name);
-    if (FileExists(dso)) {
-        if (LinkCuda(dso)) {
-            if (FLAG_verbose)
-                fprintf(stderr, "cuda: loaded %s from app directory\n", name);
-            return true;
-        }
-    }
-
-    // Try loading from home directory (common build location)
-    const char *home = getenv("HOME");
-    if (home && *home) {
-        snprintf(dso, PATH_MAX, "%s/%s", home, name);
-        if (FileExists(dso)) {
-            if (LinkCuda(dso)) {
-                if (FLAG_verbose)
-                    fprintf(stderr, "cuda: loaded %s from home directory\n", name);
-                return true;
-            }
-        }
-    }
-
-    return false;
-}
-
 static bool ImportCudaImpl(void) {
     // Skip on Apple Silicon (use Metal instead)
     if (IsXnuSilicon()) {
@@ -245,7 +131,7 @@ static bool ImportCudaImpl(void) {
     }
 
     // Determine DSO name based on GPU type
-    const char *ext = GetDsoExtension();
+    const char *ext = llamafile_get_dso_extension();
     char cuda_dso[64];
     char rocm_dso[64];
     snprintf(cuda_dso, sizeof(cuda_dso), "ggml-cuda.%s", ext);
@@ -253,14 +139,14 @@ static bool ImportCudaImpl(void) {
 
     // Try to load pre-built DSO
     if (FLAG_gpu == LLAMAFILE_GPU_AMD || FLAG_gpu == LLAMAFILE_GPU_AUTO) {
-        if (TryLoadPrebuiltDso(rocm_dso)) {
+        if (llamafile_try_load_prebuilt_dso(rocm_dso, "cuda", LinkCuda)) {
             g_cuda.is_amd = true;
             goto RegisterBackend;
         }
     }
 
     if (FLAG_gpu == LLAMAFILE_GPU_NVIDIA || FLAG_gpu == LLAMAFILE_GPU_AUTO) {
-        if (TryLoadPrebuiltDso(cuda_dso)) {
+        if (llamafile_try_load_prebuilt_dso(cuda_dso, "cuda", LinkCuda)) {
             g_cuda.is_amd = false;
             goto RegisterBackend;
         }

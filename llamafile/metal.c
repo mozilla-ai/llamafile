@@ -158,42 +158,6 @@ static struct MetalBackend {
     void (*log_set)(llamafile_log_callback log_callback, void *user_data);
 } g_metal;
 
-static int makedirs(const char *path, mode_t mode) {
-    char tmp[PATH_MAX];
-    char *p = NULL;
-    size_t len;
-
-    snprintf(tmp, sizeof(tmp), "%s", path);
-    len = strlen(tmp);
-
-    if (tmp[len - 1] == '/')
-        tmp[len - 1] = '\0';
-
-    if (mkdir(tmp, mode) == 0)
-        return 0;
-
-    if (errno == EEXIST) {
-        struct stat st;
-        if (stat(tmp, &st) == 0 && S_ISDIR(st.st_mode))
-            return 0;
-        return -1;
-    }
-
-    if (errno != ENOENT)
-        return -1;
-
-    for (p = tmp + 1; *p; p++) {
-        if (*p == '/') {
-            *p = '\0';
-            if (mkdir(tmp, mode) != 0 && errno != EEXIST)
-                return -1;
-            *p = '/';
-        }
-    }
-
-    return mkdir(tmp, mode);
-}
-
 static char *read_file(const char *path, size_t *size_out) {
     FILE *f = fopen(path, "r");
     if (!f) return NULL;
@@ -335,7 +299,7 @@ static bool BuildMetal(const char *dso) {
     }
 
     // Create app directory
-    if (makedirs(app_dir, 0755) != 0) {
+    if (llamafile_makedirs(app_dir, 0755) != 0) {
         perror(app_dir);
         return false;
     }
@@ -351,7 +315,7 @@ static bool BuildMetal(const char *dso) {
             size_t parent_len = last_slash - src;
             memcpy(parent_dir, src, parent_len);
             parent_dir[parent_len] = '\0';
-            makedirs(parent_dir, 0755);
+            llamafile_makedirs(parent_dir, 0755);
         }
 
         switch (llamafile_is_file_newer_than(metal_srcs[i].zip, src)) {

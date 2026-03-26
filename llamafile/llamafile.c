@@ -627,6 +627,143 @@ int llamafile_is_file_newer_than(const char *path, const char *other) {
         return is_file_newer_than_time(path, other);
 }
 
+/**
+ * Returns the platform-specific dynamic library extension.
+ */
+const char *llamafile_get_dso_extension(void) {
+    if (IsWindows())
+        return "dll";
+    else if (IsXnu())
+        return "dylib";
+    else
+        return "so";
+}
+
+/**
+ * Returns true if the file at path exists.
+ */
+bool llamafile_file_exists(const char *path) {
+    struct stat st;
+    return !stat(path, &st);
+}
+
+/**
+ * Creates directories recursively, like `mkdir -p`.
+ * Returns 0 on success, -1 on error.
+ */
+int llamafile_makedirs(const char *path, int mode) {
+    char tmp[PATH_MAX];
+    char *p = NULL;
+    size_t len;
+
+    snprintf(tmp, sizeof(tmp), "%s", path);
+    len = strlen(tmp);
+
+    if (tmp[len - 1] == '/')
+        tmp[len - 1] = '\0';
+
+    if (mkdir(tmp, mode) == 0)
+        return 0;
+
+    if (errno == EEXIST) {
+        struct stat st;
+        if (stat(tmp, &st) == 0 && S_ISDIR(st.st_mode))
+            return 0;
+        return -1;
+    }
+
+    if (errno != ENOENT)
+        return -1;
+
+    for (p = tmp + 1; *p; p++) {
+        if (*p == '/') {
+            *p = '\0';
+            if (mkdir(tmp, mode) != 0 && errno != EEXIST)
+                return -1;
+            *p = '/';
+        }
+    }
+
+    return mkdir(tmp, mode);
+}
+
+/**
+ * Try to load a prebuilt DSO from standard locations.
+ *
+ * Search order:
+ *   1. /zip/<name> (bundled in executable, extracted to app dir)
+ *   2. ~/.llamafile/v/<version>/<name> (app directory)
+ *   3. ~/<name> (home directory)
+ *
+ * Returns true if link_fn successfully loaded the DSO.
+ */
+bool llamafile_try_load_prebuilt_dso(const char *name, const char *backend_name,
+                                     llamafile_link_dso_fn link_fn) {
+    char dso[PATH_MAX];
+    char app_dir[PATH_MAX];
+
+    // Try loading from /zip/ (bundled in executable)
+    snprintf(dso, PATH_MAX, "/zip/%s", name);
+    if (llamafile_file_exists(dso)) {
+        // Extract to app dir first (cosmo_dlopen can't load from /zip/)
+        llamafile_get_app_dir(app_dir, PATH_MAX);
+        if (llamafile_makedirs(app_dir, 0755) != 0) {
+            perror(app_dir);
+            return false;
+        }
+        char extracted[PATH_MAX];
+        if (snprintf(extracted, PATH_MAX, "%s%s", app_dir, name) >= PATH_MAX) {
+            fprintf(stderr, "%s: path too long: %s%s\n", backend_name, app_dir, name);
+            return false;
+        }
+        // Check if extraction needed
+        switch (llamafile_is_file_newer_than(dso, extracted)) {
+        case -1:
+            return false;
+        case 0:
+            // Already extracted and up to date
+            break;
+        case 1:
+            if (!llamafile_extract(dso, extracted)) {
+                return false;
+            }
+            break;
+        }
+
+        if (link_fn(extracted)) {
+            if (FLAG_verbose)
+                fprintf(stderr, "%s: loaded bundled %s\n", backend_name, name);
+            return true;
+        }
+    }
+
+    // Try loading from app directory
+    llamafile_get_app_dir(app_dir, PATH_MAX);
+    snprintf(dso, PATH_MAX, "%s%s", app_dir, name);
+    if (llamafile_file_exists(dso)) {
+        if (link_fn(dso)) {
+            if (FLAG_verbose)
+                fprintf(stderr, "%s: loaded %s from app directory\n", backend_name, name);
+            return true;
+        }
+    }
+
+    // Try loading from home directory (common build location)
+    const char *home = getenv("HOME");
+    if (home && *home) {
+        snprintf(dso, PATH_MAX, "%s/%s", home, name);
+        if (llamafile_file_exists(dso)) {
+            if (link_fn(dso)) {
+                if (FLAG_verbose)
+                    fprintf(stderr, "%s: loaded %s from home directory\n", backend_name, name);
+                return true;
+            }
+        }
+    }
+
+    return false;
+}
+
 // ==============================================================================
 // Logging
 // ==============================================================================
@@ -644,7 +781,7 @@ void llamafile_log_callback_null(int level, const char *text, void *user_data) {
 // llamafile_has_cuda() and llamafile_has_amd_gpu() are defined in cuda.c
 
 bool llamafile_has_gpu(void) {
-    return llamafile_has_metal() || llamafile_has_cuda() || llamafile_has_amd_gpu();
+    return llamafile_has_metal() || llamafile_has_cuda() || llamafile_has_amd_gpu() || llamafile_has_vulkan();
 }
 
 const char *llamafile_describe_gpu(void) {
@@ -657,6 +794,8 @@ const char *llamafile_describe_gpu(void) {
         return "apple";
     case LLAMAFILE_GPU_NVIDIA:
         return "nvidia";
+    case LLAMAFILE_GPU_VULKAN:
+        return "vulkan";
     case LLAMAFILE_GPU_DISABLE:
         return "disabled";
     default:
@@ -675,6 +814,8 @@ int llamafile_gpu_parse(const char *s) {
         return LLAMAFILE_GPU_APPLE;
     if (!strcasecmp(s, "nvidia") || !strcasecmp(s, "cublas"))
         return LLAMAFILE_GPU_NVIDIA;
+    if (!strcasecmp(s, "vulkan") || !strcasecmp(s, "vk"))
+        return LLAMAFILE_GPU_VULKAN;
     return LLAMAFILE_GPU_ERROR;
 }
 
