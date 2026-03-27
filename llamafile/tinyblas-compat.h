@@ -128,25 +128,28 @@
 #define CUBLAS_DEFAULT_MATH 0
 
 // ============================================================================
-// Triangular solve (TRSM) - Not supported in TinyBLAS
-//
-// cublasStrsmBatched is used only by solve_tri.cu for Qwen3-Next model's
-// gated delta net attention. When TinyBLAS is used, the CUDA backend will
-// fall back to CPU for this operation.
+// Triangular solve (TRSM) type mappings
 // ============================================================================
 
-#define GGML_TINYBLAS_NO_TRSM 1
+#define cublasSideMode_t          tinyblasSideMode_t
+#define cublasFillMode_t          tinyblasFillMode_t
+#define cublasDiagType_t          tinyblasDiagType_t
 
-// Define TRSM-related constants so code compiles, but operations will fail
-#define CUBLAS_SIDE_LEFT          0
-#define CUBLAS_SIDE_RIGHT         1
-#define CUBLAS_FILL_MODE_LOWER    0
-#define CUBLAS_FILL_MODE_UPPER    1
-#define CUBLAS_DIAG_NON_UNIT      0
-#define CUBLAS_DIAG_UNIT          1
+// ============================================================================
+// TRSM constant mappings
+// ============================================================================
 
-// Stub for cublasStrsmBatched - always returns not supported
-// The solve_tri.cu code should check GGML_TINYBLAS_NO_TRSM and fall back to CPU
-#define cublasStrsmBatched(...) TINYBLAS_STATUS_NOT_SUPPORTED
+#define CUBLAS_SIDE_LEFT          TINYBLAS_SIDE_LEFT
+#define CUBLAS_SIDE_RIGHT         TINYBLAS_SIDE_RIGHT
+#define CUBLAS_FILL_MODE_LOWER    TINYBLAS_FILL_MODE_LOWER
+#define CUBLAS_FILL_MODE_UPPER    TINYBLAS_FILL_MODE_UPPER
+#define CUBLAS_DIAG_NON_UNIT      TINYBLAS_DIAG_NON_UNIT
+#define CUBLAS_DIAG_UNIT          TINYBLAS_DIAG_UNIT
+
+// ============================================================================
+// TRSM function mapping
+// ============================================================================
+
+#define cublasStrsmBatched        tinyblasStrsmBatched
 
 #endif // GGML_USE_TINYBLAS
