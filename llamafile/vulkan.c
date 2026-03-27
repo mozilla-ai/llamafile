@@ -50,19 +50,42 @@ extern void ggml_backend_register(ggml_backend_reg_t reg);
 typedef void (*llamafile_log_callback)(int level, const char *text, void *user_data);
 
 // Vulkan backend state
+//
+// On Windows the DSO exports functions with ms_abi calling convention,
+// but the cosmocc host uses System V ABI.  We store each dlsym'd pointer
+// in a union so the correct ABI variant is called at each call site,
+// following the same pattern used in cuda.c and localscore/nvml.cpp.
 static struct VulkanBackend {
     bool supported;
     atomic_uint once;
     void *lib_handle;
 
     // Function pointers for Vulkan backend
-    ggml_backend_t (*backend_init)(size_t device);
-    ggml_backend_reg_t (*backend_reg)(void);
-    int (*get_device_count)(void);
-    void (*get_device_description)(int device, char *description, size_t description_size);
+    union {
+        ggml_backend_t (*default_abi)(size_t device);
+        ggml_backend_t (__attribute__((__ms_abi__)) *windows_abi)(size_t device);
+    } backend_init;
+
+    union {
+        ggml_backend_reg_t (*default_abi)(void);
+        ggml_backend_reg_t (__attribute__((__ms_abi__)) *windows_abi)(void);
+    } backend_reg;
+
+    union {
+        int (*default_abi)(void);
+        int (__attribute__((__ms_abi__)) *windows_abi)(void);
+    } get_device_count;
+
+    union {
+        void (*default_abi)(int device, char *description, size_t description_size);
+        void (__attribute__((__ms_abi__)) *windows_abi)(int device, char *description, size_t description_size);
+    } get_device_description;
 
     // Logging control
-    void (*log_set)(llamafile_log_callback log_callback, void *user_data);
+    union {
+        void (*default_abi)(llamafile_log_callback log_callback, void *user_data);
+        void (__attribute__((__ms_abi__)) *windows_abi)(llamafile_log_callback log_callback, void *user_data);
+    } log_set;
 } g_vulkan;
 
 static bool LinkVulkan(const char *dso) {
@@ -74,32 +97,53 @@ static bool LinkVulkan(const char *dso) {
         return false;
     }
 
-    // Import functions
+    // Import functions into the correct ABI union member
     bool ok = true;
+    void *sym;
 
-    *(void **)(&g_vulkan.backend_init) = cosmo_dlsym(lib, "ggml_backend_vk_init");
-    ok &= (g_vulkan.backend_init != NULL);
+    sym = cosmo_dlsym(lib, "ggml_backend_vk_init");
+    ok &= (sym != NULL);
+    if (IsWindows())
+        *(void **)(&g_vulkan.backend_init.windows_abi) = sym;
+    else
+        *(void **)(&g_vulkan.backend_init.default_abi) = sym;
 
-    *(void **)(&g_vulkan.backend_reg) = cosmo_dlsym(lib, "ggml_backend_vk_reg");
-    ok &= (g_vulkan.backend_reg != NULL);
+    sym = cosmo_dlsym(lib, "ggml_backend_vk_reg");
+    ok &= (sym != NULL);
+    if (IsWindows())
+        *(void **)(&g_vulkan.backend_reg.windows_abi) = sym;
+    else
+        *(void **)(&g_vulkan.backend_reg.default_abi) = sym;
 
-    *(void **)(&g_vulkan.get_device_count) = cosmo_dlsym(lib, "ggml_backend_vk_get_device_count");
     // Optional - don't fail if not found
+    sym = cosmo_dlsym(lib, "ggml_backend_vk_get_device_count");
+    if (IsWindows())
+        *(void **)(&g_vulkan.get_device_count.windows_abi) = sym;
+    else
+        *(void **)(&g_vulkan.get_device_count.default_abi) = sym;
 
-    *(void **)(&g_vulkan.get_device_description) = cosmo_dlsym(lib, "ggml_backend_vk_get_device_description");
     // Optional - don't fail if not found
+    sym = cosmo_dlsym(lib, "ggml_backend_vk_get_device_description");
+    if (IsWindows())
+        *(void **)(&g_vulkan.get_device_description.windows_abi) = sym;
+    else
+        *(void **)(&g_vulkan.get_device_description.default_abi) = sym;
 
     // Import logging control (optional)
-    *(void **)(&g_vulkan.log_set) = cosmo_dlsym(lib, "ggml_log_set");
+    sym = cosmo_dlsym(lib, "ggml_log_set");
+    if (IsWindows())
+        *(void **)(&g_vulkan.log_set.windows_abi) = sym;
+    else
+        *(void **)(&g_vulkan.log_set.default_abi) = sym;
 
     if (!ok) {
         char *err = cosmo_dlerror();
         fprintf(stderr, "vulkan: %s: not all symbols could be imported\n", err ? err : "unknown error");
-        g_vulkan.backend_init = NULL;
-        g_vulkan.backend_reg = NULL;
-        g_vulkan.get_device_count = NULL;
-        g_vulkan.get_device_description = NULL;
-        g_vulkan.log_set = NULL;
+        memset(&g_vulkan.backend_init, 0, sizeof(g_vulkan.backend_init));
+        memset(&g_vulkan.backend_reg, 0, sizeof(g_vulkan.backend_reg));
+        memset(&g_vulkan.get_device_count, 0, sizeof(g_vulkan.get_device_count));
+        memset(&g_vulkan.get_device_description, 0, sizeof(g_vulkan.get_device_description));
+        memset(&g_vulkan.log_set, 0, sizeof(g_vulkan.log_set));
         cosmo_dlclose(lib);
         return false;
     }
@@ -138,8 +182,12 @@ static bool ImportVulkanImpl(void) {
     }
 
     // Register the Vulkan backend with GGML
-    if (g_vulkan.backend_reg) {
-        ggml_backend_reg_t reg = g_vulkan.backend_reg();
+    if (g_vulkan.backend_reg.default_abi || g_vulkan.backend_reg.windows_abi) {
+        ggml_backend_reg_t reg;
+        if (IsWindows())
+            reg = g_vulkan.backend_reg.windows_abi();
+        else
+            reg = g_vulkan.backend_reg.default_abi();
         if (reg) {
             ggml_backend_register(reg);
             if (FLAG_verbose)
@@ -155,8 +203,12 @@ static void ImportVulkan(void) {
         g_vulkan.supported = true;
         if (FLAG_verbose) {
             fprintf(stderr, "vulkan: Vulkan GPU support successfully loaded\n");
-            if (g_vulkan.get_device_count) {
-                int count = g_vulkan.get_device_count();
+            if (g_vulkan.get_device_count.default_abi || g_vulkan.get_device_count.windows_abi) {
+                int count;
+                if (IsWindows())
+                    count = g_vulkan.get_device_count.windows_abi();
+                else
+                    count = g_vulkan.get_device_count.default_abi();
                 fprintf(stderr, "vulkan: found %d GPU device(s)\n", count);
             }
         }
@@ -177,17 +229,21 @@ bool llamafile_has_vulkan(void) {
 ggml_backend_t ggml_backend_vk_init(size_t device) {
     if (!llamafile_has_vulkan())
         return NULL;
-    if (!g_vulkan.backend_init)
+    if (!g_vulkan.backend_init.default_abi && !g_vulkan.backend_init.windows_abi)
         return NULL;
-    return g_vulkan.backend_init(device);
+    if (IsWindows())
+        return g_vulkan.backend_init.windows_abi(device);
+    return g_vulkan.backend_init.default_abi(device);
 }
 
 int ggml_backend_vk_get_device_count(void) {
     if (!llamafile_has_vulkan())
         return 0;
-    if (!g_vulkan.get_device_count)
+    if (!g_vulkan.get_device_count.default_abi && !g_vulkan.get_device_count.windows_abi)
         return 0;
-    return g_vulkan.get_device_count();
+    if (IsWindows())
+        return g_vulkan.get_device_count.windows_abi();
+    return g_vulkan.get_device_count.default_abi();
 }
 
 void ggml_backend_vk_get_device_description(int device, char *description, size_t description_size) {
@@ -196,17 +252,24 @@ void ggml_backend_vk_get_device_description(int device, char *description, size_
             description[0] = '\0';
         return;
     }
-    if (!g_vulkan.get_device_description) {
+    if (!g_vulkan.get_device_description.default_abi && !g_vulkan.get_device_description.windows_abi) {
         if (description_size > 0)
             snprintf(description, description_size, "Vulkan GPU %d", device);
         return;
     }
-    g_vulkan.get_device_description(device, description, description_size);
+    if (IsWindows())
+        g_vulkan.get_device_description.windows_abi(device, description, description_size);
+    else
+        g_vulkan.get_device_description.default_abi(device, description, description_size);
 }
 
 void llamafile_vulkan_log_set(llamafile_log_callback log_callback, void *user_data) {
     if (!llamafile_has_vulkan())
         return;
-    if (g_vulkan.log_set)
-        g_vulkan.log_set(log_callback, user_data);
+    if (g_vulkan.log_set.default_abi || g_vulkan.log_set.windows_abi) {
+        if (IsWindows())
+            g_vulkan.log_set.windows_abi(log_callback, user_data);
+        else
+            g_vulkan.log_set.default_abi(log_callback, user_data);
+    }
 }
