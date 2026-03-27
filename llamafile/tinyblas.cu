@@ -49,6 +49,7 @@
 #else
 #include <hip/hip_fp16.h>
 #include <hip/hip_runtime.h>
+#define cudaError_t hipError_t
 #define cudaSuccess hipSuccess
 #define cudaStream_t hipStream_t
 #define cudaGetLastError hipGetLastError

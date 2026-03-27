@@ -111,6 +111,7 @@ COMMON_FLAGS="\
   -I$LLAMA_CPP_DIR/ggml/include \
   -I$LLAMA_CPP_DIR/ggml/src \
   -I$GGML_CUDA_DIR \
+  -I$ROCM_PATH/include \
   -DNDEBUG \
   -DGGML_BUILD=1 \
   -DGGML_SHARED=1 \
