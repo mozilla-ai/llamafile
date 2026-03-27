@@ -236,8 +236,11 @@ echo Linking ggml-rocm.dll...
 :: Collect all .obj files into a response file (command line too long for cmd.exe)
 set "LINK_RSP=%BUILD_DIR%\link_objects.rsp"
 type nul > "%LINK_RSP%"
-for %%f in ("%BUILD_DIR%\*.obj") do echo "%%f">> "%LINK_RSP%"
-"%HIPCC%" -shared %ARCH_FLAGS% -o "%OUTPUT%" @"%LINK_RSP%" -L"%HIP_PATH%\lib" -lhipblas -lrocblas -lamdhip64
+for %%f in ("%BUILD_DIR%\*.obj") do (
+    set "OBJPATH=%%f"
+    echo "!OBJPATH:\=/!">> "%LINK_RSP%"
+)
+"%HIPCC%" -shared %ARCH_FLAGS% -o "%OUTPUT%" @"%LINK_RSP%" -L"%HIP_PATH%\lib" "%HIP_PATH%\lib\libhipblas.dll.a" "%HIP_PATH%\lib\rocblas.lib" "%HIP_PATH%\lib\amdhip64.lib"
 if errorlevel 1 (
     echo Error: linking failed
     exit /b 1
