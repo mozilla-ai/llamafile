@@ -58,7 +58,7 @@ chmod +x Qwen3.5-0.8B-Q8_0.llamafile
 
 We chose this model because that's the smallest one we have
 built a llamafile for, so most likely to work out-of-the-box for you.
-If you have powerful hardware and/or GPUs, [feel free to choose](example_llamafiles.md)
+If you have powerful hardware and/or GPUs, [feel free to choose](https://mozilla-ai.github.io/llamafile/example_llamafiles/)
 larger and more expressive models which should provide more accurate
 responses.
 
