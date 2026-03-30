@@ -2652,13 +2652,14 @@ template <int nrc> struct Q81 {
         return y[iy][4*i].qs;
     }
 
-    // Gather d,s pairs from 4 individual blocks into a float16x8_t
-    // Layout: [d0, s0, d1, s1, d2, s2, d3, s3]
+    // Gather d and s values from 4 individual blocks into a float16x8_t
+    // Layout: [d0, d1, d2, d3, s0, s1, s2, s3]
+    // Must match the qx_scales layout from DequantizerQ*1::new_block()
     inline float16x8_t load_scales(int iy, int i) const {
         ggml_half ds_vals[8];
         for (int k = 0; k < 4; ++k) {
-            ds_vals[2*k + 0] = y[iy][4*i + k].d;
-            ds_vals[2*k + 1] = y[iy][4*i + k].s;
+            ds_vals[k]     = y[iy][4*i + k].d;
+            ds_vals[4 + k] = y[iy][4*i + k].s;
         }
         return vld1q_f16((const float16_t *)ds_vals);
     }
@@ -2840,7 +2841,7 @@ struct DequantizerQ51 final : public BaseLegacyDequantizer<block_q5_1> {
         q[1] = vreinterpretq_s8_u8(vorrq_u8(vreinterpretq_u8_s8(q[1]), vandq_u8(mh, hbits.to_bytes(qh+2))));
     }
     inline void prepare1(int i) {
-        bits.prepare1(x[i].qs, bits.b);
+        prepare1(i, bits.b);
     }
 
     inline float16x8_t new_block(int i) {

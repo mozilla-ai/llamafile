@@ -79,6 +79,21 @@ o/$(MODE)/tests/sgemm/iqk_test: \
 	$(CXX) $(LDFLAGS) -fopenmp -o $@ $^ $(LDLIBS)
 
 # ==============================================================================
+# Test: iqk_legacy_test (legacy quant types Q4_0/Q4_1/Q5_0/Q5_1)
+# ==============================================================================
+# Reproduces https://github.com/mozilla-ai/llamafile/issues/922
+
+o/$(MODE)/tests/sgemm/iqk_legacy_test.o: tests/sgemm/iqk_legacy_test.cpp
+	@mkdir -p $(@D)
+	$(CXX) $(CXXFLAGS) $(SGEMM_TEST_CPPFLAGS) -c -o $@ $<
+
+o/$(MODE)/tests/sgemm/iqk_legacy_test: \
+		o/$(MODE)/tests/sgemm/iqk_legacy_test.o \
+		$(SGEMM_TEST_DEPS)
+	@mkdir -p $(@D)
+	$(CXX) $(LDFLAGS) -o $@ $^ $(LDLIBS)
+
+# ==============================================================================
 # Test: q8_0_layout_test (standalone diagnostic)
 # ==============================================================================
 # This is a standalone diagnostic that demonstrates why IQK code gathers
