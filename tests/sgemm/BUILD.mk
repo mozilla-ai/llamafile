@@ -119,4 +119,5 @@ o/$(MODE)/tests/sgemm: \
 	o/$(MODE)/tests/sgemm/sgemm_sss_test \
 	o/$(MODE)/tests/sgemm/sgemm_matmul_test \
 	o/$(MODE)/tests/sgemm/sgemm_vecdot_test \
-	o/$(MODE)/tests/sgemm/iqk_test
+	o/$(MODE)/tests/sgemm/iqk_test \
+	o/$(MODE)/tests/sgemm/iqk_legacy_test 

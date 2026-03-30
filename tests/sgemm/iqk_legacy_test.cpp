@@ -198,7 +198,7 @@ static int test_type(const QuantType &qt, long ne00) {
     if (nan_count > 0 || inf_count > 0) {
         printf("  FAIL: %d NaN, %d Inf\n", nan_count, inf_count);
         rc = 1;
-    } else if (err_max > 0.5) {
+    } else if (err_max > 0.05) {
         printf("  FAIL: max error %.2e exceeds threshold\n", err_max);
         rc = 1;
     } else {
