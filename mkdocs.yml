@@ -10,6 +10,7 @@ nav:
   - Running a llamafile: running_llamafile.md
   - Creating llamafiles: creating_llamafiles.md
   - Source installation: source_installation.md
+  - Building DLLs: building_dlls.md
   - Technical details: technical_details.md
   - Supported Systems: support.md
   - Troubleshooting: troubleshooting.md
