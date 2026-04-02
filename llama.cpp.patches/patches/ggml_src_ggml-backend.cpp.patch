@@ -1,21 +1,7 @@
 diff --git a/ggml/src/ggml-backend.cpp b/ggml/src/ggml-backend.cpp
 --- a/llama.cpp/ggml/src/ggml-backend.cpp
 +++ b/llama.cpp/ggml/src/ggml-backend.cpp
-@@ -63,6 +63,13 @@ size_t ggml_backend_buft_get_alloc_size(ggml_backend_buffer_type_t buft, const s
-     // get_alloc_size is optional, defaults to ggml_nbytes
-     if (buft->iface.get_alloc_size) {
-         size_t size = buft->iface.get_alloc_size(buft, tensor);
-+        if (size < ggml_nbytes(tensor)) {
-+            fprintf(stderr, "ALLOC SIZE MISMATCH: tensor=%s type=%d ne=[%lld,%lld,%lld,%lld] alloc_size=%zu nbytes=%zu\n",
-+                    tensor->name, tensor->type,
-+                    (long long)tensor->ne[0], (long long)tensor->ne[1],
-+                    (long long)tensor->ne[2], (long long)tensor->ne[3],
-+                    size, ggml_nbytes(tensor));
-+        }
-         assert(size >= ggml_nbytes(tensor));
-         return size;
-     }
-@@ -112,7 +119,14 @@ void ggml_backend_buffer_free(ggml_backend_buffer_t buffer) {
+@@ -112,7 +112,14 @@ void ggml_backend_buffer_free(ggml_backend_buffer_t buffer) {
      if (buffer->iface.free_buffer != NULL) {
          buffer->iface.free_buffer(buffer);
      }
@@ -31,7 +17,7 @@ diff --git a/ggml/src/ggml-backend.cpp b/ggml/src/ggml-backend.cpp
  }
  
  size_t ggml_backend_buffer_get_size(ggml_backend_buffer_t buffer) {
-@@ -613,6 +627,7 @@ static const struct ggml_backend_buffer_i ggml_backend_multi_buffer_i = {
+@@ -613,6 +620,7 @@ static const struct ggml_backend_buffer_i ggml_backend_multi_buffer_i = {
      /* .cpy_tensor      = */ NULL,
      /* .clear           = */ ggml_backend_multi_buffer_clear,
      /* .reset           = */ NULL,
@@ -39,7 +25,7 @@ diff --git a/ggml/src/ggml-backend.cpp b/ggml/src/ggml-backend.cpp
  };
  
  ggml_backend_buffer_t ggml_backend_multi_buffer_alloc_buffer(ggml_backend_buffer_t * buffers, size_t n_buffers) {
-@@ -2177,6 +2192,7 @@ static const struct ggml_backend_buffer_i ggml_backend_cpu_buffer_i = {
+@@ -2177,6 +2185,7 @@ static const struct ggml_backend_buffer_i ggml_backend_cpu_buffer_i = {
      /* .cpy_tensor      = */ ggml_backend_cpu_buffer_cpy_tensor,
      /* .clear           = */ ggml_backend_cpu_buffer_clear,
      /* .reset           = */ NULL,
@@ -47,7 +33,7 @@ diff --git a/ggml/src/ggml-backend.cpp b/ggml/src/ggml-backend.cpp
  };
  
  static const struct ggml_backend_buffer_i ggml_backend_cpu_buffer_from_ptr_i = {
-@@ -2189,6 +2205,7 @@ static const struct ggml_backend_buffer_i ggml_backend_cpu_buffer_from_ptr_i = {
+@@ -2189,6 +2198,7 @@ static const struct ggml_backend_buffer_i ggml_backend_cpu_buffer_from_ptr_i = {
      /* .cpy_tensor      = */ ggml_backend_cpu_buffer_cpy_tensor,
      /* .clear           = */ ggml_backend_cpu_buffer_clear,
      /* .reset           = */ NULL,
