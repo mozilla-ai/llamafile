@@ -68,3 +68,21 @@ diff --git a/ggml/src/ggml-cuda/ggml-cuda.cu b/ggml/src/ggml-cuda/ggml-cuda.cu
  
      const bool use_fp16 = (src0->type == GGML_TYPE_F16 || ggml_is_quantized(src0->type)) && ggml_is_contiguous(src0) && row_diff == src0->ne[1] && dst->op_params[0] == GGML_PREC_DEFAULT;
  
+@@ -4598,6 +4621,8 @@ static bool ggml_backend_cuda_device_supports_op(ggml_backend_dev_t dev, const g
+                 switch (a->type) {
+                     case GGML_TYPE_F32:
+                     case GGML_TYPE_F16:
++                    case GGML_TYPE_Q1_0:
++                    case GGML_TYPE_Q1_0_g128:
+                     case GGML_TYPE_Q4_0:
+                     case GGML_TYPE_Q4_1:
+                     case GGML_TYPE_Q5_0:
+@@ -4634,6 +4659,8 @@ static bool ggml_backend_cuda_device_supports_op(ggml_backend_dev_t dev, const g
+                     case GGML_TYPE_F32:
+                     case GGML_TYPE_BF16:
+                     case GGML_TYPE_I32:
++                    case GGML_TYPE_Q1_0:
++                    case GGML_TYPE_Q1_0_g128:
+                     case GGML_TYPE_Q4_0:
+                     case GGML_TYPE_Q4_1:
+                     case GGML_TYPE_Q5_0:

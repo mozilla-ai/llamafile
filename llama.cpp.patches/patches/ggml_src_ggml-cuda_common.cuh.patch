@@ -17,3 +17,24 @@ diff --git a/ggml/src/ggml-cuda/common.cuh b/ggml/src/ggml-cuda/common.cuh
  }
  
  static bool fp32_mma_hardware_available(const int cc) {
+@@ -924,6 +930,20 @@ struct ggml_cuda_type_traits<GGML_TYPE_Q8_0> {
+     static constexpr int qi = QI8_0;
+ };
+ 
++template<>
++struct ggml_cuda_type_traits<GGML_TYPE_Q1_0> {
++    static constexpr int qk = QK1_0;
++    static constexpr int qr = QR1_0;
++    static constexpr int qi = QI1_0;
++};
++
++template<>
++struct ggml_cuda_type_traits<GGML_TYPE_Q1_0_g128> {
++    static constexpr int qk = QK1_0_g128;
++    static constexpr int qr = QR1_0_g128;
++    static constexpr int qi = QI1_0_g128;
++};
++
+ template<>
+ struct ggml_cuda_type_traits<GGML_TYPE_MXFP4> {
+     static constexpr int qk = QK_MXFP4;
