@@ -1423,8 +1423,6 @@ template <typename Dequantizer> void MulMat::set_functions(MulMat& m) {
 
 bool MulMat::set_mul_mat(int typeA, int ne00, MulMat& mm, int& row_size_q8, int) {
 
-    row_size_q8 = ggml_row_size(GGML_TYPE_Q8_K, ne00);
-
     switch (typeA) {
         case GGML_TYPE_Q2_K:
             assert (ne00 % QK_K == 0);
@@ -1454,27 +1452,29 @@ bool MulMat::set_mul_mat(int typeA, int ne00, MulMat& mm, int& row_size_q8, int)
             assert (ne00 % QK4_0 == 0);
             MulMat::set_functions<Q4_0_Unpacker>(mm);
             row_size_q8 = ggml_row_size(GGML_TYPE_Q8_0, ne00);
-            break;
+            return true;
         case GGML_TYPE_Q4_1:
             assert (ne00 % QK4_1 == 0);
             MulMat::set_functions<Q4_1_Unpacker>(mm);
             row_size_q8 = ggml_row_size(GGML_TYPE_Q8_1, ne00);
-            break;
+            return true;
         case GGML_TYPE_Q5_0:
             assert (ne00 % QK5_0 == 0);
             MulMat::set_functions<Q5_0_Unpacker>(mm);
             row_size_q8 = ggml_row_size(GGML_TYPE_Q8_0, ne00);
-            break;
+            return true;
         case GGML_TYPE_Q5_1:
             assert (ne00 % QK5_1 == 0);
             MulMat::set_functions<Q5_1_Unpacker>(mm);
             row_size_q8 = ggml_row_size(GGML_TYPE_Q8_1, ne00);
-            break;
+            return true;
 
         default:
             return false;
     }
 
+    // Only K-quant types reach here (they break out of the switch above)
+    row_size_q8 = ggml_row_size(GGML_TYPE_Q8_K, ne00);
     return true;
 }
 
@@ -3028,7 +3028,6 @@ template <typename Dequantizer> void MulMat::set_functions(MulMat& m) {
 }
 
 bool MulMat::set_mul_mat(int typeA, int ne00, MulMat& m, int& row_size_q8, int Ny) {
-    row_size_q8 = ggml_row_size(GGML_TYPE_Q8_K, ne00);
 
     (void)Ny;
     // Uncommenting out this would disable iqk_mul_mat for matrix x vector multiplications.
@@ -3072,26 +3071,29 @@ bool MulMat::set_mul_mat(int typeA, int ne00, MulMat& m, int& row_size_q8, int N
         case GGML_TYPE_Q4_0:
             MulMat::set_functions<DequantizerQ40>(m);
             row_size_q8 = ggml_row_size(GGML_TYPE_Q8_0, ne00);
-            break;
+            return true;
         case GGML_TYPE_Q4_1:
             MulMat::set_functions<DequantizerQ41>(m);
             row_size_q8 = ggml_row_size(GGML_TYPE_Q8_1, ne00);
-            break;
+            return true;
         case GGML_TYPE_Q5_0:
             MulMat::set_functions<DequantizerQ50>(m);
             row_size_q8 = ggml_row_size(GGML_TYPE_Q8_0, ne00);
-            break;
+            return true;
         case GGML_TYPE_Q5_1:
             MulMat::set_functions<DequantizerQ51>(m);
             row_size_q8 = ggml_row_size(GGML_TYPE_Q8_1, ne00);
-            break;
+            return true;
         case GGML_TYPE_Q8_0:
             MulMat::set_functions<DequantizerQ80>(m);
             row_size_q8 = ggml_row_size(GGML_TYPE_Q8_0, ne00);
-            break;
+            return true;
         default:
             return false;
     }
+
+    // Only K-quant / IQ types reach here (they break out of the switch above)
+    row_size_q8 = ggml_row_size(GGML_TYPE_Q8_K, ne00);
     return true;
 }
 
