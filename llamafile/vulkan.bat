@@ -93,12 +93,23 @@ if not exist "%VULKAN_SDK%\Lib\vulkan-1.lib" (
     exit /b 1
 )
 
-:: -------- check MSVC --------
+:: -------- find Visual Studio / Build Tools --------
 where cl >nul 2>&1
 if errorlevel 1 (
-    echo Error: cl.exe not found in PATH
-    echo Please run from a Visual Studio Developer Command Prompt
-    exit /b 1
+    set "VSWHERE=%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe"
+    if not exist "!VSWHERE!" (
+        echo Error: cl.exe not found in PATH and vswhere.exe not found
+        echo Please run from a Visual Studio Developer Command Prompt
+        exit /b 1
+    )
+    for /f "usebackq tokens=*" %%i in (`"!VSWHERE!" -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath`) do (
+        set "VS_PATH=%%i"
+    )
+    if not defined VS_PATH (
+        echo Error: Visual Studio with C++ tools not found
+        exit /b 1
+    )
+    call "!VS_PATH!\VC\Auxiliary\Build\vcvarsall.bat" x64
 )
 
 :: -------- build parallel job runner --------
