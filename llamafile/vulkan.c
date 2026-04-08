@@ -181,6 +181,16 @@ static bool ImportVulkanImpl(void) {
         return false;
     }
 
+    // Suppress DSO's ggml logging before backend registration, which triggers
+    // device enumeration inside the DSO. Without this, Vulkan device messages
+    // appear even when --verbose is not set.
+    if (!FLAG_verbose && (g_vulkan.log_set.default_abi || g_vulkan.log_set.windows_abi)) {
+        if (IsWindows())
+            g_vulkan.log_set.windows_abi(llamafile_log_callback_null, NULL);
+        else
+            g_vulkan.log_set.default_abi(llamafile_log_callback_null, NULL);
+    }
+
     // Register the Vulkan backend with GGML
     if (g_vulkan.backend_reg.default_abi || g_vulkan.backend_reg.windows_abi) {
         ggml_backend_reg_t reg;
