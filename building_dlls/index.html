@@ -6,29 +6,31 @@
       <meta charset="utf-8">
       <meta name="viewport" content="width=device-width,initial-scale=1">
       
-        <meta name="description" content="Clean llamafile build outputs">
       
       
       
+        <link rel="prev" href="../source_installation/">
       
+      
+        <link rel="next" href="../technical_details/">
       
       
         
       
       
-      <link rel="icon" href="../../images/llamafile-640x640.png">
+      <link rel="icon" href="../images/llamafile-640x640.png">
       <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.6">
     
     
       
-        <title>Clean Llamafile Build - llamafile</title>
+        <title>Building DLLs - llamafile</title>
       
     
     
-      <link rel="stylesheet" href="../../assets/stylesheets/main.484c7ddc.min.css">
+      <link rel="stylesheet" href="../assets/stylesheets/main.484c7ddc.min.css">
       
         
-        <link rel="stylesheet" href="../../assets/stylesheets/palette.ab4e12ef.min.css">
+        <link rel="stylesheet" href="../assets/stylesheets/palette.ab4e12ef.min.css">
       
       
 
@@ -47,7 +49,7 @@
       
     
     
-    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    <script>__md_scope=new URL("..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
     
       
 
@@ -72,7 +74,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#clean-llamafile-build" class="md-skip">
+        <a href="#requirements" class="md-skip">
           Skip to content
         </a>
       
@@ -88,9 +90,9 @@
 
 <header class="md-header md-header--shadow" data-md-component="header">
   <nav class="md-header__inner md-grid" aria-label="Header">
-    <a href="../.." title="llamafile" class="md-header__button md-logo" aria-label="llamafile" data-md-component="logo">
+    <a href=".." title="llamafile" class="md-header__button md-logo" aria-label="llamafile" data-md-component="logo">
       
-  <img src="../../images/llamafile-640x640.png" alt="logo">
+  <img src="../images/llamafile-640x640.png" alt="logo">
 
     </a>
     <label class="md-header__button md-icon" for="__drawer">
@@ -107,7 +109,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              Clean Llamafile Build
+              Building DLLs
             
           </span>
         </div>
@@ -229,9 +231,9 @@
 
 <nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
   <label class="md-nav__title" for="__drawer">
-    <a href="../.." title="llamafile" class="md-nav__button md-logo" aria-label="llamafile" data-md-component="logo">
+    <a href=".." title="llamafile" class="md-nav__button md-logo" aria-label="llamafile" data-md-component="logo">
       
-  <img src="../../images/llamafile-640x640.png" alt="logo">
+  <img src="../images/llamafile-640x640.png" alt="logo">
 
     </a>
     llamafile
@@ -258,7 +260,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../.." class="md-nav__link">
+      <a href=".." class="md-nav__link">
         
   
   
@@ -285,7 +287,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../quickstart/" class="md-nav__link">
+      <a href="../quickstart/" class="md-nav__link">
         
   
   
@@ -312,7 +314,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../example_llamafiles/" class="md-nav__link">
+      <a href="../example_llamafiles/" class="md-nav__link">
         
   
   
@@ -339,7 +341,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../running_llamafile/" class="md-nav__link">
+      <a href="../running_llamafile/" class="md-nav__link">
         
   
   
@@ -366,7 +368,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../creating_llamafiles/" class="md-nav__link">
+      <a href="../creating_llamafiles/" class="md-nav__link">
         
   
   
@@ -393,7 +395,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../source_installation/" class="md-nav__link">
+      <a href="../source_installation/" class="md-nav__link">
         
   
   
@@ -417,10 +419,19 @@
       
   
   
+    
   
   
-    <li class="md-nav__item">
-      <a href="../../building_dlls/" class="md-nav__link">
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
         
   
   
@@ -436,6 +447,7 @@
   
 
       </a>
+      
     </li>
   
 
@@ -447,7 +459,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../technical_details/" class="md-nav__link">
+      <a href="../technical_details/" class="md-nav__link">
         
   
   
@@ -474,7 +486,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../support/" class="md-nav__link">
+      <a href="../support/" class="md-nav__link">
         
   
   
@@ -501,7 +513,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../troubleshooting/" class="md-nav__link">
+      <a href="../troubleshooting/" class="md-nav__link">
         
   
   
@@ -582,7 +594,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../whisperfile/" class="md-nav__link">
+      <a href="../whisperfile/" class="md-nav__link">
         
   
   
@@ -610,7 +622,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../whisperfile/getting-started/" class="md-nav__link">
+      <a href="../whisperfile/getting-started/" class="md-nav__link">
         
   
   
@@ -638,7 +650,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../whisperfile/packaging/" class="md-nav__link">
+      <a href="../whisperfile/packaging/" class="md-nav__link">
         
   
   
@@ -666,7 +678,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../whisperfile/gpu/" class="md-nav__link">
+      <a href="../whisperfile/gpu/" class="md-nav__link">
         
   
   
@@ -694,7 +706,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../whisperfile/translate/" class="md-nav__link">
+      <a href="../whisperfile/translate/" class="md-nav__link">
         
   
   
@@ -722,7 +734,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../whisperfile/server/" class="md-nav__link">
+      <a href="../whisperfile/server/" class="md-nav__link">
         
   
   
@@ -785,7 +797,7 @@
 
 
   
-    <a href="https://github.com/mozilla-ai/llamafile/edit/main/docs/commands/clean.md" title="Edit this page" class="md-content__button md-icon" rel="edit">
+    <a href="https://github.com/mozilla-ai/llamafile/edit/main/docs/building_dlls.md" title="Edit this page" class="md-content__button md-icon" rel="edit">
       
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M10 20H6V4h7v5h5v3.1l2-2V8l-6-6H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h4zm10.2-7c.1 0 .3.1.4.2l1.3 1.3c.2.2.2.6 0 .8l-1 1-2.1-2.1 1-1c.1-.1.2-.2.4-.2m0 3.9L14.1 23H12v-2.1l6.1-6.1z"/></svg>
     </a>
@@ -793,19 +805,82 @@
   
 
 
-<h1 id="clean-llamafile-build">Clean Llamafile Build</h1>
-<p>Remove all build outputs from the <code>o/</code> directory.</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>.cosmocc/4.0.2/bin/make<span class="w"> </span>clean
-</span></code></pre></div>
+<p>This document provides instructions to replicate our Windows DLL builds.</p>
+<h1 id="requirements">Requirements:</h1>
+<ul>
+<li>Windows 11 (x64)</li>
+<li>Build Tools for Visual Studio 2022</li>
+<li><a href="https://www.msys2.org/">MSYS2</a></li>
+<li><a href="https://developer.nvidia.com/cuda-12-9-1-download-archive?target_os=Windows&amp;target_arch=x86_64&amp;target_version=11">CUDA 12.9.1</a></li>
+<li><a href="https://www.amd.com/en/developer/resources/rocm-hub/hip-sdk.html">AMD HIP SDK</a> 7.1.1</li>
+<li><a href="https://vulkan.lunarg.com/sdk/home#windows">Vulkan SDK</a> 1.4.341.1</li>
+</ul>
+<h1 id="in-the-msys-shell">In the MSYS shell</h1>
+<p>As our Makefile makes massive use of unix shell applications, it's much easier to just replicate that environment. We'll need it just to setup the repo (with <code>make setup</code>), which initializes all the submodules and applies our patches to the original code. In theory after the setup you should also be able to run <code>make -j8</code> to build llamafile with cosmocc on Windows (but honestly, why?)</p>
+<ul>
+<li>
+<p>install the required tools (vim is not really required)
+<div class="language-text highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>pacman -S git patch unzip wget make vim
+</span></code></pre></div></p>
+</li>
+<li>
+<p>create a build workspace
+<div class="language-text highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>mkdir /c/Users/Your_Username/workspace
+</span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>cd /c/Users/Your_Username/workspace
+</span></code></pre></div></p>
+</li>
+<li>
+<p>clone the repo
+<div class="language-text highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>git clone https://github.com/mozilla-ai/llamafile
+</span></code></pre></div></p>
+</li>
+<li>
+<p>setup
+<div class="language-text highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>cd llamafile
+</span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>make setup
+</span></code></pre></div></p>
+</li>
+</ul>
+<h1 id="in-the-windows-terminal">In the Windows terminal</h1>
+<p>After the repo is set up, you can build the cuda / rocm / vulkan DLLs as follows.</p>
+<ul>
+<li>
+<p>from powershell, open a Visual Studio 2022 Developer Command Prompt
+<div class="language-text highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a> cmd /k &quot;`&quot;C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Auxiliary\Build\vcvarsall.bat`&quot; x64&quot;
+</span></code></pre></div></p>
+</li>
+<li>
+<p>cd to the llamafile dir and start CUDA parallel build (this will run for a while...)
+<div class="language-text highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>cd c:\Users\Your_Username\Workspace\llamafile
+</span><span id="__span-5-2"><a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a>llamafile\cuda_parallel.bat
+</span></code></pre></div></p>
+</li>
+</ul>
+<p><img alt="images/win_cuda_build.png" src="../images/win_cuda_build.png" /> </p>
+<ul>
+<li>
+<p>run ROCm parallel build as follows:
+<div class="language-text highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a>llamafile\rocm_parallel.bat
+</span></code></pre></div></p>
+</li>
+<li>
+<p>run Vulkan build as follows (parallel is not needed, this is usually much faster than the other two):
+<div class="language-text highlight"><pre><span></span><code><span id="__span-7-1"><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a>llamafile\vulkan.bat
+</span></code></pre></div></p>
+</li>
+</ul>
+<p>At the end of this process, you should have the following libraries available in your llamafile directory (note that sizes might differ):
+<div class="language-text highlight"><pre><span></span><code><span id="__span-8-1"><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a>03/31/2026  02:15 PM       717,095,936 ggml-cuda.dll
+</span><span id="__span-8-2"><a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a>03/31/2026  02:44 PM       502,854,656 ggml-rocm.dll
+</span><span id="__span-8-3"><a id="__codelineno-8-3" name="__codelineno-8-3" href="#__codelineno-8-3"></a>03/31/2026  02:46 PM        31,482,880 ggml-vulkan.dll
+</span></code></pre></div></p>
+<p>To run llamafile with these libraries, add them in your home directory or bundle them in your llamafile (see <a href="https://mozilla-ai.github.io/llamafile/creating_llamafiles/">Creating a llamafile</a>).</p>
 
 
 
 
 
 
-
-  
-  
 
 
 
@@ -826,6 +901,44 @@
       
         <footer class="md-footer">
   
+    
+      
+      <nav class="md-footer__inner md-grid" aria-label="Footer" >
+        
+          
+          <a href="../source_installation/" class="md-footer__link md-footer__link--prev" aria-label="Previous: Source installation">
+            <div class="md-footer__button md-icon">
+              
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+            </div>
+            <div class="md-footer__title">
+              <span class="md-footer__direction">
+                Previous
+              </span>
+              <div class="md-ellipsis">
+                Source installation
+              </div>
+            </div>
+          </a>
+        
+        
+          
+          <a href="../technical_details/" class="md-footer__link md-footer__link--next" aria-label="Next: Technical details">
+            <div class="md-footer__title">
+              <span class="md-footer__direction">
+                Next
+              </span>
+              <div class="md-ellipsis">
+                Technical details
+              </div>
+            </div>
+            <div class="md-footer__button md-icon">
+              
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M4 11v2h12l-5.5 5.5 1.42 1.42L19.84 12l-7.92-7.92L10.5 5.5 16 11z"/></svg>
+            </div>
+          </a>
+        
+      </nav>
     
   
   <div class="md-footer-meta md-typeset">
@@ -853,10 +966,10 @@
     
       
       
-      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["content.code.copy", "content.tabs.link", "content.action.edit", "navigation.expand", "navigation.footer", "navigation.sections"], "search": "../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+      <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": ["content.code.copy", "content.tabs.link", "content.action.edit", "navigation.expand", "navigation.footer", "navigation.sections"], "search": "../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
     
     
-      <script src="../../assets/javascripts/bundle.79ae519e.min.js"></script>
+      <script src="../assets/javascripts/bundle.79ae519e.min.js"></script>
       
     
   </body>
