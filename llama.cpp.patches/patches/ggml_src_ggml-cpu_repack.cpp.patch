@@ -1,7 +1,7 @@
 diff --git a/ggml/src/ggml-cpu/repack.cpp b/ggml/src/ggml-cpu/repack.cpp
 --- a/llama.cpp/ggml/src/ggml-cpu/repack.cpp
 +++ b/llama.cpp/ggml/src/ggml-cpu/repack.cpp
-@@ -3521,14 +3521,14 @@ static const ggml::cpu::tensor_traits * ggml_repack_get_optimal_repack_type(cons
+@@ -4723,14 +4723,14 @@ static const ggml::cpu::tensor_traits * ggml_repack_get_optimal_repack_type(cons
      return nullptr;
  }
  
@@ -18,7 +18,7 @@ diff --git a/ggml/src/ggml-cpu/repack.cpp b/ggml/src/ggml-cpu/repack.cpp
                                                         const void * data, size_t offset, size_t size) {
      GGML_ASSERT(offset == 0);
      GGML_ASSERT(size == ggml_nbytes(tensor));
-@@ -3540,13 +3540,13 @@ static void ggml_backend_cpu_repack_buffer_set_tensor(ggml_backend_buffer_t buff
+@@ -4742,13 +4742,13 @@ static void ggml_backend_cpu_repack_buffer_set_tensor(ggml_backend_buffer_t buff
      GGML_UNUSED(buffer);
  }
  
@@ -34,7 +34,7 @@ diff --git a/ggml/src/ggml-cpu/repack.cpp b/ggml/src/ggml-cpu/repack.cpp
      ggml_backend_buffer_t buffer = ggml_backend_buft_alloc_buffer(ggml_backend_cpu_buffer_type(), size);
  
      if (buffer == nullptr) {
-@@ -3561,7 +3561,7 @@ static ggml_backend_buffer_t ggml_backend_cpu_repack_buffer_type_alloc_buffer(gg
+@@ -4763,7 +4763,7 @@ static ggml_backend_buffer_t ggml_backend_cpu_repack_buffer_type_alloc_buffer(gg
      return buffer;
  }
  

@@ -1,7 +1,7 @@
 diff --git a/vendor/cpp-httplib/httplib.cpp b/vendor/cpp-httplib/httplib.cpp
 --- a/llama.cpp/vendor/cpp-httplib/httplib.cpp
 +++ b/llama.cpp/vendor/cpp-httplib/httplib.cpp
-@@ -6043,7 +6043,13 @@ void ThreadPool::worker(bool is_dynamic) {
+@@ -6231,7 +6231,13 @@ void ThreadPool::worker(bool is_dynamic) {
            break;
          }
        } else {

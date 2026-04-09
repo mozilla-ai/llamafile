@@ -1,7 +1,7 @@
 diff --git a/src/llama-mmap.h b/src/llama-mmap.h
 --- a/llama.cpp/src/llama-mmap.h
 +++ b/llama.cpp/src/llama-mmap.h
-@@ -34,6 +34,11 @@ struct llama_file {
+@@ -35,6 +35,11 @@ struct llama_file {
  
      size_t read_alignment() const;
      bool has_direct_io() const;

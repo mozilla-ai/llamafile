@@ -122,18 +122,22 @@ diff --git a/ggml/src/gguf.cpp b/ggml/src/gguf.cpp
      if (is_array) {
          std::vector<T> value;
          try {
-@@ -394,8 +487,8 @@ bool gguf_read_emplace_helper(const struct gguf_reader & gr, std::vector<struct
+@@ -394,12 +487,8 @@ bool gguf_read_emplace_helper(const struct gguf_reader & gr, std::vector<struct
      return true;
  }
  
--struct gguf_context * gguf_init_from_file_impl(FILE * file, struct gguf_init_params params) {
+-struct gguf_context * gguf_init_from_file_ptr(FILE * file, struct gguf_init_params params) {
+-    if (!file) {
+-        return nullptr;
+-    }
+-
 -    const struct gguf_reader gr(file);
 +template<typename Reader>
 +struct gguf_context * gguf_init_from_reader_impl(const Reader & gr, struct gguf_init_params params) {
      struct gguf_context * ctx = new gguf_context;
  
      bool ok = true;
-@@ -696,14 +789,14 @@ struct gguf_context * gguf_init_from_file_impl(FILE * file, struct gguf_init_par
+@@ -700,14 +789,14 @@ struct gguf_context * gguf_init_from_file_ptr(FILE * file, struct gguf_init_para
      GGML_ASSERT(int64_t(ctx->info.size()) == n_tensors);
  
      // we require the data section to be aligned, so take into account any padding
@@ -150,12 +154,15 @@ diff --git a/ggml/src/gguf.cpp b/ggml/src/gguf.cpp
  
      // compute the total size of the data section, taking into account the alignment
      {
-@@ -840,7 +933,27 @@ struct gguf_context * gguf_init_from_file_impl(FILE * file, struct gguf_init_par
+@@ -844,7 +933,30 @@ struct gguf_context * gguf_init_from_file_ptr(FILE * file, struct gguf_init_para
      return ctx;
  }
  
 +// Wrapper for FILE*-based reading
-+struct gguf_context * gguf_init_from_file_impl(FILE * file, struct gguf_init_params params) {
++struct gguf_context * gguf_init_from_file_ptr(FILE * file, struct gguf_init_params params) {
++    if (!file) {
++        return nullptr;
++    }
 +    const struct gguf_reader gr(file);
 +    return gguf_init_from_reader_impl(gr, params);
 +}
@@ -178,8 +185,8 @@ diff --git a/ggml/src/gguf.cpp b/ggml/src/gguf.cpp
      FILE * file = ggml_fopen(fname, "rb");
  
      if (!file) {
-@@ -851,6 +964,7 @@ struct gguf_context * gguf_init_from_file(const char * fname, struct gguf_init_p
-     struct gguf_context * result = gguf_init_from_file_impl(file, params);
+@@ -855,6 +967,7 @@ struct gguf_context * gguf_init_from_file(const char * fname, struct gguf_init_p
+     struct gguf_context * result = gguf_init_from_file_ptr(file, params);
      fclose(file);
      return result;
 +#endif
