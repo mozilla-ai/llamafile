@@ -83,6 +83,7 @@ Cosmopolitan libc has specific behaviors with condition variables and signals th
 | Patch | Description |
 |-------|-------------|
 | `common_log.cpp.patch` | Adds `#include <csignal>`; blocks `SIGINT`/`SIGTERM` on logger thread via `pthread_sigmask` to prevent `EINTR` exceptions; replaces `cv.wait()` with `wait_for(30s)` loop to work around XNU futex timeout bug (~72 minute expiry) |
+| `tools_server_server-models.cpp.patch` | Adds `#include <csignal>`; blocks `SIGINT`/`SIGTERM` on stopping thread; replaces `cv.wait()` with `wait_for(30s)` loops in `unload_lru`, `stopping_thread`, and `wait_until_loading_finished` |
 | `tools_server_server-queue.cpp.patch` | Adds missing includes (`<cerrno>`, `<system_error>`, `<csignal>`); blocks `SIGINT`/`SIGTERM` on queue thread; replaces `wait()` with `wait_for()` loops in three locations (`wait_until_no_sleep`, main loop, `recv`) |
 | `vendor_cpp-httplib_httplib.cpp.patch` | Fixes httplib thread pool with `wait_for()` instead of `wait()` for XNU futex compatibility |
 

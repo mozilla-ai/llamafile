@@ -1,0 +1,74 @@
+diff --git a/tools/server/server-models.cpp b/tools/server/server-models.cpp
+--- a/llama.cpp/tools/server/server-models.cpp
++++ b/llama.cpp/tools/server/server-models.cpp
+@@ -27,6 +27,7 @@
+ #include <netinet/in.h>
+ #include <arpa/inet.h>
+ #include <unistd.h>
++#include <csignal>
+ extern char **environ;
+ #endif
+ 
+@@ -519,9 +520,12 @@ void server_models::unload_lru() {
+         // wait for unload to complete
+         {
+             std::unique_lock<std::mutex> lk(mutex);
+-            cv.wait(lk, [this, &lru_model_name]() {
+-                return mapping[lru_model_name].meta.status == SERVER_MODEL_STATUS_UNLOADED;
+-            });
++            // Use wait_for() instead of wait() to work around a Cosmopolitan libc
++            // bug where untimed futex waits on XNU (macOS) expire after ~72 minutes,
++            // causing condition_variable::wait() to throw ETIMEDOUT.
++            while (mapping[lru_model_name].meta.status != SERVER_MODEL_STATUS_UNLOADED) {
++                cv.wait_for(lk, std::chrono::seconds(30));
++            }
+         }
+     }
+ }
+@@ -623,6 +627,14 @@ void server_models::load(const std::string & name) {
+         });
+ 
+         std::thread stopping_thread([&]() {
++            // Block SIGINT/SIGTERM on this thread to prevent EINTR during
++            // condition_variable waits. Signals are handled by the main thread.
++            sigset_t block_mask;
++            sigemptyset(&block_mask);
++            sigaddset(&block_mask, SIGINT);
++            sigaddset(&block_mask, SIGTERM);
++            pthread_sigmask(SIG_BLOCK, &block_mask, nullptr);
++
+             // thread to monitor stopping signal OR child crash
+             auto is_stopping = [this, &name]() {
+                 return this->stopping_models.find(name) != this->stopping_models.end();
+@@ -632,7 +644,10 @@ void server_models::load(const std::string & name) {
+             };
+             {
+                 std::unique_lock<std::mutex> lk(this->mutex);
+-                this->cv_stop.wait(lk, should_wake);
++                // Use wait_for() instead of wait() to work around XNU futex timeout bug
++                while (!should_wake()) {
++                    this->cv_stop.wait_for(lk, std::chrono::seconds(30));
++                }
+             }
+             // child may have already exited (e.g. crashed) — skip shutdown sequence
+             if (!subprocess_alive(child_proc.get())) {
+@@ -753,13 +768,14 @@ void server_models::update_status(const std::string & name, server_model_status
+ 
+ void server_models::wait_until_loading_finished(const std::string & name) {
+     std::unique_lock<std::mutex> lk(mutex);
+-    cv.wait(lk, [this, &name]() {
++    // Use wait_for() instead of wait() to work around XNU futex timeout bug
++    while (true) {
+         auto it = mapping.find(name);
+-        if (it != mapping.end()) {
+-            return it->second.meta.status != SERVER_MODEL_STATUS_LOADING;
++        if (it != mapping.end() && it->second.meta.status != SERVER_MODEL_STATUS_LOADING) {
++            break;
+         }
+-        return false;
+-    });
++        cv.wait_for(lk, std::chrono::seconds(30));
++    }
+ }
+ 
+ bool server_models::ensure_model_ready(const std::string & name) {
