@@ -221,7 +221,7 @@ echo.
 :: ========================================================================
 echo Phase 4: Compiling shader C++ files...
 
-set "CXX_FLAGS=/c /nologo /EHsc /O2 /GR /MT /std:c++17"
+set "CXX_FLAGS=/c /nologo /EHsc /O2 /GR /MT /std:c++17 /Zc:preprocessor"
 set "CXX_FLAGS=%CXX_FLAGS% /I"%GGML_INC_DIR%" /I"%GGML_SRC_DIR%" /I"%BUILD_DIR%""
 set "CXX_FLAGS=%CXX_FLAGS% /DNDEBUG /DGGML_BUILD=1 /DGGML_SHARED=1 /DGGML_BACKEND_SHARED=1 /DGGML_BACKEND_BUILD=1 /DGGML_MULTIPLATFORM"
 
@@ -272,7 +272,7 @@ echo.
 :: ========================================================================
 echo Phase 6: Compiling core GGML sources...
 
-set "HOST_FLAGS=/nologo /EHsc /O2 /GR /MT /DNDEBUG"
+set "HOST_FLAGS=/nologo /EHsc /O2 /GR /MT /Zc:preprocessor /DNDEBUG"
 set "HOST_FLAGS=%HOST_FLAGS% /DGGML_BUILD=1 /DGGML_SHARED=1 /DGGML_BACKEND_SHARED=1 /DGGML_BACKEND_BUILD=1 /DGGML_MULTIPLATFORM"
 set "HOST_FLAGS=%HOST_FLAGS% /DGGML_VERSION=\"!GGML_VERSION!\" /DGGML_COMMIT=\"!GGML_COMMIT!\""
 set "HOST_FLAGS=%HOST_FLAGS% /I"%GGML_INC_DIR%" /I"%GGML_SRC_DIR%""
