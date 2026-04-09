@@ -1061,10 +1061,10 @@ class tinyBLAS_Q0_AVX2 {
 template <int CONFIG, typename TC>
 class tinyBLAS_Q0_g128_AVX2 {
     // Typedefs required by the INDEX macro
-    typedef block_q1_0_g128 TA;
+    typedef block_q1_0 TA;
     typedef block_q8_0 TB;
   public:
-    tinyBLAS_Q0_g128_AVX2(long k, const block_q1_0_g128 *A, long lda, const block_q8_0 *B, long ldb,
+    tinyBLAS_Q0_g128_AVX2(long k, const block_q1_0 *A, long lda, const block_q8_0 *B, long ldb,
                           TC *C, long ldc, int ith, int nth)
         : A(A), B(B), C(C), k(k), lda(lda), ldb(ldb), ldc(ldc), ith(ith), nth(nth) {
     }
@@ -1135,7 +1135,7 @@ class tinyBLAS_Q0_g128_AVX2 {
                 for (int j = 0; j < RN; ++j)
 #pragma GCC unroll 100
                     for (int i = 0; i < RM; ++i) {
-                        const block_q1_0_g128 *Abl = &INDEX(A, lda, ii + i, l)[0];
+                        const block_q1_0 *Abl = &INDEX(A, lda, ii + i, l)[0];
                         float scale_a = unhalf(Abl->d);
                         // Process 4 Q8_0 sub-blocks per g128 block
                         for (int sub = 0; sub < 4; ++sub) {
@@ -1161,7 +1161,7 @@ class tinyBLAS_Q0_g128_AVX2 {
     }
 
     // Extract 32 bits from sub-block `sub` (0-3) of a g128 block
-    inline __m256i load_sub(const block_q1_0_g128 *b, int sub) {
+    inline __m256i load_sub(const block_q1_0 *b, int sub) {
         const uint32_t bits = *(const uint32_t *)(b->qs + sub * 4);
         const __m128i bits128 = _mm_set1_epi32(bits);
         const __m256i bits256 = _mm256_broadcastsi128_si256(bits128);
@@ -1191,7 +1191,7 @@ class tinyBLAS_Q0_g128_AVX2 {
         return _mm256_cvtepi32_ps(res);
     }
 
-    const block_q1_0_g128 *const A;
+    const block_q1_0 *const A;
     const block_q8_0 *const B;
     TC *const C;
     const long k;
@@ -1208,10 +1208,10 @@ class tinyBLAS_Q0_g128_AVX2 {
 template <int CONFIG, typename TC>
 class tinyBLAS_Q0_g128_ARM {
     // Typedefs required by the INDEX macro
-    typedef block_q1_0_g128 TA;
+    typedef block_q1_0 TA;
     typedef block_q8_0 TB;
   public:
-    tinyBLAS_Q0_g128_ARM(long k, const block_q1_0_g128 *A, long lda, const block_q8_0 *B, long ldb,
+    tinyBLAS_Q0_g128_ARM(long k, const block_q1_0 *A, long lda, const block_q8_0 *B, long ldb,
                          TC *C, long ldc, int ith, int nth)
         : A(A), B(B), C(C), k(k), lda(lda), ldb(ldb), ldc(ldc), ith(ith), nth(nth) {
     }
@@ -1273,7 +1273,7 @@ class tinyBLAS_Q0_g128_ARM {
                 for (int j = 0; j < RN; ++j)
 #pragma GCC unroll 100
                     for (int i = 0; i < RM; ++i) {
-                        const block_q1_0_g128 *Abl = &INDEX(A, lda, ii + i, l)[0];
+                        const block_q1_0 *Abl = &INDEX(A, lda, ii + i, l)[0];
                         float scale_a = unhalf(Abl->d);
                         for (int sub = 0; sub < 4; ++sub) {
                             const block_q8_0 *Bbl = &INDEX(B, ldb, jj + j, 4*l + sub)[0];
@@ -1301,7 +1301,7 @@ class tinyBLAS_Q0_g128_ARM {
     }
 
     // Extract 16 bits (2 bytes) from sub-block, expand to 16 signed int8
-    inline int8x16_t load_sub_lo(const block_q1_0_g128 *b, int sub) {
+    inline int8x16_t load_sub_lo(const block_q1_0 *b, int sub) {
         const uint8_t *qs = b->qs + sub * 4;
         const uint8x8_t b0 = vdup_n_u8(qs[0]);
         const uint8x8_t b1 = vdup_n_u8(qs[1]);
@@ -1312,7 +1312,7 @@ class tinyBLAS_Q0_g128_ARM {
         return vsubq_s8(vandq_s8(mask, vdupq_n_s8(2)), vdupq_n_s8(1));
     }
 
-    inline int8x16_t load_sub_hi(const block_q1_0_g128 *b, int sub) {
+    inline int8x16_t load_sub_hi(const block_q1_0 *b, int sub) {
         const uint8_t *qs = b->qs + sub * 4 + 2;
         const uint8x8_t b0 = vdup_n_u8(qs[0]);
         const uint8x8_t b1 = vdup_n_u8(qs[1]);
@@ -1323,7 +1323,7 @@ class tinyBLAS_Q0_g128_ARM {
         return vsubq_s8(vandq_s8(mask, vdupq_n_s8(2)), vdupq_n_s8(1));
     }
 
-    const block_q1_0_g128 *const A;
+    const block_q1_0 *const A;
     const block_q8_0 *const B;
     TC *const C;
     const long k;
