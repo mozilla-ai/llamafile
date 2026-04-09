@@ -86,7 +86,7 @@ static cli_chat_template_result cli_apply_chat_template_full(llama_model *model,
 
         // Initialize parser params from chat_params
         result.parser_params.format = chat_params.format;
-        result.parser_params.thinking_forced_open = chat_params.thinking_forced_open;
+        result.parser_params.generation_prompt = chat_params.generation_prompt;
         if (!chat_params.parser.empty()) {
             result.parser_params.parser.load(chat_params.parser);
         }

@@ -224,7 +224,8 @@ LLAMAFILE_SERVER_SUPPORT_OBJS := \
 	o/$(MODE)/llama.cpp/tools/server/server-http.cpp.o \
 	o/$(MODE)/llama.cpp/tools/server/server-models.cpp.o \
 	o/$(MODE)/llama.cpp/tools/server/server-queue.cpp.o \
-	o/$(MODE)/llama.cpp/tools/server/server-task.cpp.o
+	o/$(MODE)/llama.cpp/tools/server/server-task.cpp.o \
+	o/$(MODE)/llama.cpp/tools/server/server-tools.cpp.o
 
 # Metal source files to embed in the executable (for runtime compilation on macOS)
 # These are extracted at runtime and compiled into ggml-metal.dylib

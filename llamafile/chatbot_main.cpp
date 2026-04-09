@@ -263,7 +263,7 @@ int main(int argc, char **argv) {
             try {
                 auto chat_params = common_chat_templates_apply(g_chat_templates.get(), inputs);
                 g_chat_syntax.format = chat_params.format;
-                g_chat_syntax.thinking_forced_open = chat_params.thinking_forced_open;
+                g_chat_syntax.generation_prompt = chat_params.generation_prompt;
 
                 // Load the PEG parser if one was provided
                 if (!chat_params.parser.empty()) {
