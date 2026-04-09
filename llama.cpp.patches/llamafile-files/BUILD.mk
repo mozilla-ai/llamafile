@@ -325,7 +325,9 @@ o/$(MODE)/llama.cpp/tools/server/%.hpp: llama.cpp/tools/server/public/%
 	@echo 'unsigned int $(VARNAME)_len = sizeof($(VARNAME));' >> $@
 
 SERVER_ASSETS := \
-	o/$(MODE)/llama.cpp/tools/server/index.html.gz.hpp \
+	o/$(MODE)/llama.cpp/tools/server/index.html.hpp \
+	o/$(MODE)/llama.cpp/tools/server/bundle.js.hpp \
+	o/$(MODE)/llama.cpp/tools/server/bundle.css.hpp \
 	o/$(MODE)/llama.cpp/tools/server/loading.html.hpp
 
 # ==============================================================================
@@ -383,8 +385,9 @@ $(TOOL_PERPLEXITY_OBJS) $(TOOL_BENCH_OBJS) $(TOOL_SERVER_OBJS) $(MTMD_OBJS): \
 		-iquote o/$(MODE)/llama.cpp/tools/server \
 		-isystem llama.cpp/vendor
 
-# Server needs llamafile headers for Metal support
+# Server needs llamafile headers for Metal support and web UI
 $(TOOL_SERVER_OBJS): private CPPFLAGS += -iquote llamafile
+$(TOOL_SERVER_OBJS): private CCFLAGS += -DLLAMA_BUILD_WEBUI
 
 # Version definitions
 $(GGML_OBJS): private CCFLAGS += \

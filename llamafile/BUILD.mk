@@ -286,7 +286,7 @@ LLAMAFILE_SERVER_INCS := \
 # Compile server.cpp
 o/$(MODE)/llamafile/server.cpp.o: llama.cpp/tools/server/server.cpp $(SERVER_ASSETS)
 	@mkdir -p $(@D)
-	$(CXX) $(CXXFLAGS) $(LLAMAFILE_CPPFLAGS) $(LLAMAFILE_SERVER_INCS) -c -o $@ $<
+	$(CXX) $(CXXFLAGS) $(LLAMAFILE_CPPFLAGS) $(LLAMAFILE_SERVER_INCS) -DLLAMA_BUILD_WEBUI -c -o $@ $<
 
 # ==============================================================================
 # Main executable
