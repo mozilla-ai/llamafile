@@ -115,6 +115,7 @@ class LlamafileRunner:
         executable: str,
         model: str | None = None,
         gpu: str | None = None,
+        default_thinking: bool = False,
     ):
         """Initialize the runner.
 
@@ -122,15 +123,24 @@ class LlamafileRunner:
             executable: Path to llamafile binary or pre-built .llamafile
             model: Path to model file (None for pre-built llamafiles)
             gpu: GPU mode - "auto", "apple", "amd", "nvidia", or None for CPU
+            default_thinking: Default thinking mode when callers don't specify
+                              one. Set to True for tests that exercise thinking
+                              behavior; False otherwise so small reasoning
+                              models don't derail unrelated assertions.
         """
         self.executable = os.path.abspath(executable)
         self.model = os.path.abspath(model) if model else None
         self.gpu = gpu
+        self.default_thinking = default_thinking
 
         if not os.path.exists(self.executable):
             raise FileNotFoundError(f"Executable not found: {executable}")
         if self.model and not os.path.exists(self.model):
             raise FileNotFoundError(f"Model not found: {model}")
+
+    def _resolve_thinking(self, thinking: bool | None) -> bool:
+        """Resolve the thinking flag, falling back to the runner default."""
+        return self.default_thinking if thinking is None else thinking
 
     def _base_args(self) -> list[str]:
         """Build base command arguments.
@@ -151,7 +161,7 @@ class LlamafileRunner:
     def run_cli(
         self,
         prompt: str,
-        nothink: bool = False,
+        thinking: bool | None = None,
         extra_args: list[str] | None = None,
         timeout: float = TIMEOUT_CLI,
         log_file: str | None = None,
@@ -160,7 +170,9 @@ class LlamafileRunner:
 
         Args:
             prompt: The prompt to send
-            nothink: If True, disable thinking output
+            thinking: Whether the model should produce a thinking block. If
+                      None, falls back to the runner's default_thinking.
+                      When False, adds --nothink (llamafile's CLI-mode flag).
             extra_args: Additional command-line arguments
             timeout: Timeout in seconds
             log_file: If provided, adds --log-file flag and stores log content
@@ -173,7 +185,7 @@ class LlamafileRunner:
         args = self._base_args()
         args.extend(["--cli", "-p", prompt])
 
-        if nothink:
+        if not self._resolve_thinking(thinking):
             args.append("--nothink")
 
         if log_file:
@@ -208,6 +220,7 @@ class LlamafileRunner:
     def run_tui(
         self,
         input_file: str,
+        thinking: bool | None = None,
         extra_args: list[str] | None = None,
         timeout: float = TIMEOUT_TUI,
         log_file: str | None = None,
@@ -216,6 +229,9 @@ class LlamafileRunner:
 
         Args:
             input_file: Path to file containing input to pipe to stdin
+            thinking: Whether the model should produce a thinking block. If
+                      None, falls back to the runner's default_thinking.
+                      When False, adds --reasoning off.
             extra_args: Additional command-line arguments
             timeout: Timeout in seconds
             log_file: If provided, adds --log-file flag and stores log content
@@ -227,6 +243,9 @@ class LlamafileRunner:
         """
         args = self._base_args()
         args.append("--chat")
+
+        if not self._resolve_thinking(thinking):
+            args.extend(["--reasoning", "off"])
 
         if log_file:
             args.extend(["--log-file", log_file])
@@ -265,6 +284,7 @@ class LlamafileRunner:
     def start_server(
         self,
         port: int = 8080,
+        thinking: bool | None = None,
         extra_args: list[str] | None = None,
         log_file: str | None = None,
     ) -> subprocess.Popen:
@@ -272,6 +292,9 @@ class LlamafileRunner:
 
         Args:
             port: Port to listen on
+            thinking: Whether the model should produce a thinking block. If
+                      None, falls back to the runner's default_thinking.
+                      When False, adds --reasoning off.
             extra_args: Additional command-line arguments
             log_file: If provided, adds --log-file flag. Caller should read
                       the file after terminating the process.
@@ -281,6 +304,9 @@ class LlamafileRunner:
         """
         args = self._base_args()
         args.extend(["--server", "--port", str(port)])
+
+        if not self._resolve_thinking(thinking):
+            args.extend(["--reasoning", "off"])
 
         if log_file:
             args.extend(["--log-file", log_file])
@@ -299,6 +325,7 @@ class LlamafileRunner:
     def start_combined(
         self,
         port: int = 8080,
+        thinking: bool | None = None,
         extra_args: list[str] | None = None,
         log_file: str | None = None,
     ) -> subprocess.Popen:
@@ -306,6 +333,9 @@ class LlamafileRunner:
 
         Args:
             port: Port for the server component
+            thinking: Whether the model should produce a thinking block. If
+                      None, falls back to the runner's default_thinking.
+                      When False, adds --reasoning off.
             extra_args: Additional command-line arguments
             log_file: If provided, adds --log-file flag. Caller should read
                       the file after terminating the process.
@@ -315,6 +345,9 @@ class LlamafileRunner:
         """
         args = self._base_args()
         args.extend(["--port", str(port)])
+
+        if not self._resolve_thinking(thinking):
+            args.extend(["--reasoning", "off"])
 
         if log_file:
             args.extend(["--log-file", log_file])
