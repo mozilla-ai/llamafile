@@ -39,32 +39,31 @@ class TestCLIThinking:
         """Test that the model has thinking enabled (otherwise --nothink tests make no sense)."""
         prompt = "What is 2+2? Think step by step then give the answer."
 
-        # With thinking
-        result_think = llamafile.run_cli(prompt, nothink=False, timeout=timeouts.cli)
+        # Thinking class is marked @pytest.mark.thinking, so default is on.
+        result_think = llamafile.run_cli(prompt, timeout=timeouts.cli)
 
         assert result_think.returncode == 0
-
-        # nothink output should not contain think tags
         assert "<think>" in result_think.stdout
 
     def test_nothink_removes_thinking(self, llamafile, timeouts):
         """Test that --nothink removes thinking content from output."""
         prompt = "What is 2+2? Think step by step then give the answer."
 
-        # Without thinking
-        result_nothink = llamafile.run_cli(prompt, nothink=True, timeout=timeouts.cli)
+        result_nothink = llamafile.run_cli(
+            prompt, thinking=False, timeout=timeouts.cli
+        )
 
         assert result_nothink.returncode == 0
-
-        # nothink output should not contain think tags
         assert "<think>" not in result_nothink.stdout
 
     def test_nothink_shorter_output(self, llamafile, timeouts):
         """Test that --nothink produces shorter output (no thinking tokens)."""
         prompt = "Explain briefly why the sky is blue."
 
-        result_think = llamafile.run_cli(prompt, nothink=False, timeout=timeouts.cli)
-        result_nothink = llamafile.run_cli(prompt, nothink=True, timeout=timeouts.cli)
+        result_think = llamafile.run_cli(prompt, thinking=True, timeout=timeouts.cli)
+        result_nothink = llamafile.run_cli(
+            prompt, thinking=False, timeout=timeouts.cli
+        )
 
         # nothink should generally be shorter (no thinking block)
         # This may not always hold for very short responses

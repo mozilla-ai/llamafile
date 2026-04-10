@@ -220,6 +220,27 @@ bool llamafile_sgemm_impl(long m, long n, long k, const void *A, long lda, const
 #endif
     }
 
+    case GGML_TYPE_Q1_0: {
+        // Upstream Q1_0 uses 128-element blocks (QK1_0=128)
+        if (Btype == GGML_TYPE_F32)
+            return WANT_QUANTIZATION;
+        if (Btype != GGML_TYPE_Q8_0)
+            return NOT_SUPPORTED;
+#if defined(__AVX2__) || defined(__AVX512F__)
+        tinyBLAS_Q0_g128_AVX2<0, TC> tb{
+            k, (const block_q1_0 *)A, lda, (const block_q8_0 *)B, ldb, C, ldc, ith, nth};
+        tb.matmul(m, n);
+        return true;
+#elif defined(__ARM_FEATURE_DOTPROD)
+        tinyBLAS_Q0_g128_ARM<0, TC> tb{
+            k, (const block_q1_0 *)A, lda, (const block_q8_0 *)B, ldb, C, ldc, ith, nth};
+        tb.matmul(m, n);
+        return true;
+#else
+        return NOT_SUPPORTED;
+#endif
+    }
+
     default:
         return NOT_SUPPORTED;
     }

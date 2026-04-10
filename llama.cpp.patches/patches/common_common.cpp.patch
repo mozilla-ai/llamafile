@@ -1,7 +1,7 @@
 diff --git a/common/common.cpp b/common/common.cpp
 --- a/llama.cpp/common/common.cpp
 +++ b/llama.cpp/common/common.cpp
-@@ -874,6 +874,16 @@ std::string fs_get_cache_directory() {
+@@ -970,6 +970,16 @@ std::string fs_get_cache_directory() {
          cache_directory = std::getenv("HOME") + std::string("/Library/Caches/");
  #elif defined(_WIN32)
          cache_directory = std::getenv("LOCALAPPDATA");
@@ -18,7 +18,7 @@ diff --git a/common/common.cpp b/common/common.cpp
  #elif defined(__EMSCRIPTEN__)
          GGML_ABORT("not implemented on this platform");
  #else
-@@ -1050,10 +1060,31 @@ common_init_result::common_init_result(common_params & params) :
+@@ -1146,10 +1156,31 @@ common_init_result::common_init_result(common_params & params) :
  
      if (params.fit_params) {
          LOG_INF("%s: fitting params to device memory, for bugs during this step try to reproduce them with -fit off, or provide --verbose logs if the bug only occurs with -fit on\n", __func__);

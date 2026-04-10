@@ -249,12 +249,14 @@ int main(int argc, char **argv) {
             // Check if the template supports enable_thinking (like llama.cpp server does).
             // This is needed for models like Qwen3.5 that check enable_thinking in their
             // template - without this, the template outputs a closed thinking block.
+            // Honor --reasoning on/off/auto (g_params->enable_reasoning: -1 auto, 0 off, 1 on).
             bool supports_thinking = common_chat_templates_support_enable_thinking(g_chat_templates.get());
+            bool enable_thinking = supports_thinking && (g_params->enable_reasoning != 0);
 
             common_chat_templates_inputs inputs;
             inputs.messages = {dummy_msg};
             inputs.use_jinja = true;
-            inputs.enable_thinking = supports_thinking;
+            inputs.enable_thinking = enable_thinking;
             // CRITICAL: Set reasoning_format BEFORE applying templates. The PEG parser
             // is built during common_chat_templates_apply() and checks this value to
             // decide whether to include reasoning extraction in the grammar.
@@ -263,7 +265,7 @@ int main(int argc, char **argv) {
             try {
                 auto chat_params = common_chat_templates_apply(g_chat_templates.get(), inputs);
                 g_chat_syntax.format = chat_params.format;
-                g_chat_syntax.thinking_forced_open = chat_params.thinking_forced_open;
+                g_chat_syntax.generation_prompt = chat_params.generation_prompt;
 
                 // Load the PEG parser if one was provided
                 if (!chat_params.parser.empty()) {

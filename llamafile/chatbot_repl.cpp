@@ -72,15 +72,17 @@ std::string apply_chat_template_with_thinking(
     if (!g_chat_templates)
         return "";
 
-    // Check if template supports thinking mode
+    // Check if template supports thinking mode, and honor --reasoning on/off/auto
+    // (g_params->enable_reasoning: -1 auto, 0 disable, 1 enable)
     bool supports_thinking = common_chat_templates_support_enable_thinking(g_chat_templates.get());
+    bool enable_thinking = supports_thinking && (g_params->enable_reasoning != 0);
 
     common_chat_templates_inputs inputs;
     inputs.messages = past_msgs;
     inputs.messages.push_back(new_msg);
     inputs.use_jinja = true;
     inputs.add_generation_prompt = add_generation_prompt;
-    inputs.enable_thinking = supports_thinking;
+    inputs.enable_thinking = enable_thinking;
     inputs.reasoning_format = COMMON_REASONING_FORMAT_DEEPSEEK;
 
     auto chat_params = common_chat_templates_apply(g_chat_templates.get(), inputs);

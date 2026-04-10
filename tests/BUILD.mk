@@ -31,7 +31,13 @@ EXTRACT_DATA_URIS_TEST_DEPS := \
 	o/$(MODE)/llamafile/string.o \
 	o/$(MODE)/llamafile/xterm.o \
 	o/$(MODE)/third_party/stb/stb.a \
-	o/$(MODE)/llama.cpp/common/build-info.cpp.o
+	o/$(MODE)/llama.cpp/common/build-info.cpp.o \
+	o/$(MODE)/llama.cpp/common/jinja/caps.cpp.o \
+	o/$(MODE)/llama.cpp/common/jinja/lexer.cpp.o \
+	o/$(MODE)/llama.cpp/common/jinja/parser.cpp.o \
+	o/$(MODE)/llama.cpp/common/jinja/runtime.cpp.o \
+	o/$(MODE)/llama.cpp/common/jinja/string.cpp.o \
+	o/$(MODE)/llama.cpp/common/jinja/value.cpp.o
 
 o/$(MODE)/tests/extract_data_uris_test.o: tests/extract_data_uris_test.cpp
 	@mkdir -p $(@D)

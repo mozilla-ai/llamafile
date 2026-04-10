@@ -127,13 +127,21 @@ def timeouts(timeout_multiplier) -> Timeouts:
     return Timeouts(timeout_multiplier)
 
 
-@pytest.fixture(scope="session")
-def llamafile(executable, model, gpu_mode) -> LlamafileRunner:
-    """Create a LlamafileRunner instance for tests."""
+@pytest.fixture
+def llamafile(request, executable, model, gpu_mode) -> LlamafileRunner:
+    """Create a LlamafileRunner instance for tests.
+
+    Thinking is disabled by default so that small reasoning models don't
+    derail basic assertions. Tests marked ``@pytest.mark.thinking`` get a
+    runner with thinking enabled by default, so thinking-specific tests
+    don't need to opt in on every call.
+    """
+    default_thinking = request.node.get_closest_marker("thinking") is not None
     return LlamafileRunner(
         executable=executable,
         model=model,
         gpu=gpu_mode,
+        default_thinking=default_thinking,
     )
 
 

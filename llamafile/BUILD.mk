@@ -224,7 +224,8 @@ LLAMAFILE_SERVER_SUPPORT_OBJS := \
 	o/$(MODE)/llama.cpp/tools/server/server-http.cpp.o \
 	o/$(MODE)/llama.cpp/tools/server/server-models.cpp.o \
 	o/$(MODE)/llama.cpp/tools/server/server-queue.cpp.o \
-	o/$(MODE)/llama.cpp/tools/server/server-task.cpp.o
+	o/$(MODE)/llama.cpp/tools/server/server-task.cpp.o \
+	o/$(MODE)/llama.cpp/tools/server/server-tools.cpp.o
 
 # Metal source files to embed in the executable (for runtime compilation on macOS)
 # These are extracted at runtime and compiled into ggml-metal.dylib
@@ -285,7 +286,7 @@ LLAMAFILE_SERVER_INCS := \
 # Compile server.cpp
 o/$(MODE)/llamafile/server.cpp.o: llama.cpp/tools/server/server.cpp $(SERVER_ASSETS)
 	@mkdir -p $(@D)
-	$(CXX) $(CXXFLAGS) $(LLAMAFILE_CPPFLAGS) $(LLAMAFILE_SERVER_INCS) -c -o $@ $<
+	$(CXX) $(CXXFLAGS) $(LLAMAFILE_CPPFLAGS) $(LLAMAFILE_SERVER_INCS) -DLLAMA_BUILD_WEBUI -c -o $@ $<
 
 # ==============================================================================
 # Main executable

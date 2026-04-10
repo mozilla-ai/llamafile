@@ -88,6 +88,7 @@ LLAMA_SRCS_CPP := \
 	llama.cpp/src/models/gemma2-iswa.cpp \
 	llama.cpp/src/models/gemma3.cpp \
 	llama.cpp/src/models/gemma3n-iswa.cpp \
+	llama.cpp/src/models/gemma4-iswa.cpp \
 	llama.cpp/src/models/glm4-moe.cpp \
 	llama.cpp/src/models/glm4.cpp \
 	llama.cpp/src/models/gpt2.cpp \
@@ -198,14 +199,16 @@ LLAMA_OBJS := $(LLAMA_SRCS_CPP:%.cpp=o/$(MODE)/%.cpp.o)
 
 COMMON_SRCS_CPP := \
 	llama.cpp/common/arg.cpp \
-	llama.cpp/common/chat-parser-xml-toolcall.cpp \
-	llama.cpp/common/chat-parser.cpp \
+	llama.cpp/common/chat-auto-parser-generator.cpp \
+	llama.cpp/common/chat-auto-parser-helpers.cpp \
+	llama.cpp/common/chat-diff-analyzer.cpp \
 	llama.cpp/common/chat-peg-parser.cpp \
 	llama.cpp/common/chat.cpp \
 	llama.cpp/common/common.cpp \
 	llama.cpp/common/console.cpp \
 	llama.cpp/common/debug.cpp \
 	llama.cpp/common/download.cpp \
+	llama.cpp/common/hf-cache.cpp \
 	llama.cpp/common/jinja/caps.cpp \
 	llama.cpp/common/jinja/lexer.cpp \
 	llama.cpp/common/jinja/parser.cpp \
@@ -222,6 +225,7 @@ COMMON_SRCS_CPP := \
 	llama.cpp/common/ngram-mod.cpp \
 	llama.cpp/common/peg-parser.cpp \
 	llama.cpp/common/preset.cpp \
+	llama.cpp/common/reasoning-budget.cpp \
 	llama.cpp/common/regex-partial.cpp \
 	llama.cpp/common/sampling.cpp \
 	llama.cpp/common/speculative.cpp \
@@ -273,9 +277,13 @@ MTMD_SRCS_CPP := \
 	llama.cpp/tools/mtmd/mtmd.cpp \
 	llama.cpp/tools/mtmd/mtmd-helper.cpp \
 	llama.cpp/tools/mtmd/mtmd-audio.cpp \
+	llama.cpp/tools/mtmd/mtmd-image.cpp \
 	llama.cpp/tools/mtmd/models/cogvlm.cpp \
+	llama.cpp/tools/mtmd/models/deepseekocr.cpp \
 	llama.cpp/tools/mtmd/models/conformer.cpp \
+	llama.cpp/tools/mtmd/models/gemma4v.cpp \
 	llama.cpp/tools/mtmd/models/glm4v.cpp \
+	llama.cpp/tools/mtmd/models/hunyuanocr.cpp \
 	llama.cpp/tools/mtmd/models/internvl.cpp \
 	llama.cpp/tools/mtmd/models/kimik25.cpp \
 	llama.cpp/tools/mtmd/models/kimivl.cpp \
@@ -289,6 +297,7 @@ MTMD_SRCS_CPP := \
 	llama.cpp/tools/mtmd/models/qwen2vl.cpp \
 	llama.cpp/tools/mtmd/models/qwen3vl.cpp \
 	llama.cpp/tools/mtmd/models/siglip.cpp \
+	llama.cpp/tools/mtmd/models/step3vl.cpp \
 	llama.cpp/tools/mtmd/models/whisper-enc.cpp \
 	llama.cpp/tools/mtmd/models/youtuvl.cpp
 
@@ -316,7 +325,9 @@ o/$(MODE)/llama.cpp/tools/server/%.hpp: llama.cpp/tools/server/public/%
 	@echo 'unsigned int $(VARNAME)_len = sizeof($(VARNAME));' >> $@
 
 SERVER_ASSETS := \
-	o/$(MODE)/llama.cpp/tools/server/index.html.gz.hpp \
+	o/$(MODE)/llama.cpp/tools/server/index.html.hpp \
+	o/$(MODE)/llama.cpp/tools/server/bundle.js.hpp \
+	o/$(MODE)/llama.cpp/tools/server/bundle.css.hpp \
 	o/$(MODE)/llama.cpp/tools/server/loading.html.hpp
 
 # ==============================================================================
@@ -336,7 +347,8 @@ TOOL_SERVER_SRCS := \
 	llama.cpp/tools/server/server-http.cpp \
 	llama.cpp/tools/server/server-models.cpp \
 	llama.cpp/tools/server/server-queue.cpp \
-	llama.cpp/tools/server/server-task.cpp
+	llama.cpp/tools/server/server-task.cpp \
+	llama.cpp/tools/server/server-tools.cpp
 
 # Tool object files
 TOOL_QUANTIZE_OBJS := $(TOOL_QUANTIZE_SRCS:%.cpp=o/$(MODE)/%.cpp.o)
@@ -373,8 +385,9 @@ $(TOOL_PERPLEXITY_OBJS) $(TOOL_BENCH_OBJS) $(TOOL_SERVER_OBJS) $(MTMD_OBJS): \
 		-iquote o/$(MODE)/llama.cpp/tools/server \
 		-isystem llama.cpp/vendor
 
-# Server needs llamafile headers for Metal support
+# Server needs llamafile headers for Metal support and web UI
 $(TOOL_SERVER_OBJS): private CPPFLAGS += -iquote llamafile
+$(TOOL_SERVER_OBJS): private CCFLAGS += -DLLAMA_BUILD_WEBUI
 
 # Version definitions
 $(GGML_OBJS): private CCFLAGS += \

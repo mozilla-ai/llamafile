@@ -769,6 +769,33 @@ class tinyBLAS_Q0_ARM {
         return vsubq_s8(vreinterpretq_s8_u8(vshrq_n_u8(vld1q_u8(b->qs), 4)), vdupq_n_s8(0x8));
     }
 
+    // Q1_0: expand 2 bytes (16 bits) to 16 signed int8 values (+1/-1)
+    inline int8x16_t load_lo(const block_q1_0 *b) {
+        // Bits 0-15 (bytes 0-1): each bit → +1 or -1
+        const uint8x8_t byte0 = vdup_n_u8(b->qs[0]);
+        const uint8x8_t byte1 = vdup_n_u8(b->qs[1]);
+        const uint8x8_t bitmask = vcreate_u8(0x8040201008040201ULL);
+        // Test each bit, result: 0xFF or 0x00
+        const uint8x8_t t0 = vtst_u8(byte0, bitmask);
+        const uint8x8_t t1 = vtst_u8(byte1, bitmask);
+        // Combine to 16 elements and convert 0xFF→+1, 0x00→-1
+        const int8x16_t mask = vreinterpretq_s8_u8(vcombine_u8(t0, t1));
+        const int8x16_t ones = vdupq_n_s8(1);
+        return vsubq_s8(vandq_s8(mask, vdupq_n_s8(2)), ones);  // (mask & 2) - 1
+    }
+
+    inline int8x16_t load_hi(const block_q1_0 *b) {
+        // Bits 16-31 (bytes 2-3): each bit → +1 or -1
+        const uint8x8_t byte2 = vdup_n_u8(b->qs[2]);
+        const uint8x8_t byte3 = vdup_n_u8(b->qs[3]);
+        const uint8x8_t bitmask = vcreate_u8(0x8040201008040201ULL);
+        const uint8x8_t t0 = vtst_u8(byte2, bitmask);
+        const uint8x8_t t1 = vtst_u8(byte3, bitmask);
+        const int8x16_t mask = vreinterpretq_s8_u8(vcombine_u8(t0, t1));
+        const int8x16_t ones = vdupq_n_s8(1);
+        return vsubq_s8(vandq_s8(mask, vdupq_n_s8(2)), ones);
+    }
+
     const TA *const A;
     const TB *const B;
     TC *const C;
@@ -987,6 +1014,29 @@ class tinyBLAS_Q0_AVX2 {
                                _mm256_set1_epi8(8));
     }
 
+    inline __m256i load(const block_q1_0 *b) {
+        // Expand 4 bytes (32 bits) to 32 signed int8 values: bit=1 → +1, bit=0 → -1
+        const uint32_t bits = *(const uint32_t *)b->qs;
+        const __m128i bits128 = _mm_set1_epi32(bits);
+        const __m256i bits256 = _mm256_broadcastsi128_si256(bits128);
+        const __m256i shuf = _mm256_set_epi8(
+            3,3,3,3,3,3,3,3, 2,2,2,2,2,2,2,2,
+            1,1,1,1,1,1,1,1, 0,0,0,0,0,0,0,0);
+        const __m256i shuffled = _mm256_shuffle_epi8(bits256, shuf);
+        const __m256i bitmask = _mm256_set_epi8(
+            (char)0x80,0x40,0x20,0x10,0x08,0x04,0x02,0x01,
+            (char)0x80,0x40,0x20,0x10,0x08,0x04,0x02,0x01,
+            (char)0x80,0x40,0x20,0x10,0x08,0x04,0x02,0x01,
+            (char)0x80,0x40,0x20,0x10,0x08,0x04,0x02,0x01);
+        const __m256i test = _mm256_cmpeq_epi8(
+            _mm256_and_si256(shuffled, bitmask), bitmask);
+        // test: 0xFF where bit=1, 0x00 where bit=0
+        // Convert: 0xFF → +1, 0x00 → -1
+        const __m256i ones = _mm256_set1_epi8(1);
+        const __m256i bit_val = _mm256_and_si256(test, ones);  // 1 or 0
+        return _mm256_sub_epi8(_mm256_add_epi8(bit_val, bit_val), ones);  // 2*v - 1 → +1 or -1
+    }
+
     inline __m256 updot(__m256i u, __m256i s) {
         __m256i res;
 #if defined(__AVXVNNI__) || (defined(__AVX512VNNI__) && defined(__AVX512VL__))
@@ -1007,6 +1057,282 @@ class tinyBLAS_Q0_AVX2 {
     const int ith;
     const int nth;
 };
+// Q1_0_g128: 128-element blocks with 4:1 ratio to Q8_0 blocks
+template <int CONFIG, typename TC>
+class tinyBLAS_Q0_g128_AVX2 {
+    // Typedefs required by the INDEX macro
+    typedef block_q1_0 TA;
+    typedef block_q8_0 TB;
+  public:
+    tinyBLAS_Q0_g128_AVX2(long k, const block_q1_0 *A, long lda, const block_q8_0 *B, long ldb,
+                          TC *C, long ldc, int ith, int nth)
+        : A(A), B(B), C(C), k(k), lda(lda), ldb(ldb), ldc(ldc), ith(ith), nth(nth) {
+    }
+
+    void matmul(long m, long n) {
+        mnpack(0, m, 0, n);
+    }
+
+  private:
+    void mnpack(long m0, long m, long n0, long n) {
+        long mc, nc, mp, np;
+        switch ((MIN(m - m0, 3) << 4) | MIN(n - n0, 3)) {
+        case 0x33:
+            mc = 3;
+            nc = 3;
+            gemm<3, 3, true>(m0, m, n0, n);
+            break;
+        case 0x32:
+        case 0x23:
+        case 0x22:
+            mc = 2;
+            nc = 2;
+            gemm<2, 2, true>(m0, m, n0, n);
+            break;
+        case 0x31:
+        case 0x21:
+            mc = 2;
+            nc = 1;
+            gemm<2, 1, true>(m0, m, n0, n);
+            break;
+        case 0x13:
+        case 0x12:
+            mc = 1;
+            nc = 2;
+            gemm<1, 2, true>(m0, m, n0, n);
+            break;
+        case 0x11:
+            mc = 1;
+            nc = 1;
+            gemm<1, 1, true>(m0, m, n0, n);
+            break;
+        default:
+            return;
+        }
+        mp = m0 + (m - m0) / mc * mc;
+        np = n0 + (n - n0) / nc * nc;
+        mnpack(mp, m, n0, np);
+        mnpack(m0, m, np, n);
+    }
+
+    template <int RM, int RN, int PRECISE>
+    NOINLINE void gemm(long m0, long m, long n0, long n) {
+        long ytiles = RM > 1 ? (m - m0) / RM : 1;
+        long xtiles = RN > 1 ? (n - n0) / RN : 1;
+        long tiles = xtiles * ytiles;
+        long duty = (tiles + nth - 1) / nth;
+        long start = duty * ith;
+        long end = start + duty;
+        if (end > tiles)
+            end = tiles;
+        for (long job = start; job < end; ++job) {
+            long ii = m0 + job / xtiles * RM;
+            long jj = n0 + job % xtiles * RN;
+            __m256 Cv[RN][RM] = {};
+            __m256 Ce[RN][RM] = {};
+            for (long l = 0; l < k; ++l) {
+#pragma GCC unroll 100
+                for (int j = 0; j < RN; ++j)
+#pragma GCC unroll 100
+                    for (int i = 0; i < RM; ++i) {
+                        const block_q1_0 *Abl = &INDEX(A, lda, ii + i, l)[0];
+                        float scale_a = unhalf(Abl->d);
+                        // Process 4 Q8_0 sub-blocks per g128 block
+                        for (int sub = 0; sub < 4; ++sub) {
+                            const block_q8_0 *Bbl = &INDEX(B, ldb, jj + j, 4*l + sub)[0];
+                            __m256 a = _mm256_set1_ps(scale_a * unhalf(Bbl->d));
+                            __m256i qa = load_sub(Abl, sub);
+                            __m256i qb = _mm256_loadu_si256((const __m256i *)Bbl->qs);
+                            __m256 b = updot(_mm256_sign_epi8(qa, qa),
+                                             _mm256_sign_epi8(qb, qa));
+                            if (PRECISE)
+                                Cv[j][i] = madder(a, b, Cv[j][i], &Ce[j][i]);
+                            else
+                                Cv[j][i] = madd(a, b, Cv[j][i]);
+                        }
+                    }
+            }
+#pragma GCC unroll 100
+            for (int j = 0; j < RN; ++j)
+#pragma GCC unroll 100
+                for (int i = 0; i < RM; ++i)
+                    store(INDEX(C, ldc, jj + j, ii + i), hsum(Cv[j][i]));
+        }
+    }
+
+    // Extract 32 bits from sub-block `sub` (0-3) of a g128 block
+    inline __m256i load_sub(const block_q1_0 *b, int sub) {
+        const uint32_t bits = *(const uint32_t *)(b->qs + sub * 4);
+        const __m128i bits128 = _mm_set1_epi32(bits);
+        const __m256i bits256 = _mm256_broadcastsi128_si256(bits128);
+        const __m256i shuf = _mm256_set_epi8(
+            3,3,3,3,3,3,3,3, 2,2,2,2,2,2,2,2,
+            1,1,1,1,1,1,1,1, 0,0,0,0,0,0,0,0);
+        const __m256i shuffled = _mm256_shuffle_epi8(bits256, shuf);
+        const __m256i bitmask = _mm256_set_epi8(
+            (char)0x80,0x40,0x20,0x10,0x08,0x04,0x02,0x01,
+            (char)0x80,0x40,0x20,0x10,0x08,0x04,0x02,0x01,
+            (char)0x80,0x40,0x20,0x10,0x08,0x04,0x02,0x01,
+            (char)0x80,0x40,0x20,0x10,0x08,0x04,0x02,0x01);
+        const __m256i test = _mm256_cmpeq_epi8(
+            _mm256_and_si256(shuffled, bitmask), bitmask);
+        const __m256i ones = _mm256_set1_epi8(1);
+        const __m256i bit_val = _mm256_and_si256(test, ones);
+        return _mm256_sub_epi8(_mm256_add_epi8(bit_val, bit_val), ones);
+    }
+
+    inline __m256 updot(__m256i u, __m256i s) {
+        __m256i res;
+#if defined(__AVXVNNI__) || (defined(__AVX512VNNI__) && defined(__AVX512VL__))
+        res = _mm256_dpbusd_epi32(_mm256_setzero_si256(), u, s);
+#else
+        res = _mm256_madd_epi16(_mm256_set1_epi16(1), _mm256_maddubs_epi16(u, s));
+#endif
+        return _mm256_cvtepi32_ps(res);
+    }
+
+    const block_q1_0 *const A;
+    const block_q8_0 *const B;
+    TC *const C;
+    const long k;
+    const long lda;
+    const long ldb;
+    const long ldc;
+    const int ith;
+    const int nth;
+};
 #endif // __AVX2__
+
+#if defined(__ARM_FEATURE_DOTPROD)
+// Q1_0_g128: 128-element blocks with 4:1 ratio to Q8_0 blocks (ARM)
+template <int CONFIG, typename TC>
+class tinyBLAS_Q0_g128_ARM {
+    // Typedefs required by the INDEX macro
+    typedef block_q1_0 TA;
+    typedef block_q8_0 TB;
+  public:
+    tinyBLAS_Q0_g128_ARM(long k, const block_q1_0 *A, long lda, const block_q8_0 *B, long ldb,
+                         TC *C, long ldc, int ith, int nth)
+        : A(A), B(B), C(C), k(k), lda(lda), ldb(ldb), ldc(ldc), ith(ith), nth(nth) {
+    }
+
+    void matmul(long m, long n) {
+        mnpack(0, m, 0, n);
+    }
+
+  private:
+    void mnpack(long m0, long m, long n0, long n) {
+        long mc, nc, mp, np;
+        switch ((MIN(m - m0, 3) << 4) | MIN(n - n0, 3)) {
+        case 0x33:
+            mc = 3; nc = 3;
+            gemm<3, 3, true>(m0, m, n0, n);
+            break;
+        case 0x32: case 0x23: case 0x22:
+            mc = 2; nc = 2;
+            gemm<2, 2, true>(m0, m, n0, n);
+            break;
+        case 0x31: case 0x21:
+            mc = 2; nc = 1;
+            gemm<2, 1, true>(m0, m, n0, n);
+            break;
+        case 0x13: case 0x12:
+            mc = 1; nc = 2;
+            gemm<1, 2, true>(m0, m, n0, n);
+            break;
+        case 0x11:
+            mc = 1; nc = 1;
+            gemm<1, 1, true>(m0, m, n0, n);
+            break;
+        default:
+            return;
+        }
+        mp = m0 + (m - m0) / mc * mc;
+        np = n0 + (n - n0) / nc * nc;
+        mnpack(mp, m, n0, np);
+        mnpack(m0, m, np, n);
+    }
+
+    template <int RM, int RN, int PRECISE>
+    NOINLINE void gemm(long m0, long m, long n0, long n) {
+        long ytiles = RM > 1 ? (m - m0) / RM : 1;
+        long xtiles = RN > 1 ? (n - n0) / RN : 1;
+        long tiles = xtiles * ytiles;
+        long duty = (tiles + nth - 1) / nth;
+        long start = duty * ith;
+        long end = start + duty;
+        if (end > tiles)
+            end = tiles;
+        for (long job = start; job < end; ++job) {
+            long ii = m0 + job / xtiles * RM;
+            long jj = n0 + job % xtiles * RN;
+            float32x4_t Cv[RN][RM] = {};
+            float32x4_t Ce[RN][RM] = {};
+            for (int l = 0; l < k; ++l) {
+#pragma GCC unroll 100
+                for (int j = 0; j < RN; ++j)
+#pragma GCC unroll 100
+                    for (int i = 0; i < RM; ++i) {
+                        const block_q1_0 *Abl = &INDEX(A, lda, ii + i, l)[0];
+                        float scale_a = unhalf(Abl->d);
+                        for (int sub = 0; sub < 4; ++sub) {
+                            const block_q8_0 *Bbl = &INDEX(B, ldb, jj + j, 4*l + sub)[0];
+                            float b = scale_a * unhalf(Bbl->d);
+                            int8x16_t qa_lo = load_sub_lo(Abl, sub);
+                            int8x16_t qa_hi = load_sub_hi(Abl, sub);
+                            int8x16_t qb_lo = vld1q_s8(Bbl->qs);
+                            int8x16_t qb_hi = vld1q_s8(Bbl->qs + 16);
+                            float32x4_t a = vcvtq_f32_s32(vdotq_s32(
+                                vdotq_s32(vdupq_n_s32(0), qa_lo, qb_lo),
+                                qa_hi, qb_hi));
+                            if (PRECISE)
+                                Cv[j][i] = badder(a, b, Cv[j][i], &Ce[j][i]);
+                            else
+                                Cv[j][i] = vmlaq_n_f32(Cv[j][i], a, b);
+                        }
+                    }
+            }
+#pragma GCC unroll 100
+            for (int j = 0; j < RN; ++j)
+#pragma GCC unroll 100
+                for (int i = 0; i < RM; ++i)
+                    store(INDEX(C, ldc, jj + j, ii + i), hsum(Cv[j][i]));
+        }
+    }
+
+    // Extract 16 bits (2 bytes) from sub-block, expand to 16 signed int8
+    inline int8x16_t load_sub_lo(const block_q1_0 *b, int sub) {
+        const uint8_t *qs = b->qs + sub * 4;
+        const uint8x8_t b0 = vdup_n_u8(qs[0]);
+        const uint8x8_t b1 = vdup_n_u8(qs[1]);
+        const uint8x8_t bitmask = vcreate_u8(0x8040201008040201ULL);
+        const uint8x8_t t0 = vtst_u8(b0, bitmask);
+        const uint8x8_t t1 = vtst_u8(b1, bitmask);
+        const int8x16_t mask = vreinterpretq_s8_u8(vcombine_u8(t0, t1));
+        return vsubq_s8(vandq_s8(mask, vdupq_n_s8(2)), vdupq_n_s8(1));
+    }
+
+    inline int8x16_t load_sub_hi(const block_q1_0 *b, int sub) {
+        const uint8_t *qs = b->qs + sub * 4 + 2;
+        const uint8x8_t b0 = vdup_n_u8(qs[0]);
+        const uint8x8_t b1 = vdup_n_u8(qs[1]);
+        const uint8x8_t bitmask = vcreate_u8(0x8040201008040201ULL);
+        const uint8x8_t t0 = vtst_u8(b0, bitmask);
+        const uint8x8_t t1 = vtst_u8(b1, bitmask);
+        const int8x16_t mask = vreinterpretq_s8_u8(vcombine_u8(t0, t1));
+        return vsubq_s8(vandq_s8(mask, vdupq_n_s8(2)), vdupq_n_s8(1));
+    }
+
+    const block_q1_0 *const A;
+    const block_q8_0 *const B;
+    TC *const C;
+    const long k;
+    const long lda;
+    const long ldb;
+    const long ldc;
+    const int ith;
+    const int nth;
+};
+#endif // __ARM_FEATURE_DOTPROD
 
 } // namespace
