@@ -1,0 +1,20 @@
+# llamafile
+
+## Docs
+
+- [Introduction](https://raw.githubusercontent.com/mozilla-ai/llamafile/refs/heads/gitbook-docs/index.md): llamafile is a Mozilla Builders project (see its announcement blog post), now revamped by Mozilla.ai.
+- [Quickstart](https://raw.githubusercontent.com/mozilla-ai/llamafile/refs/heads/gitbook-docs/quickstart.md): The easiest way to try it for yourself is to download our example llamafile
+- [Example Llamafiles](https://raw.githubusercontent.com/mozilla-ai/llamafile/refs/heads/gitbook-docs/example_llamafiles.md): We provide example llamafiles for a variety of models, so you can easily try out llamafile
+- [Running Llamafile](https://raw.githubusercontent.com/mozilla-ai/llamafile/refs/heads/gitbook-docs/running_llamafile.md): You have just downloaded a llamafile from the Example llamafiles
+- [Creating Llamafiles](https://raw.githubusercontent.com/mozilla-ai/llamafile/refs/heads/gitbook-docs/creating_llamafiles.md): A llamafile bundles the llamafile executable, model weights, and a set of
+- [Source Installation](https://raw.githubusercontent.com/mozilla-ai/llamafile/refs/heads/gitbook-docs/source_installation.md): Developing on llamafile requires a modern version of the GNU make
+- [Building Dlls](https://raw.githubusercontent.com/mozilla-ai/llamafile/refs/heads/gitbook-docs/building_dlls.md): As our Makefile makes massive use of unix shell applications, it's much easier to just replicate that environment.
+- [Technical Details](https://raw.githubusercontent.com/mozilla-ai/llamafile/refs/heads/gitbook-docs/technical_details.md): Here is a succinct overview of the tricks we used to create the fattest
+- [Support](https://raw.githubusercontent.com/mozilla-ai/llamafile/refs/heads/gitbook-docs/support.md): llamafile supports the following operating systems, which require a minimum
+- [Troubleshooting](https://raw.githubusercontent.com/mozilla-ai/llamafile/refs/heads/gitbook-docs/troubleshooting.md): On any platform, if your llamafile process is immediately killed, check
+- [Whisperfile - Overview](https://raw.githubusercontent.com/mozilla-ai/llamafile/refs/heads/gitbook-docs/whisperfile/index.md): Whisperfile is a high-performance speech-to-text tool built on
+- [Whisperfile - Getting Started](https://raw.githubusercontent.com/mozilla-ai/llamafile/refs/heads/gitbook-docs/whisperfile/getting-started.md): This tutorial will explain how to turn speech from audio files into plain text, using the whisperfile software and OpenA…
+- [Whisperfile - Packaging](https://raw.githubusercontent.com/mozilla-ai/llamafile/refs/heads/gitbook-docs/whisperfile/packaging.md): Whisperfile is designed to be a single-file solution for speech-to-text.
+- [Whisperfile - Gpu](https://raw.githubusercontent.com/mozilla-ai/llamafile/refs/heads/gitbook-docs/whisperfile/gpu.md): GPU acceleration is most beneficial for the medium and large models. The
+- [Whisperfile - Translate](https://raw.githubusercontent.com/mozilla-ai/llamafile/refs/heads/gitbook-docs/whisperfile/translate.md): Whisperfile is not only able to transcribe speech to text, it's also able to
+- [Whisperfile - Server](https://raw.githubusercontent.com/mozilla-ai/llamafile/refs/heads/gitbook-docs/whisperfile/server.md): The whisper-server provides an HTTP API for speech-to-text transcription.
