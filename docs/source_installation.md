@@ -47,7 +47,7 @@ make check
 This runs our unit tests to ensure everything is built correctly.
 
 Some integration tests in `tests/integration` are available to test llamafile
-with real models. Check the [README](/tests/integration/README.md) to learn how to run them. 
+with real models. Check the [README](https://github.com/mozilla-ai/llamafile/blob/main/tests/integration/README.md) to learn how to run them.
 
 ### Running llamafile
 

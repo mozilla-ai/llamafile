@@ -68,4 +68,4 @@ At the end of this process, you should have the following libraries available in
 03/31/2026  02:46 PM        31,482,880 ggml-vulkan.dll
 ```
 
-To run llamafile with these libraries, add them in your home directory or bundle them in your llamafile (see [Creating a llamafile](https://mozilla-ai.github.io/llamafile/creating_llamafiles/)).
+To run llamafile with these libraries, add them in your home directory or bundle them in your llamafile (see [Creating a llamafile](creating_llamafiles.md)).

@@ -29,12 +29,12 @@ make o//third_party/zipalign
 - **The llamafile executable** — download a prebuilt binary from the
   [releases page](https://github.com/mozilla-ai/llamafile/releases), or build
   from source following
-  [these instructions](https://mozilla-ai.github.io/llamafile/source_installation/).
+  [these instructions](source_installation.md).
 
 - **Model weights in GGUF format** — download from Hugging Face
   ([search here](https://huggingface.co/models?library=gguf)), or use weights
   already on disk from
-  [another application](https://mozilla-ai.github.io/llamafile/quickstart/#running-llamafile-with-models-downloaded-by-third-party-applications).
+  [another application](quickstart.md#running-llamafile-with-models-downloaded-by-third-party-applications).
 
 - **A `.args` file** — specifies default arguments (at minimum, the model
   path so it loads automatically).

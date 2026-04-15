@@ -4,13 +4,17 @@ on:
   push:
     branches: [main]
     paths:
-      - mkdocs.yml
       - 'docs/**'
+      - 'scripts/publish_docs.py'
+      - 'scripts/validate_docs.py'
+      - '.gitbook.yaml'
       - '.github/workflows/docs.yml'
   pull_request:
     paths:
-      - mkdocs.yml
       - 'docs/**'
+      - 'scripts/publish_docs.py'
+      - 'scripts/validate_docs.py'
+      - '.gitbook.yaml'
       - '.github/workflows/docs.yml'
   workflow_dispatch:
 
@@ -21,28 +25,37 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Check out the repository
-        uses: actions/checkout@v5
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.x'
+      - name: Build GitBook site
+        run: python scripts/publish_docs.py
 
-      - name: Configure git
+      - name: Validate site output
+        run: python scripts/validate_docs.py
+
+      - name: Deploy to gitbook-docs branch
+        if: "${{ github.event_name == 'push' || github.event_name == 'workflow_dispatch' }}"
         run: |
           git config user.name 'github-actions[bot]'
           git config user.email 'github-actions[bot]@users.noreply.github.com'
+          cp .gitbook-branch-readme.md site/README-BRANCH.md
 
-      - name: Install dependencies
-        run: |
-          pip install mkdocs-material
+          # Move site/ outside the repo before switching branches
+          mv site/ /tmp/gitbook-site/
 
-      - name: Build docs
-        if: github.event_name == 'pull_request'
-        run: mkdocs build -s
+          git fetch origin gitbook-docs || true
+          if git rev-parse --verify origin/gitbook-docs >/dev/null 2>&1; then
+            git checkout gitbook-docs
+          else
+            git checkout --orphan gitbook-docs
+            git rm -rf .
+          fi
 
-      - name: Publish docs
-        if: ${{ github.event_name == 'push' || github.event_name == 'workflow_dispatch' }}
-        run: mkdocs gh-deploy --force
+          rsync -a --delete --exclude='.git' /tmp/gitbook-site/ .
+          git add -A
+          if ! git diff --cached --quiet; then
+            git commit -m "docs: update GitBook documentation from ${{ github.sha }}"
+            git push origin gitbook-docs
+          fi
