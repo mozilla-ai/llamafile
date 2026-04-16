@@ -82,14 +82,6 @@ then distribute these llamafiles to other people, who can easily make
 use of them regardless of what kind of computer they have.
 
 
-## For AI assistants
-
-Machine-readable versions of this documentation are available at the docs root:
-
-- [llms.txt](https://docs.mozilla.ai/llamafile/llms.txt) — page index with descriptions, following the [llmstxt.org](https://llmstxt.org) standard
-- [llms-full.txt](https://docs.mozilla.ai/llamafile/llms-full.txt) — all documentation pages concatenated into a single file
-
-
 ## Licensing
 
 While the llamafile project is Apache 2.0-licensed, our changes
