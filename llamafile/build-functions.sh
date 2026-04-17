@@ -216,6 +216,13 @@ compile_ggml_core() {
 # Link object files into shared library
 # Args: $1 = linker command, $2 = linker_flags (e.g., "--shared" or "-shared -fPIC")
 #       $3 = arch_flags, $4 = build_dir, $5 = output, $6 = extra_libs
+#
+# On Linux, the C++ runtime (libstdc++, libgcc_s) is linked statically so the
+# shipped .so does not carry versioned GLIBCXX symbol requirements from the
+# build host. Without this, users on distros with an older libstdc++ than the
+# build machine (e.g. Pop!_OS 22.04 / Ubuntu 22.04 with GCC 12) fail to load
+# the library with "GLIBCXX_3.4.xx not found". Windows achieves the same via
+# /MT; Darwin uses libc++ and is unaffected.
 link_shared_library() {
     local linker="$1"
     local linker_flags="$2"
@@ -224,13 +231,27 @@ link_shared_library() {
     local output="$5"
     local extra_libs="$6"
 
+    local static_cxx_flags=""
+    if [ "$(uname -s)" = "Linux" ]; then
+        case "$(basename "$linker")" in
+            nvcc)
+                # nvcc requires -Xcompiler to forward flags to the host driver.
+                static_cxx_flags="-Xcompiler=-static-libstdc++,-static-libgcc"
+                ;;
+            *)
+                # hipcc, g++, clang++ accept these driver flags directly
+                static_cxx_flags="-static-libstdc++ -static-libgcc"
+                ;;
+        esac
+    fi
+
     echo "Linking..."
 
     local obj_files=$(find "$build_dir" -name "*.o" -type f | tr '\n' ' ')
     local num_objs=$(find "$build_dir" -name "*.o" -type f | wc -l)
     echo "  Linking $num_objs object files..."
 
-    $linker $linker_flags $arch_flags -o "$output" $obj_files $extra_libs
+    $linker $linker_flags $arch_flags $static_cxx_flags -o "$output" $obj_files $extra_libs
 }
 
 # Print build summary
