@@ -47,7 +47,7 @@ diff --git a/ggml/src/ggml-vulkan/ggml-vulkan.cpp b/ggml/src/ggml-vulkan/ggml-vu
 -                                          parameter_count, wg_denoms, specialization_constants, disable_robustness, require_full_subgroups, required_subgroup_size));
 +            // Compile synchronously to avoid threading issues in cross-module DLL loading
 +            ggml_vk_create_pipeline_func(device, pipeline, spv_size, spv_data, entrypoint,
-+                                          parameter_count, wg_denoms, specialization_constants, disable_robustness, require_full_subgroups, required_subgroup_size);
++                                         parameter_count, wg_denoms, specialization_constants, disable_robustness, require_full_subgroups, required_subgroup_size);
          }
      };
  
