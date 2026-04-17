@@ -27,6 +27,7 @@
 #include <limits.h>
 #include <stdatomic.h>
 #include <stdint.h>
+#include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -730,9 +731,9 @@ bool llamafile_try_load_prebuilt_dso(const char *name, const char *backend_name,
             break;
         }
 
+        llamafile_info(backend_name, "probing library %s (bundled)", extracted);
         if (link_fn(extracted)) {
-            if (FLAG_verbose)
-                fprintf(stderr, "%s: loaded bundled %s\n", backend_name, name);
+            llamafile_info(backend_name, "loaded bundled library %s", extracted);
             return true;
         }
     }
@@ -741,9 +742,9 @@ bool llamafile_try_load_prebuilt_dso(const char *name, const char *backend_name,
     llamafile_get_app_dir(app_dir, PATH_MAX);
     snprintf(dso, PATH_MAX, "%s%s", app_dir, name);
     if (llamafile_file_exists(dso)) {
+        llamafile_info(backend_name, "probing library %s (app directory)", dso);
         if (link_fn(dso)) {
-            if (FLAG_verbose)
-                fprintf(stderr, "%s: loaded %s from app directory\n", backend_name, name);
+            llamafile_info(backend_name, "loaded library %s from app directory", dso);
             return true;
         }
     }
@@ -753,9 +754,9 @@ bool llamafile_try_load_prebuilt_dso(const char *name, const char *backend_name,
     if (home && *home) {
         snprintf(dso, PATH_MAX, "%s/%s", home, name);
         if (llamafile_file_exists(dso)) {
+            llamafile_info(backend_name, "probing library %s (home directory)", dso);
             if (link_fn(dso)) {
-                if (FLAG_verbose)
-                    fprintf(stderr, "%s: loaded %s from home directory\n", backend_name, name);
+                llamafile_info(backend_name, "loaded library %s from home directory", dso);
                 return true;
             }
         }
@@ -772,6 +773,17 @@ void llamafile_log_callback_null(int level, const char *text, void *user_data) {
     (void)level;
     (void)text;
     (void)user_data;
+}
+
+void llamafile_info(const char *backend, const char *fmt, ...) {
+    if (!FLAG_verbose)
+        return;
+    fprintf(stderr, "%s: INFO: ", backend);
+    va_list ap;
+    va_start(ap, fmt);
+    vfprintf(stderr, fmt, ap);
+    va_end(ap);
+    fputc('\n', stderr);
 }
 
 // ==============================================================================

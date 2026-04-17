@@ -20,3 +20,6 @@ CLAUDE.md
 *.pyc
 __init__.py
 uv.lock
+
+# docs build output (pushed to gitbook-docs branch by CI)
+/site

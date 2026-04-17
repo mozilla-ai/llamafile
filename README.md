@@ -58,7 +58,7 @@ chmod +x Qwen3.5-0.8B-Q8_0.llamafile
 
 We chose this model because that's the smallest one we have
 built a llamafile for, so most likely to work out-of-the-box for you.
-If you have powerful hardware and/or GPUs, [feel free to choose](https://mozilla-ai.github.io/llamafile/example_llamafiles/)
+If you have powerful hardware and/or GPUs, [feel free to choose](docs/example_llamafiles.md)
 larger and more expressive models which should provide more accurate
 responses.
 
@@ -66,17 +66,17 @@ responses.
 
 ## Documentation
 
-Check the full documentation in the [docs/](docs/) folder or online at [mozilla-ai.github.io/llamafile](https://mozilla-ai.github.io/llamafile/), or directly jump into one of the following subsections:
+Check the full documentation in the [docs/](docs/) folder, or directly jump into one of the following subsections:
 
-- [Quickstart](https://mozilla-ai.github.io/llamafile/quickstart/)
-- [Example llamafiles](https://mozilla-ai.github.io/llamafile/example_llamafiles/)
-- [Running a llamafile](https://mozilla-ai.github.io/llamafile/running_llamafile/)
-- [Creating llamafiles](https://mozilla-ai.github.io/llamafile/creating_llamafiles/)
-- [Source installation](https://mozilla-ai.github.io/llamafile/source_installation/)
-- [Technical details](https://mozilla-ai.github.io/llamafile/technical_details/)
-- [Supported Systems](https://mozilla-ai.github.io/llamafile/support/)
-- [Troubleshooting](https://mozilla-ai.github.io/llamafile/troubleshooting/)
-- [Whisperfile](https://mozilla-ai.github.io/llamafile/whisperfile/)
+- [Quickstart](docs/quickstart.md)
+- [Example llamafiles](docs/example_llamafiles.md)
+- [Running a llamafile](docs/running_llamafile.md)
+- [Creating llamafiles](docs/creating_llamafiles.md)
+- [Source installation](docs/source_installation.md)
+- [Technical details](docs/technical_details.md)
+- [Supported Systems](docs/support.md)
+- [Troubleshooting](docs/troubleshooting.md)
+- [Whisperfile](docs/whisperfile/index.md)
 
 
 ## Licensing
