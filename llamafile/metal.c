@@ -276,8 +276,7 @@ static bool PreprocessMetalShader(const char *app_dir) {
     free(impl_content);
     free(metal_content);
 
-    if (FLAG_verbose)
-        fprintf(stderr, "metal: preprocessed %s\n", metal_path);
+    llamafile_info("metal", "preprocessed %s", metal_path);
 
     return true;
 }
@@ -293,8 +292,7 @@ static bool BuildMetal(const char *dso) {
     // Since we use versioned paths, source updates come with new versions
     struct stat dso_stat;
     if (stat(dso, &dso_stat) == 0 && !FLAG_recompile) {
-        if (FLAG_verbose)
-            fprintf(stderr, "metal: using cached %s\n", dso);
+        llamafile_info("metal", "using cached %s", dso);
         return true;
     }
 
@@ -359,8 +357,7 @@ static bool BuildMetal(const char *dso) {
 
     // Compile dynamic shared object
     if (needs_rebuild || FLAG_recompile) {
-        if (FLAG_verbose)
-            fprintf(stderr, "metal: building ggml-metal.dylib with xcode...\n");
+        llamafile_info("metal", "building ggml-metal.dylib with xcode...");
 
         char tmpdso[PATH_MAX];
         snprintf(tmpdso, PATH_MAX, "%s.XXXXXX", dso);
@@ -435,10 +432,12 @@ static bool BuildMetal(const char *dso) {
             args[argc] = NULL;
 
             if (FLAG_verbose) {
-                fprintf(stderr, "metal: executing: cc");
-                for (int j = 1; args[j]; j++)
-                    fprintf(stderr, " %s", args[j]);
-                fprintf(stderr, "\n");
+                char cmd[4096];
+                size_t off = 0;
+                off += snprintf(cmd + off, sizeof(cmd) - off, "executing: cc");
+                for (int j = 1; args[j] && off < sizeof(cmd); j++)
+                    off += snprintf(cmd + off, sizeof(cmd) - off, " %s", args[j]);
+                llamafile_info("metal", "%s", cmd);
             }
 
             int pid, ws;
@@ -499,10 +498,12 @@ static bool BuildMetal(const char *dso) {
             args[argc] = NULL;
 
             if (FLAG_verbose) {
-                fprintf(stderr, "metal: executing: cc");
-                for (int j = 1; args[j]; j++)
-                    fprintf(stderr, " %s", args[j]);
-                fprintf(stderr, "\n");
+                char cmd[4096];
+                size_t off = 0;
+                off += snprintf(cmd + off, sizeof(cmd) - off, "executing: cc");
+                for (int j = 1; args[j] && off < sizeof(cmd); j++)
+                    off += snprintf(cmd + off, sizeof(cmd) - off, " %s", args[j]);
+                llamafile_info("metal", "%s", cmd);
             }
 
             int pid, ws;
@@ -538,8 +539,7 @@ static bool BuildMetal(const char *dso) {
             return false;
         }
 
-        if (FLAG_verbose)
-            fprintf(stderr, "metal: successfully built %s\n", dso);
+        llamafile_info("metal", "successfully built %s", dso);
     }
 
     return true;
@@ -550,7 +550,8 @@ static bool LinkMetal(const char *dso) {
     void *lib = cosmo_dlopen(dso, RTLD_LAZY);
     if (!lib) {
         char *err = cosmo_dlerror();
-        fprintf(stderr, "metal: %s: failed to load library\n", err ? err : "unknown error");
+        llamafile_info("metal", "failed to load library %s: %s",
+                       dso, err ? err : "unknown error");
         return false;
     }
 
@@ -570,7 +571,8 @@ static bool LinkMetal(const char *dso) {
 
     if (!ok) {
         char *err = cosmo_dlerror();
-        fprintf(stderr, "metal: %s: not all symbols could be imported\n", err ? err : "unknown error");
+        llamafile_info("metal", "could not import all symbols from %s: %s",
+                       dso, err ? err : "unknown error");
         cosmo_dlclose(lib);
         return false;
     }
@@ -617,8 +619,7 @@ static bool ImportMetalImpl(void) {
                 ggml_backend_reg_t reg = g_metal.backend_metal_reg();
                 if (reg) {
                     ggml_backend_register(reg);
-                    if (FLAG_verbose)
-                        fprintf(stderr, "metal: Metal backend registered with GGML\n");
+                    llamafile_info("metal", "Metal backend registered with GGML");
                 }
             }
             return true;
@@ -630,8 +631,7 @@ static bool ImportMetalImpl(void) {
 static void ImportMetal(void) {
     if (ImportMetalImpl()) {
         g_metal.supported = true;
-        if (FLAG_verbose)
-            fprintf(stderr, "metal: Apple Metal GPU support successfully loaded\n");
+        llamafile_info("metal", "Apple Metal GPU support successfully loaded");
     } else if (FLAG_gpu == LLAMAFILE_GPU_APPLE) {
         fprintf(stderr, "fatal error: support for --gpu %s was explicitly requested, "
                 "but it wasn't available\n", llamafile_describe_gpu());

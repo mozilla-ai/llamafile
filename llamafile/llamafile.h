@@ -120,6 +120,13 @@ typedef void (*llamafile_log_callback)(int level, const char *text, void *user_d
 // No-op log callback to disable logging (defined in llamafile.c)
 void llamafile_log_callback_null(int level, const char *text, void *user_data);
 
+// Print an INFO-level diagnostic tagged with a backend name.
+// No-op unless FLAG_verbose is set. Adds the "<backend>: INFO: " prefix
+// and a trailing newline, so callers pass only the message body.
+// Defined in llamafile.c.
+void llamafile_info(const char *backend, const char *fmt, ...)
+    __attribute__((format(printf, 2, 3)));
+
 // Set logging callback for Metal dylib (defined in metal.c)
 // Pass a no-op callback to disable logging
 void llamafile_metal_log_set(llamafile_log_callback log_callback, void *user_data);
