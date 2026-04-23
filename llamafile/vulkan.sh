@@ -287,6 +287,11 @@ if [ "$(uname -s)" = "Darwin" ]; then
         VULKAN_LIB_PATH="/usr/local/lib"
     fi
     LINK_FLAGS="$LINK_FLAGS -Wl,-rpath,$VULKAN_LIB_PATH -L$VULKAN_LIB_PATH"
+elif [ "$(uname -s)" = "Linux" ]; then
+    # Statically link libstdc++/libgcc so the shipped .so does not depend on
+    # the build host's GLIBCXX version. See link_shared_library in
+    # build-functions.sh for the full rationale.
+    LINK_FLAGS="$LINK_FLAGS -static-libstdc++ -static-libgcc"
 fi
 
 $CXX $LINK_FLAGS -o "$OUTPUT" $OBJ_FILES -lvulkan -lpthread

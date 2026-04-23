@@ -97,7 +97,8 @@ static bool LinkCuda(const char *dso) {
     void *lib = cosmo_dlopen(dso, RTLD_LAZY);
     if (!lib) {
         char *err = cosmo_dlerror();
-        fprintf(stderr, "cuda: %s: failed to load library\n", err ? err : "unknown error");
+        llamafile_info("cuda", "failed to load library %s: %s",
+                       dso, err ? err : "unknown error");
         return false;
     }
 
@@ -142,7 +143,8 @@ static bool LinkCuda(const char *dso) {
 
     if (!ok) {
         char *err = cosmo_dlerror();
-        fprintf(stderr, "cuda: %s: not all symbols could be imported\n", err ? err : "unknown error");
+        llamafile_info("cuda", "could not import all symbols from %s: %s",
+                       dso, err ? err : "unknown error");
         memset(&g_cuda.backend_init, 0, sizeof(g_cuda.backend_init));
         memset(&g_cuda.backend_reg, 0, sizeof(g_cuda.backend_reg));
         memset(&g_cuda.get_device_count, 0, sizeof(g_cuda.get_device_count));
@@ -197,12 +199,10 @@ static bool ImportCudaImpl(void) {
     }
 
     // No pre-built DSO found
-    if (FLAG_verbose) {
-        fprintf(stderr, "cuda: no pre-built GPU library found\n");
-        fprintf(stderr, "cuda: to enable GPU support, build with:\n");
-        fprintf(stderr, "cuda:   llamafile/cuda.sh   (for NVIDIA)\n");
-        fprintf(stderr, "cuda:   llamafile/rocm.sh   (for AMD)\n");
-    }
+    llamafile_info("cuda", "no pre-built GPU library found");
+    llamafile_info("cuda", "to enable GPU support, build with:");
+    llamafile_info("cuda", "  llamafile/cuda.sh   (for NVIDIA)");
+    llamafile_info("cuda", "  llamafile/rocm.sh   (for AMD)");
     return false;
 
 RegisterBackend:
@@ -225,9 +225,8 @@ RegisterBackend:
             reg = g_cuda.backend_reg.default_abi();
         if (reg) {
             ggml_backend_register(reg);
-            if (FLAG_verbose)
-                fprintf(stderr, "cuda: %s backend registered with GGML\n",
-                        g_cuda.is_amd ? "ROCm" : "CUDA");
+            llamafile_info("cuda", "%s backend registered with GGML",
+                           g_cuda.is_amd ? "ROCm" : "CUDA");
         }
     }
 
@@ -237,17 +236,15 @@ RegisterBackend:
 static void ImportCuda(void) {
     if (ImportCudaImpl()) {
         g_cuda.supported = true;
-        if (FLAG_verbose) {
-            fprintf(stderr, "cuda: %s GPU support successfully loaded\n",
-                    g_cuda.is_amd ? "AMD ROCm" : "NVIDIA CUDA");
-            if (g_cuda.get_device_count.default_abi || g_cuda.get_device_count.windows_abi) {
-                int count;
-                if (IsWindows())
-                    count = g_cuda.get_device_count.windows_abi();
-                else
-                    count = g_cuda.get_device_count.default_abi();
-                fprintf(stderr, "cuda: found %d GPU device(s)\n", count);
-            }
+        llamafile_info("cuda", "%s GPU support successfully loaded",
+                       g_cuda.is_amd ? "AMD ROCm" : "NVIDIA CUDA");
+        if (g_cuda.get_device_count.default_abi || g_cuda.get_device_count.windows_abi) {
+            int count;
+            if (IsWindows())
+                count = g_cuda.get_device_count.windows_abi();
+            else
+                count = g_cuda.get_device_count.default_abi();
+            llamafile_info("cuda", "found %d GPU device(s)", count);
         }
     } else if (FLAG_gpu == LLAMAFILE_GPU_NVIDIA || FLAG_gpu == LLAMAFILE_GPU_AMD) {
         fprintf(stderr, "fatal error: support for --gpu %s was explicitly requested, "

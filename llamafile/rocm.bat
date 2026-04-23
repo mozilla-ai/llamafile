@@ -33,6 +33,25 @@ echo Unknown option: %~1
 exit /b 1
 :done_args
 
+:: -------- find Visual Studio / Build Tools --------
+where cl >nul 2>&1
+if errorlevel 1 (
+    set "VSWHERE=%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe"
+    if not exist "!VSWHERE!" (
+        echo Error: cl.exe not found in PATH and vswhere.exe not found
+        echo Please run from a Visual Studio Developer Command Prompt
+        exit /b 1
+    )
+    for /f "usebackq tokens=*" %%i in (`"!VSWHERE!" -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath`) do (
+        set "VS_PATH=%%i"
+    )
+    if not defined VS_PATH (
+        echo Error: Visual Studio with C++ tools not found
+        exit /b 1
+    )
+    call "!VS_PATH!\VC\Auxiliary\Build\vcvarsall.bat" x64
+)
+
 set "LLAMA_CPP_DIR=%REPO_DIR%\llama.cpp"
 set "GGML_CUDA_DIR=%LLAMA_CPP_DIR%\ggml\src\ggml-cuda"
 set "GGML_SRC_DIR=%LLAMA_CPP_DIR%\ggml\src"
@@ -196,7 +215,7 @@ echo.
 :: -------- compile core GGML sources with host compiler --------
 echo Compiling core GGML sources...
 
-set "HOST_FLAGS=/nologo /EHsc /O2 /GR /MT /DNDEBUG"
+set "HOST_FLAGS=/nologo /EHsc /O2 /GR /MT /Zc:preprocessor /DNDEBUG"
 set "HOST_FLAGS=%HOST_FLAGS% /DGGML_BUILD=1 /DGGML_SHARED=1 /DGGML_BACKEND_SHARED=1 /DGGML_BACKEND_BUILD=1 /DGGML_MULTIPLATFORM"
 set "HOST_FLAGS=%HOST_FLAGS% /DGGML_VERSION=\"!GGML_VERSION!\" /DGGML_COMMIT=\"!GGML_COMMIT!\""
 set "HOST_FLAGS=%HOST_FLAGS% /I"%GGML_INC_DIR%" /I"%GGML_SRC_DIR%""

@@ -93,7 +93,8 @@ static bool LinkVulkan(const char *dso) {
     void *lib = cosmo_dlopen(dso, RTLD_LAZY);
     if (!lib) {
         char *err = cosmo_dlerror();
-        fprintf(stderr, "vulkan: %s: failed to load library\n", err ? err : "unknown error");
+        llamafile_info("vulkan", "failed to load library %s: %s",
+                       dso, err ? err : "unknown error");
         return false;
     }
 
@@ -138,7 +139,8 @@ static bool LinkVulkan(const char *dso) {
 
     if (!ok) {
         char *err = cosmo_dlerror();
-        fprintf(stderr, "vulkan: %s: not all symbols could be imported\n", err ? err : "unknown error");
+        llamafile_info("vulkan", "could not import all symbols from %s: %s",
+                       dso, err ? err : "unknown error");
         memset(&g_vulkan.backend_init, 0, sizeof(g_vulkan.backend_init));
         memset(&g_vulkan.backend_reg, 0, sizeof(g_vulkan.backend_reg));
         memset(&g_vulkan.get_device_count, 0, sizeof(g_vulkan.get_device_count));
@@ -173,11 +175,9 @@ static bool ImportVulkanImpl(void) {
     // Try to load pre-built DSO
     if (!llamafile_try_load_prebuilt_dso(vulkan_dso, "vulkan", LinkVulkan)) {
         // No pre-built DSO found
-        if (FLAG_verbose) {
-            fprintf(stderr, "vulkan: no pre-built GPU library found\n");
-            fprintf(stderr, "vulkan: to enable Vulkan support, build with:\n");
-            fprintf(stderr, "vulkan:   llamafile/vulkan.sh\n");
-        }
+        llamafile_info("vulkan", "no pre-built GPU library found");
+        llamafile_info("vulkan", "to enable Vulkan support, build with:");
+        llamafile_info("vulkan", "  llamafile/vulkan.sh");
         return false;
     }
 
@@ -200,8 +200,7 @@ static bool ImportVulkanImpl(void) {
             reg = g_vulkan.backend_reg.default_abi();
         if (reg) {
             ggml_backend_register(reg);
-            if (FLAG_verbose)
-                fprintf(stderr, "vulkan: Vulkan backend registered with GGML\n");
+            llamafile_info("vulkan", "Vulkan backend registered with GGML");
         }
     }
 
@@ -211,16 +210,14 @@ static bool ImportVulkanImpl(void) {
 static void ImportVulkan(void) {
     if (ImportVulkanImpl()) {
         g_vulkan.supported = true;
-        if (FLAG_verbose) {
-            fprintf(stderr, "vulkan: Vulkan GPU support successfully loaded\n");
-            if (g_vulkan.get_device_count.default_abi || g_vulkan.get_device_count.windows_abi) {
-                int count;
-                if (IsWindows())
-                    count = g_vulkan.get_device_count.windows_abi();
-                else
-                    count = g_vulkan.get_device_count.default_abi();
-                fprintf(stderr, "vulkan: found %d GPU device(s)\n", count);
-            }
+        llamafile_info("vulkan", "Vulkan GPU support successfully loaded");
+        if (g_vulkan.get_device_count.default_abi || g_vulkan.get_device_count.windows_abi) {
+            int count;
+            if (IsWindows())
+                count = g_vulkan.get_device_count.windows_abi();
+            else
+                count = g_vulkan.get_device_count.default_abi();
+            llamafile_info("vulkan", "found %d GPU device(s)", count);
         }
     } else if (FLAG_gpu == LLAMAFILE_GPU_VULKAN) {
         fprintf(stderr, "fatal error: support for --gpu vulkan was explicitly requested, "

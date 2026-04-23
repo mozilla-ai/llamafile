@@ -37,11 +37,16 @@ make setup
 # In the Windows terminal
 
 After the repo is set up, you can build the cuda / rocm / vulkan DLLs as follows.
+The .bat files to run the builds are in the `llamafile` directory and accept the following
+parameters:
 
-- from powershell, open a Visual Studio 2022 Developer Command Prompt
-```
- cmd /k "`"C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Auxiliary\Build\vcvarsall.bat`" x64"
-```
+- `--clean` to restart a build from scratch
+- `--output` to provide a custom output filename for the dll (default is ggml-xxxx.dll in the current directory
+for xxxx in (cuda, rocm, vulkan)
+- only for the cuda libraries, you also have the `--cublas` option to link the library against NVIDIA's cublas instead of tinyblas
+
+Also note that for cuda and rocm libraries there are `*_parallel.bat` scripts that should work faster
+by parallelizing compilation and taking advantage of your compute. Here's how you call the build scripts:
 
 - cd to the llamafile dir and start CUDA parallel build (this will run for a while...)
 ```
