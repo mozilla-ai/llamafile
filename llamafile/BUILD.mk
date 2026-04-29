@@ -219,6 +219,7 @@ LLAMAFILE_HIGHLIGHT_KEYWORDS := $(LLAMAFILE_HIGHLIGHT_GPERF_FILES:%.gperf=o/$(MO
 
 # Server objects for llamafile
 LLAMAFILE_SERVER_SUPPORT_OBJS := \
+	o/$(MODE)/llama.cpp/tools/server/server-chat.cpp.o \
 	o/$(MODE)/llama.cpp/tools/server/server-common.cpp.o \
 	o/$(MODE)/llama.cpp/tools/server/server-context.cpp.o \
 	o/$(MODE)/llama.cpp/tools/server/server-http.cpp.o \

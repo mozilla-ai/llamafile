@@ -1,7 +1,7 @@
 diff --git a/ggml/src/ggml-cuda/common.cuh b/ggml/src/ggml-cuda/common.cuh
 --- a/llama.cpp/ggml/src/ggml-cuda/common.cuh
 +++ b/llama.cpp/ggml/src/ggml-cuda/common.cuh
-@@ -292,9 +292,15 @@ static bool fp16_mma_hardware_available(const int cc) {
+@@ -294,9 +294,15 @@ static bool fp16_mma_hardware_available(const int cc) {
  }
  
  static bool bf16_mma_hardware_available(const int cc) {

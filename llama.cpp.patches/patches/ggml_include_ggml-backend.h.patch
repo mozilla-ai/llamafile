@@ -18,10 +18,10 @@ diff --git a/ggml/include/ggml-backend.h b/ggml/include/ggml-backend.h
  #ifdef  __cplusplus
  extern "C" {
  #endif
-@@ -197,19 +207,19 @@ extern "C" {
-     // Common functions that may be obtained using ggml_backend_reg_get_proc_address
+@@ -208,19 +218,19 @@ extern "C" {
+     typedef bool   (*ggml_backend_comm_allreduce_tensor_t)(void * comm_ctx, struct ggml_tensor ** tensors);
  
-     // Split buffer type for tensor parallelism
+     // Split buffer type for tensor parallelism (old)
 -    typedef ggml_backend_buffer_type_t   (*ggml_backend_split_buffer_type_t)(int main_device, const float * tensor_split);
 +    typedef ggml_backend_buffer_type_t   (GGML_CALL *ggml_backend_split_buffer_type_t)(int main_device, const float * tensor_split);
      // Set the number of threads for the backend

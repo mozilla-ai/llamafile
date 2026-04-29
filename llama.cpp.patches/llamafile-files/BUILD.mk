@@ -24,6 +24,7 @@ GGML_SRCS_C := \
 
 GGML_SRCS_CPP := \
 	llama.cpp/ggml/src/ggml-backend-dl.cpp \
+	llama.cpp/ggml/src/ggml-backend-meta.cpp \
 	llama.cpp/ggml/src/ggml-backend-reg.cpp \
 	llama.cpp/ggml/src/ggml-backend.cpp \
 	llama.cpp/ggml/src/ggml-opt.cpp \
@@ -108,7 +109,7 @@ LLAMA_SRCS_CPP := \
 	llama.cpp/src/models/lfm2.cpp \
 	llama.cpp/src/models/llada-moe.cpp \
 	llama.cpp/src/models/llada.cpp \
-	llama.cpp/src/models/llama-iswa.cpp \
+	llama.cpp/src/models/llama4.cpp \
 	llama.cpp/src/models/llama.cpp \
 	llama.cpp/src/models/maincoder.cpp \
 	llama.cpp/src/models/mamba.cpp \
@@ -160,8 +161,8 @@ LLAMA_SRCS_CPP := \
 	llama.cpp/src/models/starcoder.cpp \
 	llama.cpp/src/models/step35-iswa.cpp \
 	llama.cpp/src/models/starcoder2.cpp \
-	llama.cpp/src/models/t5-dec.cpp \
-	llama.cpp/src/models/t5-enc.cpp \
+	llama.cpp/src/models/t5.cpp \
+	llama.cpp/src/models/t5encoder.cpp \
 	llama.cpp/src/models/wavtokenizer-dec.cpp \
 	llama.cpp/src/models/xverse.cpp \
 	llama.cpp/src/llama-adapter.cpp \
@@ -208,6 +209,7 @@ COMMON_SRCS_CPP := \
 	llama.cpp/common/console.cpp \
 	llama.cpp/common/debug.cpp \
 	llama.cpp/common/download.cpp \
+	llama.cpp/common/fit.cpp \
 	llama.cpp/common/hf-cache.cpp \
 	llama.cpp/common/jinja/caps.cpp \
 	llama.cpp/common/jinja/lexer.cpp \
@@ -249,6 +251,10 @@ COMMON_SRCS_CPP += o/$(MODE)/llama.cpp/common/build-info.cpp
 
 COMMON_OBJS := $(COMMON_SRCS_CPP:%.cpp=o/$(MODE)/%.cpp.o)
 
+# build-info.cpp #includes "build-info.h" from llama.cpp/common; tests build the
+# single-prefix object directly via the generic rule, so add the include path.
+o/$(MODE)/llama.cpp/common/build-info.cpp.o: private CPPFLAGS += -iquote llama.cpp/common
+
 # ==============================================================================
 # Additional support files
 # ==============================================================================
@@ -281,6 +287,8 @@ MTMD_SRCS_CPP := \
 	llama.cpp/tools/mtmd/models/cogvlm.cpp \
 	llama.cpp/tools/mtmd/models/deepseekocr.cpp \
 	llama.cpp/tools/mtmd/models/conformer.cpp \
+	llama.cpp/tools/mtmd/models/dotsocr.cpp \
+	llama.cpp/tools/mtmd/models/gemma4a.cpp \
 	llama.cpp/tools/mtmd/models/gemma4v.cpp \
 	llama.cpp/tools/mtmd/models/glm4v.cpp \
 	llama.cpp/tools/mtmd/models/hunyuanocr.cpp \
@@ -295,10 +303,12 @@ MTMD_SRCS_CPP := \
 	llama.cpp/tools/mtmd/models/paddleocr.cpp \
 	llama.cpp/tools/mtmd/models/pixtral.cpp \
 	llama.cpp/tools/mtmd/models/qwen2vl.cpp \
+	llama.cpp/tools/mtmd/models/qwen3a.cpp \
 	llama.cpp/tools/mtmd/models/qwen3vl.cpp \
 	llama.cpp/tools/mtmd/models/siglip.cpp \
 	llama.cpp/tools/mtmd/models/step3vl.cpp \
 	llama.cpp/tools/mtmd/models/whisper-enc.cpp \
+	llama.cpp/tools/mtmd/models/yasa2.cpp \
 	llama.cpp/tools/mtmd/models/youtuvl.cpp
 
 MTMD_OBJS := $(MTMD_SRCS_CPP:%.cpp=o/$(MODE)/%.cpp.o)
@@ -342,6 +352,7 @@ TOOL_BENCH_SRCS := llama.cpp/tools/llama-bench/llama-bench.cpp
 
 TOOL_SERVER_SRCS := \
 	llama.cpp/tools/server/server.cpp \
+	llama.cpp/tools/server/server-chat.cpp \
 	llama.cpp/tools/server/server-common.cpp \
 	llama.cpp/tools/server/server-context.cpp \
 	llama.cpp/tools/server/server-http.cpp \

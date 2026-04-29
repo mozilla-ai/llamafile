@@ -62,7 +62,7 @@ diff --git a/ggml/src/ggml-cpu/ggml-cpu.cpp b/ggml/src/ggml-cpu/ggml-cpu.cpp
      struct ggml_backend_cpu_context * cpu_ctx = (struct ggml_backend_cpu_context *)backend->context;
  
      struct ggml_cplan cplan = ggml_graph_plan(cgraph, cpu_ctx->n_threads, cpu_ctx->threadpool);
-@@ -248,7 +248,7 @@ bool ggml_backend_is_cpu(ggml_backend_t backend) {
+@@ -250,7 +250,7 @@ bool ggml_backend_is_cpu(ggml_backend_t backend) {
      return backend != NULL && ggml_guid_matches(backend->guid, ggml_backend_cpu_guid());
  }
  
@@ -71,7 +71,7 @@ diff --git a/ggml/src/ggml-cpu/ggml-cpu.cpp b/ggml/src/ggml-cpu/ggml-cpu.cpp
      GGML_ASSERT(ggml_backend_is_cpu(backend_cpu));
  
      struct ggml_backend_cpu_context * ctx = (struct ggml_backend_cpu_context *)backend_cpu->context;
-@@ -267,7 +267,7 @@ void ggml_backend_cpu_set_threadpool(ggml_backend_t backend_cpu, ggml_threadpool
+@@ -269,7 +269,7 @@ void ggml_backend_cpu_set_threadpool(ggml_backend_t backend_cpu, ggml_threadpool
      ctx->threadpool = threadpool;
  }
  
@@ -80,7 +80,7 @@ diff --git a/ggml/src/ggml-cpu/ggml-cpu.cpp b/ggml/src/ggml-cpu/ggml-cpu.cpp
      GGML_ASSERT(ggml_backend_is_cpu(backend_cpu));
  
      struct ggml_backend_cpu_context * ctx = (struct ggml_backend_cpu_context *)backend_cpu->context;
-@@ -348,19 +348,19 @@ struct ggml_backend_cpu_device_context {
+@@ -350,19 +350,19 @@ struct ggml_backend_cpu_device_context {
      }
  };
  
@@ -103,7 +103,7 @@ diff --git a/ggml/src/ggml-cpu/ggml-cpu.cpp b/ggml/src/ggml-cpu/ggml-cpu.cpp
  #ifdef _WIN32
      MEMORYSTATUSEX status;
      status.dwLength = sizeof(status);
-@@ -379,13 +379,13 @@ static void ggml_backend_cpu_device_get_memory(ggml_backend_dev_t dev, size_t *
+@@ -381,13 +381,13 @@ static void ggml_backend_cpu_device_get_memory(ggml_backend_dev_t dev, size_t *
      GGML_UNUSED(dev);
  }
  
@@ -119,7 +119,7 @@ diff --git a/ggml/src/ggml-cpu/ggml-cpu.cpp b/ggml/src/ggml-cpu/ggml-cpu.cpp
      props->name        = ggml_backend_cpu_device_get_name(dev);
      props->description = ggml_backend_cpu_device_get_description(dev);
      props->type        = ggml_backend_cpu_device_get_type(dev);
-@@ -398,27 +398,27 @@ static void ggml_backend_cpu_device_get_props(ggml_backend_dev_t dev, struct ggm
+@@ -400,27 +400,27 @@ static void ggml_backend_cpu_device_get_props(ggml_backend_dev_t dev, struct ggm
      };
  }
  
@@ -151,7 +151,7 @@ diff --git a/ggml/src/ggml-cpu/ggml-cpu.cpp b/ggml/src/ggml-cpu/ggml-cpu.cpp
      const struct ggml_tensor * src0 = op->src[0];
      const struct ggml_tensor * src1 = op->src[1];
  
-@@ -471,7 +471,7 @@ static bool ggml_backend_cpu_device_supports_op(ggml_backend_dev_t dev, const st
+@@ -473,7 +473,7 @@ static bool ggml_backend_cpu_device_supports_op(ggml_backend_dev_t dev, const st
      }
  }
  
@@ -160,7 +160,7 @@ diff --git a/ggml/src/ggml-cpu/ggml-cpu.cpp b/ggml/src/ggml-cpu/ggml-cpu.cpp
      return ggml_backend_buft_is_host(buft) || ggml_backend_cpu_is_extra_buffer_type(buft);
      GGML_UNUSED(dev);
  }
-@@ -496,19 +496,19 @@ static const struct ggml_backend_device_i ggml_backend_cpu_device_i = {
+@@ -498,19 +498,19 @@ static const struct ggml_backend_device_i ggml_backend_cpu_device_i = {
  
  // CPU backend - backend (reg)
  
@@ -183,7 +183,7 @@ diff --git a/ggml/src/ggml-cpu/ggml-cpu.cpp b/ggml/src/ggml-cpu/ggml-cpu.cpp
      GGML_ASSERT(index == 0);
  
      static ggml_backend_cpu_device_context ctx;
-@@ -523,7 +523,7 @@ static ggml_backend_dev_t ggml_backend_cpu_reg_get_device(ggml_backend_reg_t reg
+@@ -525,7 +525,7 @@ static ggml_backend_dev_t ggml_backend_cpu_reg_get_device(ggml_backend_reg_t reg
  
  // This is intended to replace the the ggml_cpu_has_* functions when loading the CPU backend dynamically,
  // and additionally to allow other backends to expose their own list of features that applications can query using the same API
@@ -192,7 +192,7 @@ diff --git a/ggml/src/ggml-cpu/ggml-cpu.cpp b/ggml/src/ggml-cpu/ggml-cpu.cpp
      static std::vector<ggml_backend_feature> features = []() {
          ggml_cpu_init();
  
-@@ -637,7 +637,7 @@ static ggml_backend_feature * ggml_backend_cpu_get_features(ggml_backend_reg_t r
+@@ -639,7 +639,7 @@ static ggml_backend_feature * ggml_backend_cpu_get_features(ggml_backend_reg_t r
      GGML_UNUSED(reg);
  }
  

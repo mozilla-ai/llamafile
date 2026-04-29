@@ -25,7 +25,7 @@ diff --git a/ggml/src/ggml-backend-impl.h b/ggml/src/ggml-backend-impl.h
      };
  
      struct ggml_backend_buffer_type {
-@@ -39,22 +39,26 @@ extern "C" {
+@@ -39,26 +39,30 @@ extern "C" {
      //
  
      struct ggml_backend_buffer_i {
@@ -46,6 +46,12 @@ diff --git a/ggml/src/ggml-backend-impl.h b/ggml/src/ggml-backend-impl.h
 +        void         (GGML_CALL *memset_tensor)(ggml_backend_buffer_t buffer,       struct ggml_tensor * tensor,     uint8_t value, size_t offset, size_t size);
 +        void         (GGML_CALL *set_tensor)   (ggml_backend_buffer_t buffer,       struct ggml_tensor * tensor, const void * data, size_t offset, size_t size);
 +        void         (GGML_CALL *get_tensor)   (ggml_backend_buffer_t buffer, const struct ggml_tensor * tensor,       void * data, size_t offset, size_t size);
+         // (optional) 2d data copies
+-        void         (*set_tensor_2d)(ggml_backend_buffer_t buffer,       struct ggml_tensor * tensor, const void * data, size_t offset, size_t size, size_t n_copies, size_t stride_tensor, size_t stride_data);
+-        void         (*get_tensor_2d)(ggml_backend_buffer_t buffer, const struct ggml_tensor * tensor,       void * data, size_t offset, size_t size, size_t n_copies, size_t stride_tensor, size_t stride_data);
++        void         (GGML_CALL *set_tensor_2d)(ggml_backend_buffer_t buffer,       struct ggml_tensor * tensor, const void * data, size_t offset, size_t size, size_t n_copies, size_t stride_tensor, size_t stride_data);
++        void         (GGML_CALL *get_tensor_2d)(ggml_backend_buffer_t buffer, const struct ggml_tensor * tensor,       void * data, size_t offset, size_t size, size_t n_copies, size_t stride_tensor, size_t stride_data);
+ 
          // (optional) tensor copy: dst is in the buffer, src may be in any buffer, including buffers from a different backend (return false if not supported)
 -        bool         (*cpy_tensor)   (ggml_backend_buffer_t buffer, const struct ggml_tensor * src, struct ggml_tensor * dst);
 +        bool         (GGML_CALL *cpy_tensor)   (ggml_backend_buffer_t buffer, const struct ggml_tensor * src, struct ggml_tensor * dst);
@@ -62,7 +68,7 @@ diff --git a/ggml/src/ggml-backend-impl.h b/ggml/src/ggml-backend-impl.h
      };
  
      struct ggml_backend_buffer {
-@@ -85,38 +89,38 @@ extern "C" {
+@@ -103,40 +107,40 @@ extern "C" {
      //
  
      struct ggml_backend_i {
@@ -73,11 +79,15 @@ diff --git a/ggml/src/ggml-backend-impl.h b/ggml/src/ggml-backend-impl.h
 +        void (GGML_CALL *free)(ggml_backend_t backend);
  
          // (optional) asynchronous tensor data access
--        void (*set_tensor_async)(ggml_backend_t backend,       struct ggml_tensor * tensor, const void * data, size_t offset, size_t size);
--        void (*get_tensor_async)(ggml_backend_t backend, const struct ggml_tensor * tensor,       void * data, size_t offset, size_t size);
+-        void (*set_tensor_async)   (ggml_backend_t backend,       struct ggml_tensor * tensor, const void * data, size_t offset, size_t size);
+-        void (*get_tensor_async)   (ggml_backend_t backend, const struct ggml_tensor * tensor,       void * data, size_t offset, size_t size);
+-        void (*set_tensor_2d_async)(ggml_backend_t backend,       struct ggml_tensor * tensor, const void * data, size_t offset, size_t size, size_t n_copies, size_t stride_tensor, size_t stride_data);
+-        void (*get_tensor_2d_async)(ggml_backend_t backend, const struct ggml_tensor * tensor,       void * data, size_t offset, size_t size, size_t n_copies, size_t stride_tensor, size_t stride_data);
 -        bool (*cpy_tensor_async)(ggml_backend_t backend_src, ggml_backend_t backend_dst, const struct ggml_tensor * src, struct ggml_tensor * dst);
-+        void (GGML_CALL *set_tensor_async)(ggml_backend_t backend,       struct ggml_tensor * tensor, const void * data, size_t offset, size_t size);
-+        void (GGML_CALL *get_tensor_async)(ggml_backend_t backend, const struct ggml_tensor * tensor,       void * data, size_t offset, size_t size);
++        void (GGML_CALL *set_tensor_async)   (ggml_backend_t backend,       struct ggml_tensor * tensor, const void * data, size_t offset, size_t size);
++        void (GGML_CALL *get_tensor_async)   (ggml_backend_t backend, const struct ggml_tensor * tensor,       void * data, size_t offset, size_t size);
++        void (GGML_CALL *set_tensor_2d_async)(ggml_backend_t backend,       struct ggml_tensor * tensor, const void * data, size_t offset, size_t size, size_t n_copies, size_t stride_tensor, size_t stride_data);
++        void (GGML_CALL *get_tensor_2d_async)(ggml_backend_t backend, const struct ggml_tensor * tensor,       void * data, size_t offset, size_t size, size_t n_copies, size_t stride_tensor, size_t stride_data);
 +        bool (GGML_CALL *cpy_tensor_async)(ggml_backend_t backend_src, ggml_backend_t backend_dst, const struct ggml_tensor * src, struct ggml_tensor * dst);
  
          // (optional) complete all pending operations (required if the backend supports async operations)
@@ -115,7 +125,7 @@ diff --git a/ggml/src/ggml-backend-impl.h b/ggml/src/ggml-backend-impl.h
      };
  
      struct ggml_backend {
-@@ -139,46 +143,46 @@ extern "C" {
+@@ -159,46 +163,46 @@ extern "C" {
      //       the current functions to obtain the properties can remain, since they are more convenient for often used properties
      struct ggml_backend_device_i {
          // device name: short identifier for this device, such as "CPU" or "CUDA0"
@@ -177,7 +187,7 @@ diff --git a/ggml/src/ggml-backend-impl.h b/ggml/src/ggml-backend-impl.h
      };
  
      struct ggml_backend_device {
-@@ -192,15 +196,15 @@ extern "C" {
+@@ -212,15 +216,15 @@ extern "C" {
      //
  
      struct ggml_backend_reg_i {

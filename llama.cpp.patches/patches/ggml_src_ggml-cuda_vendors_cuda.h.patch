@@ -19,7 +19,7 @@ diff --git a/ggml/src/ggml-cuda/vendors/cuda.h b/ggml/src/ggml-cuda/vendors/cuda
  #include <cuda_bf16.h>
  #include <cuda_fp16.h>
  
-@@ -17,8 +27,10 @@
+@@ -21,8 +31,10 @@
  
  #if CUDART_VERSION < 11020
  #define CU_DEVICE_ATTRIBUTE_VIRTUAL_MEMORY_MANAGEMENT_SUPPORTED CU_DEVICE_ATTRIBUTE_VIRTUAL_ADDRESS_MANAGEMENT_SUPPORTED

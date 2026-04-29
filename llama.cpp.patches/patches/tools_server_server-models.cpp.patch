@@ -1,7 +1,7 @@
 diff --git a/tools/server/server-models.cpp b/tools/server/server-models.cpp
 --- a/llama.cpp/tools/server/server-models.cpp
 +++ b/llama.cpp/tools/server/server-models.cpp
-@@ -27,6 +27,7 @@
+@@ -30,6 +30,7 @@
  #include <netinet/in.h>
  #include <arpa/inet.h>
  #include <unistd.h>
@@ -9,7 +9,7 @@ diff --git a/tools/server/server-models.cpp b/tools/server/server-models.cpp
  extern char **environ;
  #endif
  
-@@ -519,9 +520,12 @@ void server_models::unload_lru() {
+@@ -523,9 +524,12 @@ void server_models::unload_lru() {
          // wait for unload to complete
          {
              std::unique_lock<std::mutex> lk(mutex);
@@ -25,7 +25,7 @@ diff --git a/tools/server/server-models.cpp b/tools/server/server-models.cpp
          }
      }
  }
-@@ -623,6 +627,14 @@ void server_models::load(const std::string & name) {
+@@ -627,6 +631,14 @@ void server_models::load(const std::string & name) {
          });
  
          std::thread stopping_thread([&]() {
@@ -40,7 +40,7 @@ diff --git a/tools/server/server-models.cpp b/tools/server/server-models.cpp
              // thread to monitor stopping signal OR child crash
              auto is_stopping = [this, &name]() {
                  return this->stopping_models.find(name) != this->stopping_models.end();
-@@ -632,7 +644,10 @@ void server_models::load(const std::string & name) {
+@@ -636,7 +648,10 @@ void server_models::load(const std::string & name) {
              };
              {
                  std::unique_lock<std::mutex> lk(this->mutex);
@@ -52,7 +52,7 @@ diff --git a/tools/server/server-models.cpp b/tools/server/server-models.cpp
              }
              // child may have already exited (e.g. crashed) — skip shutdown sequence
              if (!subprocess_alive(child_proc.get())) {
-@@ -753,13 +768,14 @@ void server_models::update_status(const std::string & name, server_model_status
+@@ -762,13 +777,14 @@ void server_models::update_status(const std::string & name, server_model_status
  
  void server_models::wait_until_loading_finished(const std::string & name) {
      std::unique_lock<std::mutex> lk(mutex);

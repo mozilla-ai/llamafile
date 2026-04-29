@@ -1,7 +1,7 @@
 diff --git a/tools/server/server.cpp b/tools/server/server.cpp
 --- a/llama.cpp/tools/server/server.cpp
 +++ b/llama.cpp/tools/server/server.cpp
-@@ -12,6 +12,7 @@
+@@ -14,6 +14,7 @@
  #include <atomic>
  #include <clocale>
  #include <exception>
@@ -9,7 +9,7 @@ diff --git a/tools/server/server.cpp b/tools/server/server.cpp
  #include <signal.h>
  #include <thread> // for std::thread::hardware_concurrency
  
-@@ -19,6 +20,11 @@
+@@ -21,6 +22,11 @@
  #include <windows.h>
  #endif
  
@@ -21,7 +21,7 @@ diff --git a/tools/server/server.cpp b/tools/server/server.cpp
  static std::function<void(int)> shutdown_handler;
  static std::atomic_flag is_terminating = ATOMIC_FLAG_INIT;
  
-@@ -69,12 +75,22 @@ static server_http_context::handler_t ex_wrapper(server_http_context::handler_t
+@@ -71,12 +77,22 @@ static server_http_context::handler_t ex_wrapper(server_http_context::handler_t
      };
  }
  
@@ -45,7 +45,7 @@ diff --git a/tools/server/server.cpp b/tools/server/server.cpp
      common_init();
  
      if (!common_params_parse(argc, argv, params, LLAMA_EXAMPLE_SERVER)) {
-@@ -293,6 +309,13 @@ int main(int argc, char ** argv) {
+@@ -295,6 +311,13 @@ int main(int argc, char ** argv) {
              // this will unblock start_loop()
              ctx_server.terminate();
          };
@@ -59,7 +59,7 @@ diff --git a/tools/server/server.cpp b/tools/server/server.cpp
      }
  
      // TODO: refactor in common/console
-@@ -324,6 +347,11 @@ int main(int argc, char ** argv) {
+@@ -326,6 +349,11 @@ int main(int argc, char ** argv) {
          LOG_INF("%s: server is listening on %s\n", __func__, ctx_http.listening_address.c_str());
          LOG_INF("%s: starting the main loop...\n", __func__);
  
@@ -71,7 +71,7 @@ diff --git a/tools/server/server.cpp b/tools/server/server.cpp
          // optionally, notify router server that this instance is ready
          std::thread monitor_thread;
          if (server_models::is_child_server()) {
-@@ -347,5 +375,48 @@ int main(int argc, char ** argv) {
+@@ -349,5 +377,48 @@ int main(int argc, char ** argv) {
          }
      }
  

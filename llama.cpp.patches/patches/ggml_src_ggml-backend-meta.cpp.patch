@@ -1,0 +1,261 @@
+diff --git a/ggml/src/ggml-backend-meta.cpp b/ggml/src/ggml-backend-meta.cpp
+--- a/llama.cpp/ggml/src/ggml-backend-meta.cpp
++++ b/llama.cpp/ggml/src/ggml-backend-meta.cpp
+@@ -83,19 +83,19 @@ struct ggml_backend_meta_device_context {
+ 
+ static bool ggml_backend_dev_is_meta(ggml_backend_dev_t dev);
+ 
+-static const char * ggml_backend_meta_device_get_name(ggml_backend_dev_t dev) {
++static const char * GGML_CALL ggml_backend_meta_device_get_name(ggml_backend_dev_t dev) {
+     GGML_ASSERT(ggml_backend_dev_is_meta(dev));
+     const ggml_backend_meta_device_context * meta_dev_ctx = (const ggml_backend_meta_device_context *) dev->context;
+     return meta_dev_ctx->name.c_str();
+ }
+ 
+-static const char * ggml_backend_meta_device_get_description(ggml_backend_dev_t dev) {
++static const char * GGML_CALL ggml_backend_meta_device_get_description(ggml_backend_dev_t dev) {
+     GGML_ASSERT(ggml_backend_dev_is_meta(dev));
+     const ggml_backend_meta_device_context * meta_dev_ctx = (const ggml_backend_meta_device_context *) dev->context;
+     return meta_dev_ctx->description.c_str();
+ }
+ 
+-static void ggml_backend_meta_device_get_memory(ggml_backend_dev_t dev, size_t * free, size_t * total) {
++static void GGML_CALL ggml_backend_meta_device_get_memory(ggml_backend_dev_t dev, size_t * free, size_t * total) {
+     GGML_ASSERT(ggml_backend_dev_is_meta(dev));
+     const ggml_backend_meta_device_context * meta_dev_ctx = (const ggml_backend_meta_device_context *) dev->context;
+     *free  = 0;
+@@ -108,13 +108,13 @@ static void ggml_backend_meta_device_get_memory(ggml_backend_dev_t dev, size_t *
+     }
+ }
+ 
+-static enum ggml_backend_dev_type ggml_backend_meta_device_get_type(ggml_backend_dev_t dev) {
++static enum ggml_backend_dev_type GGML_CALL ggml_backend_meta_device_get_type(ggml_backend_dev_t dev) {
+     return GGML_BACKEND_DEVICE_TYPE_META;
+ 
+     GGML_UNUSED(dev);
+ }
+ 
+-static void ggml_backend_meta_device_get_props(ggml_backend_dev_t dev, ggml_backend_dev_props * props) {
++static void GGML_CALL ggml_backend_meta_device_get_props(ggml_backend_dev_t dev, ggml_backend_dev_props * props) {
+     GGML_ASSERT(ggml_backend_dev_is_meta(dev));
+     const ggml_backend_meta_device_context * meta_dev_ctx = (const ggml_backend_meta_device_context *) dev->context;
+ 
+@@ -142,20 +142,20 @@ static void ggml_backend_meta_device_get_props(ggml_backend_dev_t dev, ggml_back
+     }
+ }
+ 
+-static ggml_backend_t ggml_backend_meta_device_init_backend(ggml_backend_dev_t dev, const char * params);
++static ggml_backend_t GGML_CALL ggml_backend_meta_device_init_backend(ggml_backend_dev_t dev, const char * params);
+ 
+-static ggml_backend_buffer_type_t ggml_backend_meta_device_get_buffer_type(ggml_backend_dev_t dev);
++static ggml_backend_buffer_type_t GGML_CALL ggml_backend_meta_device_get_buffer_type(ggml_backend_dev_t dev);
+ 
+-static ggml_backend_buffer_type_t ggml_backend_meta_device_get_host_buffer_type(ggml_backend_dev_t dev);
++static ggml_backend_buffer_type_t GGML_CALL ggml_backend_meta_device_get_host_buffer_type(ggml_backend_dev_t dev);
+ 
+-static bool ggml_backend_meta_device_supports_op(ggml_backend_dev_t dev, const ggml_tensor * op) {
++static bool GGML_CALL ggml_backend_meta_device_supports_op(ggml_backend_dev_t dev, const ggml_tensor * op) {
+     GGML_ASSERT(ggml_backend_dev_is_meta(dev));
+     const ggml_backend_meta_device_context * meta_dev_ctx = (const ggml_backend_meta_device_context *) dev->context;
+     return std::all_of(meta_dev_ctx->simple_devs.begin(), meta_dev_ctx->simple_devs.end(),
+         [op](ggml_backend_dev_t simple_dev) { return ggml_backend_dev_supports_op(simple_dev, op); });
+ }
+ 
+-static bool ggml_backend_meta_device_supports_buft(ggml_backend_dev_t dev, ggml_backend_buffer_type_t buft) {
++static bool GGML_CALL ggml_backend_meta_device_supports_buft(ggml_backend_dev_t dev, ggml_backend_buffer_type_t buft) {
+     GGML_ASSERT(ggml_backend_dev_is_meta(dev));
+     ggml_backend_dev_t dev_buft = ggml_backend_buft_get_device(buft);
+     if (!ggml_backend_dev_is_meta(dev_buft)) {
+@@ -272,7 +272,7 @@ static size_t ggml_backend_meta_buft_n_bufts(ggml_backend_buffer_type_t meta_buf
+     return meta_buft_ctx->simple_bufts.size();
+ }
+ 
+-static const char * ggml_backend_meta_buffer_type_get_name(ggml_backend_buffer_type_t buft) {
++static const char * GGML_CALL ggml_backend_meta_buffer_type_get_name(ggml_backend_buffer_type_t buft) {
+     GGML_ASSERT(ggml_backend_buft_is_meta(buft));
+     const ggml_backend_meta_buffer_type_context * meta_buft_ctx = (const ggml_backend_meta_buffer_type_context *) buft->context;
+     return meta_buft_ctx->name.c_str();
+@@ -285,9 +285,9 @@ static ggml_backend_buffer_type_t ggml_backend_meta_buft_simple_buft(ggml_backen
+     return meta_buft_ctx->simple_bufts[index];
+ }
+ 
+-static ggml_backend_buffer_t ggml_backend_meta_buffer_type_alloc_buffer(ggml_backend_buffer_type_t buft, size_t size);
++static ggml_backend_buffer_t GGML_CALL ggml_backend_meta_buffer_type_alloc_buffer(ggml_backend_buffer_type_t buft, size_t size);
+ 
+-static size_t ggml_backend_meta_buffer_type_get_alignment(ggml_backend_buffer_type_t buft) {
++static size_t GGML_CALL ggml_backend_meta_buffer_type_get_alignment(ggml_backend_buffer_type_t buft) {
+     const size_t n_simple_bufts = ggml_backend_meta_buft_n_bufts(buft);
+     size_t max_alignment = 1;
+     for (size_t i = 0; i < n_simple_bufts; i++) {
+@@ -298,7 +298,7 @@ static size_t ggml_backend_meta_buffer_type_get_alignment(ggml_backend_buffer_ty
+     return max_alignment;
+ }
+ 
+-static size_t ggml_backend_meta_buffer_type_get_max_size(ggml_backend_buffer_type_t buft) {
++static size_t GGML_CALL ggml_backend_meta_buffer_type_get_max_size(ggml_backend_buffer_type_t buft) {
+     const size_t n_simple_bufts = ggml_backend_meta_buft_n_bufts(buft);
+     size_t max_size = SIZE_MAX;
+     for (size_t i = 0; i < n_simple_bufts; i++) {
+@@ -307,7 +307,7 @@ static size_t ggml_backend_meta_buffer_type_get_max_size(ggml_backend_buffer_typ
+     return max_size;
+ }
+ 
+-static size_t ggml_backend_meta_buffer_type_get_alloc_size(ggml_backend_buffer_type_t buft, const ggml_tensor * tensor) {
++static size_t GGML_CALL ggml_backend_meta_buffer_type_get_alloc_size(ggml_backend_buffer_type_t buft, const ggml_tensor * tensor) {
+     const size_t n_simple_bufts = ggml_backend_meta_buft_n_bufts(buft);
+     size_t max_alloc_size = 0;
+     for (size_t i = 0; i < n_simple_bufts; i++) {
+@@ -317,7 +317,7 @@ static size_t ggml_backend_meta_buffer_type_get_alloc_size(ggml_backend_buffer_t
+     return max_alloc_size;
+ }
+ 
+-static bool ggml_backend_meta_buffer_type_is_host(ggml_backend_buffer_type_t buft) {
++static bool GGML_CALL ggml_backend_meta_buffer_type_is_host(ggml_backend_buffer_type_t buft) {
+     const size_t n_simple_bufts = ggml_backend_meta_buft_n_bufts(buft);
+     for (size_t i = 0; i < n_simple_bufts; i++) {
+         if (!ggml_backend_buft_is_host(ggml_backend_meta_buft_simple_buft(buft, i))) {
+@@ -340,7 +340,7 @@ bool ggml_backend_buft_is_meta(ggml_backend_buffer_type_t buft) {
+     return buft != nullptr && buft->iface.get_name == ggml_backend_meta_buffer_type_iface.get_name;
+ }
+ 
+-static ggml_backend_buffer_type_t ggml_backend_meta_device_get_buffer_type(ggml_backend_dev_t dev) {
++static ggml_backend_buffer_type_t GGML_CALL ggml_backend_meta_device_get_buffer_type(ggml_backend_dev_t dev) {
+     static std::map<ggml_backend_dev_t, struct ggml_backend_buffer_type> meta_bufts;
+     GGML_ASSERT(ggml_backend_dev_is_meta(dev));
+     {
+@@ -367,7 +367,7 @@ static ggml_backend_buffer_type_t ggml_backend_meta_device_get_buffer_type(ggml_
+     return &result.first->second;
+ }
+ 
+-static ggml_backend_buffer_type_t ggml_backend_meta_device_get_host_buffer_type(ggml_backend_dev_t dev) {
++static ggml_backend_buffer_type_t GGML_CALL ggml_backend_meta_device_get_host_buffer_type(ggml_backend_dev_t dev) {
+     GGML_ASSERT(ggml_backend_dev_is_meta(dev));
+     const ggml_backend_meta_device_context * meta_dev_ctx = (const ggml_backend_meta_device_context *) dev->context;
+ 
+@@ -414,7 +414,7 @@ struct ggml_backend_meta_buffer_context {
+     }
+ };
+ 
+-static void ggml_backend_meta_buffer_free_buffer(ggml_backend_buffer_t buffer) {
++static void GGML_CALL ggml_backend_meta_buffer_free_buffer(ggml_backend_buffer_t buffer) {
+     GGML_ASSERT(ggml_backend_buffer_is_meta(buffer));
+     ggml_backend_meta_buffer_context * buf_ctx = (ggml_backend_meta_buffer_context *) buffer->context;
+     for (auto & [ctx, buf] : buf_ctx->buf_configs) {
+@@ -1077,12 +1077,12 @@ static struct ggml_backend_meta_split_state ggml_backend_meta_get_split_state(co
+     return ret;
+ }
+ 
+-static void * ggml_backend_meta_buffer_get_base(ggml_backend_buffer_t buffer) {
++static void * GGML_CALL ggml_backend_meta_buffer_get_base(ggml_backend_buffer_t buffer) {
+     GGML_UNUSED(buffer);
+     return (void *) 0x1000000000000000; // FIXME
+ }
+ 
+-static enum ggml_status ggml_backend_meta_buffer_init_tensor(ggml_backend_buffer_t buffer, ggml_tensor * tensor) {
++static enum ggml_status GGML_CALL ggml_backend_meta_buffer_init_tensor(ggml_backend_buffer_t buffer, ggml_tensor * tensor) {
+     GGML_ASSERT(ggml_backend_buffer_is_meta(buffer));
+     ggml_backend_meta_buffer_context * buf_ctx = (ggml_backend_meta_buffer_context *) buffer->context;
+     const size_t n_simple_bufs = ggml_backend_meta_buffer_n_bufs(buffer);
+@@ -1197,7 +1197,7 @@ static enum ggml_status ggml_backend_meta_buffer_init_tensor(ggml_backend_buffer
+     return GGML_STATUS_SUCCESS;
+ }
+ 
+-static void ggml_backend_meta_buffer_set_tensor(ggml_backend_buffer_t buffer, ggml_tensor * tensor, const void * data, size_t offset, size_t size) {
++static void GGML_CALL ggml_backend_meta_buffer_set_tensor(ggml_backend_buffer_t buffer, ggml_tensor * tensor, const void * data, size_t offset, size_t size) {
+     const size_t n_bufs = ggml_backend_meta_buffer_n_bufs(buffer);
+     GGML_ASSERT(ggml_is_contiguous(tensor));
+ 
+@@ -1304,7 +1304,7 @@ static void ggml_backend_meta_buffer_set_tensor(ggml_backend_buffer_t buffer, gg
+     }
+ }
+ 
+-static void ggml_backend_meta_buffer_get_tensor(ggml_backend_buffer_t buffer, const ggml_tensor * tensor, void * data, size_t offset, size_t size) {
++static void GGML_CALL ggml_backend_meta_buffer_get_tensor(ggml_backend_buffer_t buffer, const ggml_tensor * tensor, void * data, size_t offset, size_t size) {
+     const size_t n_bufs = ggml_backend_meta_buffer_n_bufs(buffer);
+     GGML_ASSERT(ggml_is_contiguous(tensor));
+ 
+@@ -1397,14 +1397,14 @@ static void ggml_backend_meta_buffer_get_tensor(ggml_backend_buffer_t buffer, co
+     }
+ }
+ 
+-static void ggml_backend_meta_buffer_clear(ggml_backend_buffer_t buffer, uint8_t value) {
++static void GGML_CALL ggml_backend_meta_buffer_clear(ggml_backend_buffer_t buffer, uint8_t value) {
+     const size_t n_buffers = ggml_backend_meta_buffer_n_bufs(buffer);
+     for (size_t i = 0; i < n_buffers; i++) {
+         ggml_backend_buffer_clear(ggml_backend_meta_buffer_simple_buffer(buffer, i), value);
+     }
+ }
+ 
+-static void ggml_backend_meta_buffer_reset(ggml_backend_buffer_t buffer) {
++static void GGML_CALL ggml_backend_meta_buffer_reset(ggml_backend_buffer_t buffer) {
+     const size_t n_buffers = ggml_backend_meta_buffer_n_bufs(buffer);
+     for (size_t i = 0; i < n_buffers; i++) {
+         ggml_backend_buffer_reset(ggml_backend_meta_buffer_simple_buffer(buffer, i));
+@@ -1429,7 +1429,7 @@ bool ggml_backend_buffer_is_meta(ggml_backend_buffer_t buf) {
+     return buf != nullptr && buf->iface.free_buffer == ggml_backend_meta_buffer_iface.free_buffer;
+ }
+ 
+-static ggml_backend_buffer_t ggml_backend_meta_buffer_type_alloc_buffer(ggml_backend_buffer_type_t buft, size_t size) {
++static ggml_backend_buffer_t GGML_CALL ggml_backend_meta_buffer_type_alloc_buffer(ggml_backend_buffer_type_t buft, size_t size) {
+     const size_t n_simple_bufts = ggml_backend_meta_buft_n_bufts(buft);
+ 
+     ggml_init_params params = {
+@@ -1567,20 +1567,20 @@ struct ggml_backend_meta_context {
+     }
+ };
+ 
+-static const char * ggml_backend_meta_get_name(ggml_backend_t backend) {
++static const char * GGML_CALL ggml_backend_meta_get_name(ggml_backend_t backend) {
+     GGML_ASSERT(ggml_backend_is_meta(backend));
+     const ggml_backend_meta_context * backend_ctx = (const ggml_backend_meta_context *) backend->context;
+     return backend_ctx->name.c_str();
+ }
+ 
+-static void ggml_backend_meta_free(ggml_backend_t backend) {
++static void GGML_CALL ggml_backend_meta_free(ggml_backend_t backend) {
+     GGML_ASSERT(ggml_backend_is_meta(backend));
+     ggml_backend_meta_context * backend_ctx = (ggml_backend_meta_context *) backend->context;
+     delete backend_ctx;
+     delete backend;
+ }
+ 
+-static void ggml_backend_meta_set_tensor_async(ggml_backend_t backend, ggml_tensor * tensor, const void * data, size_t offset, size_t size) {
++static void GGML_CALL ggml_backend_meta_set_tensor_async(ggml_backend_t backend, ggml_tensor * tensor, const void * data, size_t offset, size_t size) {
+     const size_t n_backends = ggml_backend_meta_n_backends(backend);
+     GGML_ASSERT(offset == 0);
+     GGML_ASSERT(ggml_is_contiguous(tensor));
+@@ -1621,7 +1621,7 @@ static void ggml_backend_meta_set_tensor_async(ggml_backend_t backend, ggml_tens
+     }
+ }
+ 
+-static void ggml_backend_meta_get_tensor_async(ggml_backend_t backend, const ggml_tensor * tensor, void * data, size_t offset, size_t size) {
++static void GGML_CALL ggml_backend_meta_get_tensor_async(ggml_backend_t backend, const ggml_tensor * tensor, void * data, size_t offset, size_t size) {
+     const size_t n_backends = ggml_backend_meta_n_backends(backend);
+     GGML_ASSERT(offset == 0);
+     GGML_ASSERT(ggml_is_contiguous(tensor));
+@@ -1662,14 +1662,14 @@ static void ggml_backend_meta_get_tensor_async(ggml_backend_t backend, const ggm
+     }
+ }
+ 
+-static void ggml_backend_meta_synchronize(ggml_backend_t backend) {
++static void GGML_CALL ggml_backend_meta_synchronize(ggml_backend_t backend) {
+     const size_t n_backends = ggml_backend_meta_n_backends(backend);
+     for (size_t i = 0; i < n_backends; i++) {
+         ggml_backend_synchronize(ggml_backend_meta_simple_backend(backend, i));
+     }
+ }
+ 
+-static enum ggml_status ggml_backend_meta_graph_compute(ggml_backend_t backend, struct ggml_cgraph * cgraph) {
++static enum ggml_status GGML_CALL ggml_backend_meta_graph_compute(ggml_backend_t backend, struct ggml_cgraph * cgraph) {
+     GGML_ASSERT(cgraph->grads == nullptr);
+     const size_t n_backends = ggml_backend_meta_n_backends(backend);
+     ggml_backend_meta_context * backend_ctx = (ggml_backend_meta_context *) backend->context;
+@@ -2101,7 +2101,7 @@ bool ggml_backend_is_meta(ggml_backend_t backend) {
+     return backend != nullptr && backend->iface.get_name == ggml_backend_meta_i.get_name;
+ }
+ 
+-static ggml_backend_t ggml_backend_meta_device_init_backend(ggml_backend_dev_t dev, const char * params) {
++static ggml_backend_t GGML_CALL ggml_backend_meta_device_init_backend(ggml_backend_dev_t dev, const char * params) {
+     ggml_backend_meta_context * backend_ctx = new ggml_backend_meta_context(dev, params);
+ 
+     ggml_backend_t backend = new struct ggml_backend;
