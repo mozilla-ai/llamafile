@@ -54,6 +54,7 @@ extern char **environ;
 __static_yoink("llama.cpp/ggml/src/ggml.c");
 __static_yoink("llama.cpp/ggml/src/ggml-alloc.c");
 __static_yoink("llama.cpp/ggml/src/ggml-backend.cpp");
+__static_yoink("llama.cpp/ggml/src/ggml-backend-meta.cpp");
 __static_yoink("llama.cpp/ggml/src/ggml-quants.c");
 __static_yoink("llama.cpp/ggml/src/ggml-threading.cpp");
 
@@ -108,6 +109,7 @@ static const struct MetalSource {
     {"/zip/llama.cpp/ggml/src/ggml.c", "ggml.c"},
     {"/zip/llama.cpp/ggml/src/ggml-alloc.c", "ggml-alloc.c"},
     {"/zip/llama.cpp/ggml/src/ggml-backend.cpp", "ggml-backend.cpp"},
+    {"/zip/llama.cpp/ggml/src/ggml-backend-meta.cpp", "ggml-backend-meta.cpp"},
     {"/zip/llama.cpp/ggml/src/ggml-quants.c", "ggml-quants.c"},
     {"/zip/llama.cpp/ggml/src/ggml-threading.cpp", "ggml-threading.cpp"},
 
@@ -379,6 +381,7 @@ static bool BuildMetal(const char *dso) {
             "ggml-alloc.c",
             "ggml-quants.c",
             "ggml-backend.cpp",
+            "ggml-backend-meta.cpp",
             "ggml-threading.cpp",
             "ggml-metal.cpp",
             "ggml-metal-device.cpp",

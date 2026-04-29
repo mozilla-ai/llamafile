@@ -175,6 +175,7 @@ compile_ggml_core() {
         $llama_cpp_dir/ggml/src/ggml.c \
         $llama_cpp_dir/ggml/src/ggml-alloc.c \
         $llama_cpp_dir/ggml/src/ggml-backend.cpp \
+        $llama_cpp_dir/ggml/src/ggml-backend-meta.cpp \
         $llama_cpp_dir/ggml/src/ggml-quants.c \
         $llama_cpp_dir/ggml/src/ggml-threading.cpp"
 

@@ -249,7 +249,7 @@ for %%f in (ggml.c ggml-alloc.c ggml-quants.c) do (
 )
 
 :: C++ sources
-for %%f in (ggml-backend.cpp ggml-threading.cpp) do (
+for %%f in (ggml-backend.cpp ggml-backend-meta.cpp ggml-threading.cpp) do (
     set "SRC=%GGML_SRC_DIR%\%%f"
     set "BASE=%%~nf"
     set "OBJ=%BUILD_DIR%\ggml-core-!BASE!.obj"

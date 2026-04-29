@@ -234,6 +234,7 @@ LLAMAFILE_METAL_SOURCES := \
 	o/$(MODE)/llama.cpp/ggml/src/ggml.c.zip.o \
 	o/$(MODE)/llama.cpp/ggml/src/ggml-alloc.c.zip.o \
 	o/$(MODE)/llama.cpp/ggml/src/ggml-backend.cpp.zip.o \
+	o/$(MODE)/llama.cpp/ggml/src/ggml-backend-meta.cpp.zip.o \
 	o/$(MODE)/llama.cpp/ggml/src/ggml-quants.c.zip.o \
 	o/$(MODE)/llama.cpp/ggml/src/ggml-threading.cpp.zip.o \
 	o/$(MODE)/llama.cpp/ggml/include/ggml.h.zip.o \
