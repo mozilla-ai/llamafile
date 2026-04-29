@@ -4,7 +4,7 @@ Thank you for your interest in contributing to llamafile.
 
 We welcome fixes, docs improvements, tests, build work, and larger feature work. 
 
-If your change touches the `llama.cpp/` submodule, also read [`llama.cpp/CONTRIBUTING.md`](llama.cpp/CONTRIBUTING.md). That file covers additional upstream expectations for code style, testing, and review.
+Submodule changes (`llama.cpp/`, `whisper.cpp/`, `stable-diffusion.cpp/`) are applied as patches rather than committed directly. If your change should also go upstream, open a PR to the upstream repository (e.g., [llama.cpp](https://github.com/ggml-org/llama.cpp)). Otherwise, follow the [submodule changes workflow](#submodule-changes) described below.
 
 ## Before You Start
 
@@ -40,7 +40,7 @@ You will need:
 - `unzip`
 - Git
 
-Windows contributors also need Cosmos bash.
+Windows contributors can use [MSYS2](https://www.msys2.org/) or WSL. See [docs/building_dlls.md](docs/building_dlls.md) for detailed Windows setup instructions.
 
 ### Quick Start
 
@@ -127,6 +127,8 @@ make setup
 .cosmocc/4.0.2/bin/make -j8
 .cosmocc/4.0.2/bin/make check
 ```
+
+For a more detailed walkthrough of the patch-based workflow, see [docs/skills/llamafile/development.md](docs/skills/llamafile/development.md#making-changes-to-a-submodule).
 
 ### 3. Write tests
 
