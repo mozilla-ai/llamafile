@@ -14,7 +14,7 @@ other hand, you have powerful hardware and/or GPUs, [feel free to choose](exampl
 larger and more expressive models which should provide more accurate
 responses.
 
-1. Download [Qwen3.5-0.8B-Q8_0.llamafile](https://huggingface.co/mozilla-ai/llamafile_0.10.0/resolve/main/Qwen3.5-0.8B-Q8_0.llamafile) (1.77 GB).
+1. Download [Qwen3.5-0.8B-Q8_0.llamafile](https://huggingface.co/mozilla-ai/llamafile_0.10/resolve/main/Qwen3.5-0.8B-Q8_0.llamafile) (1.77 GB).
 
 2. Open your computer's terminal.
 
@@ -175,7 +175,7 @@ enable you to work around Windows' 4GB executable file size limit.
 For Windows users, here's an example for the gpt-oss LLM (whose size is >12GB):
 
 ```sh
-curl -L -o llamafile.exe https://huggingface.co/mozilla-ai/llamafile_0.10.0/resolve/main/llamafile_0.10.0
+curl -L -o llamafile.exe https://huggingface.co/mozilla-ai/llamafile_0.10/resolve/main/llamafile_0.10.1
 curl -L -o gpt-oss.gguf https://huggingface.co/unsloth/gpt-oss-20b-GGUF/resolve/main/gpt-oss-20b-Q5_K_S.gguf
 ./llamafile.exe -m gpt-oss.gguf
 ```
