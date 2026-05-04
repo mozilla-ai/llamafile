@@ -120,8 +120,9 @@ static bool LinkCuda(const char *dso) {
     else
         *(void **)(&g_cuda.backend_reg.default_abi) = sym;
 
-    // Optional - don't fail if not found
+    // Required: TryGpuBackend uses this to reject 0-device DSOs
     sym = cosmo_dlsym(lib, "ggml_backend_cuda_get_device_count");
+    ok &= (sym != NULL);
     if (IsWindows())
         *(void **)(&g_cuda.get_device_count.windows_abi) = sym;
     else
@@ -189,18 +190,16 @@ static bool TryGpuBackend(const char *dso, bool is_amd) {
     // loads fine even when no compatible hardware is present, so we must
     // probe device count to avoid registering a 0-device backend (which
     // would then prevent fallback to other GPU backends in AUTO mode).
-    if (g_cuda.get_device_count.default_abi || g_cuda.get_device_count.windows_abi) {
-        int count;
-        if (IsWindows())
-            count = g_cuda.get_device_count.windows_abi();
-        else
-            count = g_cuda.get_device_count.default_abi();
-        if (count <= 0) {
-            llamafile_info("cuda", "%s library loaded but no devices detected; trying next backend",
-                           is_amd ? "ROCm" : "CUDA");
-            UnlinkCuda();
-            return false;
-        }
+    int count;
+    if (IsWindows())
+        count = g_cuda.get_device_count.windows_abi();
+    else
+        count = g_cuda.get_device_count.default_abi();
+    if (count <= 0) {
+        llamafile_info("cuda", "%s library loaded but no devices detected; trying next backend",
+                       is_amd ? "ROCm" : "CUDA");
+        UnlinkCuda();
+        return false;
     }
 
     g_cuda.is_amd = is_amd;
@@ -272,14 +271,12 @@ static void ImportCuda(void) {
         g_cuda.supported = true;
         llamafile_info("cuda", "%s GPU support successfully loaded",
                        g_cuda.is_amd ? "AMD ROCm" : "NVIDIA CUDA");
-        if (g_cuda.get_device_count.default_abi || g_cuda.get_device_count.windows_abi) {
-            int count;
-            if (IsWindows())
-                count = g_cuda.get_device_count.windows_abi();
-            else
-                count = g_cuda.get_device_count.default_abi();
-            llamafile_info("cuda", "found %d GPU device(s)", count);
-        }
+        int count;
+        if (IsWindows())
+            count = g_cuda.get_device_count.windows_abi();
+        else
+            count = g_cuda.get_device_count.default_abi();
+        llamafile_info("cuda", "found %d GPU device(s)", count);
     } else if (FLAG_gpu == LLAMAFILE_GPU_NVIDIA || FLAG_gpu == LLAMAFILE_GPU_AMD) {
         fprintf(stderr, "fatal error: support for --gpu %s was explicitly requested, "
                 "but it wasn't available\n", llamafile_describe_gpu());
