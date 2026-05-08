@@ -64,6 +64,8 @@ responses.
 
 **Windows users:** Rename the file to add `.exe` extension before running.
 
+**Note - Only executables under 4GB can run on Windows, so any llamafile above 4GB won't work. Download the [llamafile](https://github.com/mozilla-ai/llamafile/releases) binary and run it with any [external weights/models(GGUF)](https://docs.mozilla.ai/llamafile/getting-started/quickstart#using-llamafile-with-external-weights).**
+
 ## Documentation
 
 Check the full documentation at [docs.mozilla.ai/llamafile](https://docs.mozilla.ai/llamafile), or directly jump into one of the following subsections:
