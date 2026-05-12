@@ -22,14 +22,37 @@ for %%I in ("%~dp0..") do set "REPO_DIR=%%~fI"
 set "USE_CUBLAS=0"
 set "CLEAN=0"
 set "OUTPUT="
+set "MINIMAL_ARCHS=0"
+set "NO_IQ_QUANTS=0"
+set "STRIP=0"
+set "COMPRESS=0"
+set "FA_ALL_QUANTS=0"
 
 :parse_args
 if "%~1"=="" goto done_args
-if /i "%~1"=="--cublas" (set "USE_CUBLAS=1" & shift & goto parse_args)
-if /i "%~1"=="--clean"  (set "CLEAN=1"     & shift & goto parse_args)
-if /i "%~1"=="--output" (set "OUTPUT=%~2"   & shift & shift & goto parse_args)
+if /i "%~1"=="--cublas"        (set "USE_CUBLAS=1"     & shift & goto parse_args)
+if /i "%~1"=="--clean"         (set "CLEAN=1"          & shift & goto parse_args)
+if /i "%~1"=="--output"        (set "OUTPUT=%~2"       & shift & shift & goto parse_args)
+if /i "%~1"=="--fa-all-quants" (set "FA_ALL_QUANTS=1"  & shift & goto parse_args)
+if /i "%~1"=="--minimize-size" (set "MINIMAL_ARCHS=1"  & set "NO_IQ_QUANTS=1" & set "STRIP=1" & set "COMPRESS=1" & shift & goto parse_args)
+if /i "%~1"=="--minimal-archs" (set "MINIMAL_ARCHS=1"  & shift & goto parse_args)
+if /i "%~1"=="--no-iq-quants"  (set "NO_IQ_QUANTS=1"   & shift & goto parse_args)
+if /i "%~1"=="--strip"         (set "STRIP=1"          & shift & goto parse_args)
+if /i "%~1"=="--compress"      (set "COMPRESS=1"       & shift & goto parse_args)
 if /i "%~1"=="--help" (
     echo Usage: cuda.bat [--clean] [--cublas] [--output PATH]
+    echo   --clean          Clean build directory before building
+    echo   --cublas         Use NVIDIA cuBLAS instead of TinyBLAS
+    echo   --output         Output path for shared library
+    echo   --fa-all-quants  Compile all flash-attention vec quant combos
+    echo                    ^(default: f16-f16, q4_0-q4_0, q8_0-q8_0 only^)
+    echo.
+    echo Size reduction options ^(all off by default^):
+    echo   --minimize-size  Enable all size reduction options below
+    echo   --minimal-archs  Use virtual PTX for sm_75/sm_90, real SASS for sm_80/86/89
+    echo   --no-iq-quants   Exclude IQ quant MMQ template instances
+    echo   --strip          No-op on Windows ^(debug info is in a separate .pdb^)
+    echo   --compress       Pass --compress-mode=size to nvcc ^(requires CUDA ^>= 12.8^)
     exit /b 0
 )
 echo Unknown option: %~1
@@ -97,28 +120,57 @@ if errorlevel 1 (
     exit /b 1
 )
 
-:: -------- detect CUDA version for Blackwell support --------
+:: -------- architecture flags --------
+:: Virtual PTX for less-used archs (JIT on first run), real SASS for popular archs.
 set "ARCH_FLAGS="
-set "ARCH_FLAGS=%ARCH_FLAGS% -gencode arch=compute_75,code=sm_75"
-set "ARCH_FLAGS=%ARCH_FLAGS% -gencode arch=compute_80,code=sm_80"
-set "ARCH_FLAGS=%ARCH_FLAGS% -gencode arch=compute_86,code=sm_86"
-set "ARCH_FLAGS=%ARCH_FLAGS% -gencode arch=compute_89,code=sm_89"
-set "ARCH_FLAGS=%ARCH_FLAGS% -gencode arch=compute_90,code=sm_90"
+if "%MINIMAL_ARCHS%"=="1" (
+    set "ARCH_FLAGS=!ARCH_FLAGS! -gencode arch=compute_75,code=compute_75"
+    set "ARCH_FLAGS=!ARCH_FLAGS! -gencode arch=compute_80,code=sm_80"
+    set "ARCH_FLAGS=!ARCH_FLAGS! -gencode arch=compute_86,code=sm_86"
+    set "ARCH_FLAGS=!ARCH_FLAGS! -gencode arch=compute_89,code=sm_89"
+    set "ARCH_FLAGS=!ARCH_FLAGS! -gencode arch=compute_90,code=compute_90"
+) else (
+    set "ARCH_FLAGS=!ARCH_FLAGS! -gencode arch=compute_75,code=sm_75"
+    set "ARCH_FLAGS=!ARCH_FLAGS! -gencode arch=compute_80,code=sm_80"
+    set "ARCH_FLAGS=!ARCH_FLAGS! -gencode arch=compute_86,code=sm_86"
+    set "ARCH_FLAGS=!ARCH_FLAGS! -gencode arch=compute_89,code=sm_89"
+    set "ARCH_FLAGS=!ARCH_FLAGS! -gencode arch=compute_90,code=sm_90"
+)
 
-:: Check for CUDA 13.x to add Blackwell support
+:: Detect CUDA version for Blackwell and compress support
 for /f "tokens=*" %%v in ('nvcc --version 2^>nul ^| findstr /r "release [0-9]"') do (
     set "NVCC_VER_LINE=%%v"
 )
 set "CUDA_MAJOR="
+set "CUDA_MINOR="
 if defined NVCC_VER_LINE (
     for /f "tokens=2 delims=," %%a in ("!NVCC_VER_LINE!") do (
         for /f "tokens=2" %%b in ("%%a") do (
-            for /f "tokens=1 delims=." %%c in ("%%b") do set "CUDA_MAJOR=%%c"
+            for /f "tokens=1,2 delims=." %%c in ("%%b") do (
+                set "CUDA_MAJOR=%%c"
+                set "CUDA_MINOR=%%d"
+            )
         )
     )
 )
 if "%CUDA_MAJOR%"=="13" (
-    set "ARCH_FLAGS=!ARCH_FLAGS! -gencode arch=compute_120f,code=sm_120f --compress-mode=size"
+    set "ARCH_FLAGS=!ARCH_FLAGS! -gencode arch=compute_120f,code=sm_120f"
+)
+
+:: Fall back to 0 if version parsing failed, to keep the numeric comparisons below valid.
+if not defined CUDA_MAJOR set "CUDA_MAJOR=0"
+if not defined CUDA_MINOR set "CUDA_MINOR=0"
+
+:: --compress-mode=size: opt-in via --compress (or --minimize-size). Requires CUDA >= 12.8.
+if "%COMPRESS%"=="1" (
+    set "COMPRESS_OK=0"
+    if !CUDA_MAJOR! gtr 12 set "COMPRESS_OK=1"
+    if !CUDA_MAJOR! equ 12 if !CUDA_MINOR! geq 8 set "COMPRESS_OK=1"
+    if "!COMPRESS_OK!"=="1" (
+        set "ARCH_FLAGS=!ARCH_FLAGS! --compress-mode=size"
+    ) else (
+        echo Warning: --compress requested but CUDA !CUDA_MAJOR!.!CUDA_MINOR! ^< 12.8; ignoring.
+    )
 )
 
 :: -------- copy TinyBLAS files if needed --------
@@ -138,6 +190,8 @@ set "COMMON_FLAGS=%COMMON_FLAGS% -Xcompiler="/nologo /EHsc /O2 /GR /MT /std:c++1
 set "COMMON_FLAGS=%COMMON_FLAGS% -diag-suppress 177 -diag-suppress 221 -diag-suppress 550"
 set "COMMON_FLAGS=%COMMON_FLAGS% -DNDEBUG -DGGML_BUILD=1 -DGGML_SHARED=1 -DGGML_BACKEND_SHARED=1 -DGGML_BACKEND_BUILD=1 -DGGML_MULTIPLATFORM"
 set "COMMON_FLAGS=%COMMON_FLAGS% %BLAS_DEFINE%"
+if "%NO_IQ_QUANTS%"=="1"  set "COMMON_FLAGS=%COMMON_FLAGS% -DGGML_CUDA_NO_IQ_QUANTS"
+if "%FA_ALL_QUANTS%"=="1" set "COMMON_FLAGS=%COMMON_FLAGS% -DGGML_CUDA_FA_ALL_QUANTS"
 
 :: -------- extract GGML version --------
 set "GGML_VERSION=unknown"
@@ -165,6 +219,14 @@ echo   Version: !GGML_VERSION! (commit: !GGML_COMMIT!)
 echo   Source:  %GGML_CUDA_DIR%
 echo   Output:  %OUTPUT%
 echo   Build:   %BUILD_DIR%
+if "%MINIMAL_ARCHS%%NO_IQ_QUANTS%%STRIP%%COMPRESS%" neq "0000" (
+    echo   Size reduction:
+    if "%MINIMAL_ARCHS%"=="1" echo     - Minimal archs ^(PTX for sm_75/sm_90^)
+    if "%NO_IQ_QUANTS%"=="1"  echo     - No IQ quant templates
+    if "%STRIP%"=="1"         echo     - Strip ^(no-op on Windows; debug info is in a separate .pdb^)
+    if "%COMPRESS%"=="1"      echo     - Compress mode enabled
+)
+if "%FA_ALL_QUANTS%"=="1"     echo   FA all quants: all fattn-vec template instances included
 echo.
 
 :: -------- collect and compile .cu sources --------
@@ -205,8 +267,11 @@ for %%f in ("%GGML_CUDA_DIR%\*.cu") do (
     set "OBJ_FILES=!OBJ_FILES! "!OBJ!""
 )
 
-:: Template-instances CUDA sources
-for %%f in ("%GGML_CUDA_DIR%\template-instances\*.cu") do (
+:: Template-instances: selectively included to mirror upstream CMake defaults.
+set "TI_DIR=%GGML_CUDA_DIR%\template-instances"
+
+:: 2. fattn-mma and fattn-tile instances (always included)
+for %%f in ("%TI_DIR%\fattn-mma-*.cu" "%TI_DIR%\fattn-tile-*.cu") do (
     set /a COUNT+=1
     set "BASE=%%~nf"
     set "OBJ=%BUILD_DIR%\ti-!BASE!.obj"
@@ -220,6 +285,71 @@ for %%f in ("%GGML_CUDA_DIR%\template-instances\*.cu") do (
         echo [!COUNT!] Skipping: ti-!BASE!.cu (up to date^)
     )
     set "OBJ_FILES=!OBJ_FILES! "!OBJ!""
+)
+
+:: 3. fattn-vec: only the 3 default quant combos unless --fa-all-quants.
+if "%FA_ALL_QUANTS%"=="1" (
+    set "FATTN_VEC_GLOB=%TI_DIR%\fattn-vec-instance-*.cu"
+) else (
+    set "FATTN_VEC_GLOB=%TI_DIR%\fattn-vec-instance-f16-f16.cu %TI_DIR%\fattn-vec-instance-q4_0-q4_0.cu %TI_DIR%\fattn-vec-instance-q8_0-q8_0.cu"
+)
+for %%f in (!FATTN_VEC_GLOB!) do (
+    if exist "%%f" (
+        set /a COUNT+=1
+        set "BASE=%%~nf"
+        set "OBJ=%BUILD_DIR%\ti-!BASE!.obj"
+        set "SRC=%%f"
+        if not exist "!OBJ!" (
+            echo [!COUNT!] Compiling: ti-!BASE!.cu
+            nvcc -c %ARCH_FLAGS% %COMMON_FLAGS% -o "!OBJ!" "!SRC!"
+            if errorlevel 1 (echo Error compiling ti-!BASE!.cu & exit /b 1)
+            set /a COMPILED+=1
+        ) else (
+            echo [!COUNT!] Skipping: ti-!BASE!.cu (up to date^)
+        )
+        set "OBJ_FILES=!OBJ_FILES! "!OBJ!""
+    )
+)
+
+:: 4. mmf instances (always included)
+for %%f in ("%TI_DIR%\mmf-*.cu") do (
+    set /a COUNT+=1
+    set "BASE=%%~nf"
+    set "OBJ=%BUILD_DIR%\ti-!BASE!.obj"
+    set "SRC=%%f"
+    if not exist "!OBJ!" (
+        echo [!COUNT!] Compiling: ti-!BASE!.cu
+        nvcc -c %ARCH_FLAGS% %COMMON_FLAGS% -o "!OBJ!" "!SRC!"
+        if errorlevel 1 (echo Error compiling ti-!BASE!.cu & exit /b 1)
+        set /a COMPILED+=1
+    ) else (
+        echo [!COUNT!] Skipping: ti-!BASE!.cu (up to date^)
+    )
+    set "OBJ_FILES=!OBJ_FILES! "!OBJ!""
+)
+
+:: 5. mmq instances: all unless --no-iq-quants excludes mmq-instance-iq*
+for %%f in ("%TI_DIR%\mmq-*.cu") do (
+    set "BASE=%%~nf"
+    set "SKIP=0"
+    if "%NO_IQ_QUANTS%"=="1" (
+        echo !BASE! | findstr /b /i "mmq-instance-iq" >nul
+        if not errorlevel 1 set "SKIP=1"
+    )
+    if "!SKIP!"=="0" (
+        set /a COUNT+=1
+        set "OBJ=%BUILD_DIR%\ti-!BASE!.obj"
+        set "SRC=%%f"
+        if not exist "!OBJ!" (
+            echo [!COUNT!] Compiling: ti-!BASE!.cu
+            nvcc -c %ARCH_FLAGS% %COMMON_FLAGS% -o "!OBJ!" "!SRC!"
+            if errorlevel 1 (echo Error compiling ti-!BASE!.cu & exit /b 1)
+            set /a COMPILED+=1
+        ) else (
+            echo [!COUNT!] Skipping: ti-!BASE!.cu (up to date^)
+        )
+        set "OBJ_FILES=!OBJ_FILES! "!OBJ!""
+    )
 )
 
 echo.
@@ -274,6 +404,10 @@ nvcc --shared %ARCH_FLAGS% -o "%OUTPUT%" -optf "%LINK_RSP%" %LINK_LIBS%
 if errorlevel 1 (
     echo Error: linking failed
     exit /b 1
+)
+
+if "%STRIP%"=="1" (
+    echo Note: --strip is a no-op on Windows ^(debug info is in a separate .pdb^)
 )
 
 echo.
