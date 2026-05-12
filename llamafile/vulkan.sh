@@ -69,13 +69,42 @@ if [ -z "$GLSLC" ]; then
         GLSLC="/usr/bin/glslc"
     else
         echo "Error: glslc not found. Please install the Vulkan SDK."
-        echo "  Linux (Ubuntu/Debian): sudo apt install vulkan-sdk"
-        echo "  Linux (Fedora): sudo dnf install vulkan-tools shaderc"
-        echo "  Linux (Arch): sudo pacman -S vulkan-devel shaderc"
+        echo "  Linux (Ubuntu/Debian): sudo apt install vulkan-sdk spirv-headers"
+        echo "  Linux (Fedora): sudo dnf install vulkan-tools shaderc spirv-headers-devel"
+        echo "  Linux (Arch): sudo pacman -S vulkan-devel shaderc spirv-headers"
         echo "  macOS: brew install vulkan-sdk"
         echo "  Or set VULKAN_SDK environment variable"
         exit 1
     fi
+fi
+
+# Find SPIR-V headers (required by ggml-vulkan.cpp since llama.cpp PR #21572).
+# Probe the same cascade as the C++ source, plus VULKAN_SDK. For each hit,
+# strip the matched relative path off to get the -I root.
+SPIRV_INCLUDE=""
+probe() {
+    local rel="$1" base
+    for base in \
+        "$VULKAN_SDK/include" \
+        /usr/include \
+        /usr/local/include
+    do
+        [ -z "$base" ] && continue
+        if [ -f "$base/$rel" ]; then
+            SPIRV_INCLUDE="-I$base"
+            return 0
+        fi
+    done
+    return 1
+}
+probe spirv/unified1/spirv.hpp || probe spirv-headers/spirv.hpp || probe spirv.hpp || true
+if [ -z "$SPIRV_INCLUDE" ]; then
+    echo "Error: SPIR-V headers not found (spirv.hpp). Required by ggml-vulkan.cpp."
+    echo "  Linux (Ubuntu/Debian): sudo apt install spirv-headers"
+    echo "  Linux (Fedora): sudo dnf install spirv-headers-devel"
+    echo "  Linux (Arch): sudo pacman -S spirv-headers"
+    echo "  Or install the LunarG Vulkan SDK and set VULKAN_SDK."
+    exit 1
 fi
 
 # Directory setup
@@ -249,6 +278,7 @@ if [ ! -f "$VULKAN_OBJ" ] || [ "$VULKAN_SRC" -nt "$VULKAN_OBJ" ] || [ "$SHADERS_
     echo "  Compiling ggml-vulkan.cpp..."
     $CXX -c $CXX_FLAGS \
         -I$GGML_VULKAN_DIR \
+        $SPIRV_INCLUDE \
         -o "$VULKAN_OBJ" "$VULKAN_SRC"
 else
     echo "  ggml-vulkan.o is up to date"
