@@ -126,9 +126,10 @@ collect_gpu_sources() {
         [ -f "$f" ] && CUDA_SOURCES="$CUDA_SOURCES $f"
     done
 
-    # 3. fattn-vec: default to the 3 common quant combos (f16-f16, q4_0-q4_0,
-    #    q8_0-q8_0), matching upstream CMake. With FA_ALL_QUANTS=1 include all
-    #    fattn-vec instances (mirrors upstream's GGML_CUDA_FA_ALL_QUANTS opt-in).
+    # 3. fattn-vec: default to the 4 common quant combos (f16-f16, q4_0-q4_0,
+    #    q8_0-q8_0, bf16-bf16), matching upstream CMake. With FA_ALL_QUANTS=1
+    #    include all fattn-vec instances (mirrors upstream's
+    #    GGML_CUDA_FA_ALL_QUANTS opt-in).
     if [ "$fa_all_quants" = "1" ]; then
         for f in "$ti_dir"/fattn-vec-instance-*.cu; do
             [ -f "$f" ] && CUDA_SOURCES="$CUDA_SOURCES $f"
@@ -136,7 +137,8 @@ collect_gpu_sources() {
     else
         for f in "$ti_dir"/fattn-vec-instance-f16-f16.cu \
                  "$ti_dir"/fattn-vec-instance-q4_0-q4_0.cu \
-                 "$ti_dir"/fattn-vec-instance-q8_0-q8_0.cu; do
+                 "$ti_dir"/fattn-vec-instance-q8_0-q8_0.cu \
+                 "$ti_dir"/fattn-vec-instance-bf16-bf16.cu; do
             [ -f "$f" ] && CUDA_SOURCES="$CUDA_SOURCES $f"
         done
     fi

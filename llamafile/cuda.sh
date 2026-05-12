@@ -83,7 +83,7 @@ for arg in "$@"; do
             echo "  --cublas         Use NVIDIA cuBLAS instead of TinyBLAS"
             echo "  --output         Output path for shared library"
             echo "  --fa-all-quants  Compile all flash-attention vec quant combos"
-            echo "                   (default: f16-f16, q4_0-q4_0, q8_0-q8_0 only)"
+            echo "                   (default: f16-f16, q4_0-q4_0, q8_0-q8_0, bf16-bf16 only)"
             echo ""
             echo "Size reduction options (all off by default):"
             echo "  --minimize-size  Enable all size reduction options below"

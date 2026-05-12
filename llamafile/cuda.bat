@@ -45,7 +45,7 @@ if /i "%~1"=="--help" (
     echo   --cublas         Use NVIDIA cuBLAS instead of TinyBLAS
     echo   --output         Output path for shared library
     echo   --fa-all-quants  Compile all flash-attention vec quant combos
-    echo                    ^(default: f16-f16, q4_0-q4_0, q8_0-q8_0 only^)
+    echo                    ^(default: f16-f16, q4_0-q4_0, q8_0-q8_0, bf16-bf16 only^)
     echo.
     echo Size reduction options ^(all off by default^):
     echo   --minimize-size  Enable all size reduction options below
@@ -287,11 +287,11 @@ for %%f in ("%TI_DIR%\fattn-mma-*.cu" "%TI_DIR%\fattn-tile-*.cu") do (
     set "OBJ_FILES=!OBJ_FILES! "!OBJ!""
 )
 
-:: 3. fattn-vec: only the 3 default quant combos unless --fa-all-quants.
+:: 3. fattn-vec: only the 4 default quant combos unless --fa-all-quants.
 if "%FA_ALL_QUANTS%"=="1" (
     set "FATTN_VEC_GLOB=%TI_DIR%\fattn-vec-instance-*.cu"
 ) else (
-    set "FATTN_VEC_GLOB=%TI_DIR%\fattn-vec-instance-f16-f16.cu %TI_DIR%\fattn-vec-instance-q4_0-q4_0.cu %TI_DIR%\fattn-vec-instance-q8_0-q8_0.cu"
+    set "FATTN_VEC_GLOB=%TI_DIR%\fattn-vec-instance-f16-f16.cu %TI_DIR%\fattn-vec-instance-q4_0-q4_0.cu %TI_DIR%\fattn-vec-instance-q8_0-q8_0.cu %TI_DIR%\fattn-vec-instance-bf16-bf16.cu"
 )
 for %%f in (!FATTN_VEC_GLOB!) do (
     if exist "%%f" (
