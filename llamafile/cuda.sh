@@ -43,6 +43,10 @@ source "$SCRIPT_DIR/build-functions.sh"
 #
 
 USE_CUBLAS=0
+MINIMAL_ARCHS=0
+NO_IQ_QUANTS=0
+STRIP=0
+COMPRESS=0
 ARGS=()
 
 for arg in "$@"; do
@@ -50,12 +54,37 @@ for arg in "$@"; do
         --cublas)
             USE_CUBLAS=1
             ;;
+        --minimize-size)
+            MINIMAL_ARCHS=1
+            NO_IQ_QUANTS=1
+            STRIP=1
+            COMPRESS=1
+            ;;
+        --minimal-archs)
+            MINIMAL_ARCHS=1
+            ;;
+        --no-iq-quants)
+            NO_IQ_QUANTS=1
+            ;;
+        --strip)
+            STRIP=1
+            ;;
+        --compress)
+            COMPRESS=1
+            ;;
         --help)
             echo "Usage: $0 [-jN] [--clean] [--cublas] [--output PATH]"
-            echo "  -jN       Use N parallel jobs (default: auto-detect)"
-            echo "  --clean   Clean build directory before building"
-            echo "  --cublas  Use NVIDIA cuBLAS instead of TinyBLAS"
-            echo "  --output  Output path for shared library"
+            echo "  -jN              Use N parallel jobs (default: auto-detect)"
+            echo "  --clean          Clean build directory before building"
+            echo "  --cublas         Use NVIDIA cuBLAS instead of TinyBLAS"
+            echo "  --output         Output path for shared library"
+            echo ""
+            echo "Size reduction options (all off by default):"
+            echo "  --minimize-size  Enable all size reduction options below"
+            echo "  --minimal-archs  Use virtual PTX for sm_75/sm_90, real SASS for sm_80/86/89"
+            echo "  --no-iq-quants   Exclude IQ quant MMQ template instances"
+            echo "  --strip          Strip the final shared library"
+            echo "  --compress       Pass --compress-mode=size to nvcc (requires CUDA >= 12.8)"
             exit 0
             ;;
         *)
@@ -128,6 +157,13 @@ echo "  Source: $GGML_CUDA_DIR"
 echo "  Output: $OUTPUT"
 echo "  Build:  $BUILD_DIR"
 echo "  Jobs:   $JOBS"
+if [ "$MINIMAL_ARCHS" = "1" ] || [ "$NO_IQ_QUANTS" = "1" ] || [ "$STRIP" = "1" ] || [ "$COMPRESS" = "1" ]; then
+    echo "  Size reduction:"
+    [ "$MINIMAL_ARCHS" = "1" ] && echo "    - Minimal archs (PTX for sm_75/sm_90)"
+    [ "$NO_IQ_QUANTS" = "1" ] && echo "    - No IQ quant templates"
+    [ "$STRIP" = "1" ]        && echo "    - Strip enabled"
+    [ "$COMPRESS" = "1" ]     && echo "    - Compress mode enabled"
+fi
 
 # Copy TinyBLAS files if needed
 if [ "$USE_CUBLAS" = "0" ]; then
@@ -142,29 +178,50 @@ fi
 # sm_86: Ampere (RTX 3000 series mobile)
 # sm_89: Ada Lovelace (RTX 4000 series, L40S)
 # sm_90: Hopper (H100)
-ARCH_FLAGS="\
+if [ "$MINIMAL_ARCHS" = "1" ]; then
+    # Virtual PTX for less-used archs (JIT-compiled and cached on first run),
+    # real SASS for the most popular archs (no JIT penalty).
+    ARCH_FLAGS="\
+  -gencode arch=compute_75,code=compute_75 \
+  -gencode arch=compute_80,code=sm_80 \
+  -gencode arch=compute_86,code=sm_86 \
+  -gencode arch=compute_89,code=sm_89 \
+  -gencode arch=compute_90,code=compute_90"
+else
+    ARCH_FLAGS="\
   -gencode arch=compute_75,code=sm_75 \
   -gencode arch=compute_80,code=sm_80 \
   -gencode arch=compute_86,code=sm_86 \
   -gencode arch=compute_89,code=sm_89 \
   -gencode arch=compute_90,code=sm_90"
+fi
 
-# Enabling Blackwell native codegen requires CUDA 13.x
+# Detect CUDA version for Blackwell and compress support
 CUDA_VERSION=$("$NVCC" --version | sed -n 's/^.*release \([0-9]\+\.[0-9]\+\).*$/\1/p')
+CUDA_MAJOR="${CUDA_VERSION%%.*}"
+CUDA_MINOR="${CUDA_VERSION#*.}"
 HOST_ARCH=$(uname -m)
 
 # Blackwell aarch64 non-server platforms (sm_110: Jetson Thor & family, sm_121: DGX Spark GB10)
-if [ "$HOST_ARCH" = "aarch64" ] && [ "${CUDA_VERSION%%.*}" = "13" ]; then
+if [ "$HOST_ARCH" = "aarch64" ] && [ "$CUDA_MAJOR" = "13" ]; then
     ARCH_FLAGS="\
   -gencode arch=compute_110f,code=sm_110f \
-  -gencode arch=compute_121a,code=sm_121a \
-  --compress-mode=size"
+  -gencode arch=compute_121a,code=sm_121a"
 
 # Blackwell GPUs: CUDA 13.x append sm_120 family GPU support (RTX 5000 series, RTX PRO Blackwell)
-elif [ "${CUDA_VERSION%%.*}" = "13" ]; then
+elif [ "$CUDA_MAJOR" = "13" ]; then
     ARCH_FLAGS="$ARCH_FLAGS \
-  -gencode arch=compute_120f,code=sm_120f \
-  --compress-mode=size"
+  -gencode arch=compute_120f,code=sm_120f"
+fi
+
+# --compress-mode=size: opt-in via --compress (or --minimize-size). Requires CUDA >= 12.8.
+if [ "$COMPRESS" = "1" ]; then
+    if [ "$CUDA_MAJOR" -gt 12 ] 2>/dev/null || \
+       { [ "$CUDA_MAJOR" = "12" ] && [ "$CUDA_MINOR" -ge 8 ] 2>/dev/null; }; then
+        ARCH_FLAGS="$ARCH_FLAGS --compress-mode=size"
+    else
+        echo "Warning: --compress requested but CUDA $CUDA_VERSION < 12.8; ignoring."
+    fi
 fi
 
 # NVCC compiler flags
@@ -183,8 +240,12 @@ COMMON_FLAGS="\
   -DGGML_MULTIPLATFORM \
   $BLAS_DEFINE"
 
+if [ "$NO_IQ_QUANTS" = "1" ]; then
+    COMMON_FLAGS="$COMMON_FLAGS -DGGML_CUDA_NO_IQ_QUANTS"
+fi
+
 # Collect sources
-collect_gpu_sources "$GGML_CUDA_DIR" "$EXTRA_SOURCES"
+collect_gpu_sources "$GGML_CUDA_DIR" "$EXTRA_SOURCES" "$NO_IQ_QUANTS"
 echo "  Sources: $NUM_SOURCES .cu files"
 echo ""
 
@@ -202,6 +263,12 @@ compile_ggml_core "$LLAMA_CPP_DIR" "$BUILD_DIR"
 
 # Link
 link_shared_library "$NVCC" "--shared" "$ARCH_FLAGS" "$BUILD_DIR" "$OUTPUT" "$LINK_LIBS"
+
+# Strip
+if [ "$STRIP" = "1" ]; then
+    echo "Stripping $OUTPUT..."
+    strip --strip-unneeded "$OUTPUT"
+fi
 
 # Done
 if [ "$USE_CUBLAS" = "1" ]; then

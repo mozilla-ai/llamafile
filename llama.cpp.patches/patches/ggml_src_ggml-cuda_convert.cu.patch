@@ -1,0 +1,35 @@
+diff --git a/ggml/src/ggml-cuda/convert.cu b/ggml/src/ggml-cuda/convert.cu
+--- a/llama.cpp/ggml/src/ggml-cuda/convert.cu
++++ b/llama.cpp/ggml/src/ggml-cuda/convert.cu
+@@ -736,6 +736,7 @@ to_fp16_cuda_t ggml_get_to_fp16_cuda(ggml_type type) {
+             return dequantize_row_q5_K_cuda;
+         case GGML_TYPE_Q6_K:
+             return dequantize_row_q6_K_cuda;
++#ifndef GGML_CUDA_NO_IQ_QUANTS
+         case GGML_TYPE_IQ2_XXS:
+             return dequantize_row_iq2_xxs_cuda;
+         case GGML_TYPE_IQ2_XS:
+@@ -754,6 +755,7 @@ to_fp16_cuda_t ggml_get_to_fp16_cuda(ggml_type type) {
+             return dequantize_row_iq4_xs_cuda;
+         case GGML_TYPE_IQ3_S:
+             return dequantize_row_iq3_s_cuda;
++#endif // GGML_CUDA_NO_IQ_QUANTS
+         case GGML_TYPE_MXFP4:
+             return dequantize_row_mxfp4_cuda;
+         case GGML_TYPE_NVFP4:
+@@ -791,6 +793,7 @@ to_fp32_cuda_t ggml_get_to_fp32_cuda(ggml_type type) {
+             return dequantize_row_q5_K_cuda;
+         case GGML_TYPE_Q6_K:
+             return dequantize_row_q6_K_cuda;
++#ifndef GGML_CUDA_NO_IQ_QUANTS
+         case GGML_TYPE_IQ2_XXS:
+             return dequantize_row_iq2_xxs_cuda;
+         case GGML_TYPE_IQ2_XS:
+@@ -809,6 +812,7 @@ to_fp32_cuda_t ggml_get_to_fp32_cuda(ggml_type type) {
+             return dequantize_row_iq4_xs_cuda;
+         case GGML_TYPE_IQ3_S:
+             return dequantize_row_iq3_s_cuda;
++#endif // GGML_CUDA_NO_IQ_QUANTS
+         case GGML_TYPE_MXFP4:
+             return dequantize_row_mxfp4_cuda;
+         case GGML_TYPE_NVFP4:
