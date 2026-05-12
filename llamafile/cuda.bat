@@ -138,20 +138,13 @@ if "%MINIMAL_ARCHS%"=="1" (
 )
 
 :: Detect CUDA version for Blackwell and compress support
-for /f "tokens=*" %%v in ('nvcc --version 2^>nul ^| findstr /r "release [0-9]"') do (
-    set "NVCC_VER_LINE=%%v"
-)
+:: nvcc prints e.g. "Cuda compilation tools, release 13.2, V13.2.51".
+:: Splitting on ',', ' ', and '.' produces tokens 4..6 = "release", "13", "2".
 set "CUDA_MAJOR="
 set "CUDA_MINOR="
-if defined NVCC_VER_LINE (
-    for /f "tokens=2 delims=," %%a in ("!NVCC_VER_LINE!") do (
-        for /f "tokens=2" %%b in ("%%a") do (
-            for /f "tokens=1,2 delims=." %%c in ("%%b") do (
-                set "CUDA_MAJOR=%%c"
-                set "CUDA_MINOR=%%d"
-            )
-        )
-    )
+for /f "tokens=5,6 delims=, ." %%a in ('nvcc --version 2^>nul ^| findstr /r "release [0-9]"') do (
+    set "CUDA_MAJOR=%%a"
+    set "CUDA_MINOR=%%b"
 )
 if "%CUDA_MAJOR%"=="13" (
     set "ARCH_FLAGS=!ARCH_FLAGS! -gencode arch=compute_120f,code=sm_120f"
