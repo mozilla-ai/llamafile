@@ -53,7 +53,7 @@ mode) are new.
 [20251218](https://github.com/mozilla-ai/llamafile/discussions/845)
 - added Metal support: GPU on MacOS ARM64 is supported by compiling a small module
 using the Xcode Command Line Tools, which need to be installed. Check our docs at
-[docs/support.md#gpu-support](docs/support.md#gpu-support) for more info.
+[our support docs](https://docs.mozilla.ai/llamafile/reference/support#gpu-support) for more info.
 - Metal works both in llamafile (called either as TUI or with the --server flag)
 and in llama-server.
 

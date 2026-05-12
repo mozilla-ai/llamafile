@@ -81,6 +81,6 @@ In the event that GPU support couldn't be compiled and dynamically
 linked on the fly for any reason, llamafile will fall back to CPU
 inference.
 
-**NOTE** that the 0.10.0 build of llamafile has not been tested on all
+**NOTE** that the 0.10.* build of llamafile has not been tested on all
 GPUs/platforms yet, so we welcome your feedback both whether there are
 any issues or if everything runs smoothly on your specific setup!

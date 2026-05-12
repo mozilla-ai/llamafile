@@ -688,13 +688,27 @@ int llamafile_makedirs(const char *path, int mode) {
     return mkdir(tmp, mode);
 }
 
+// Probe `path`, and if it exists, hand it to link_fn. Logs both the probe
+// and the success at INFO level. Returns true only if link_fn loaded it.
+static bool try_link_dso_from(const char *path, const char *backend_name,
+                              const char *location, llamafile_link_dso_fn link_fn) {
+    if (!llamafile_file_exists(path))
+        return false;
+    llamafile_info(backend_name, "probing library %s (%s)", path, location);
+    if (!link_fn(path))
+        return false;
+    llamafile_info(backend_name, "loaded library %s from %s", path, location);
+    return true;
+}
+
 /**
  * Try to load a prebuilt DSO from standard locations.
  *
  * Search order:
- *   1. /zip/<name> (bundled in executable, extracted to app dir)
- *   2. ~/.llamafile/v/<version>/<name> (app directory)
- *   3. ~/<name> (home directory)
+ *   1. <exe_dir>/<name> (next to the llamafile executable)
+ *   2. /zip/<name> (bundled in executable, extracted to app dir)
+ *   3. ~/.llamafile/v/<version>/<name> (app directory)
+ *   4. ~/<name> (home directory)
  *
  * Returns true if link_fn successfully loaded the DSO.
  */
@@ -703,10 +717,27 @@ bool llamafile_try_load_prebuilt_dso(const char *name, const char *backend_name,
     char dso[PATH_MAX];
     char app_dir[PATH_MAX];
 
-    // Try loading from /zip/ (bundled in executable)
+    // Try loading from the directory containing the executable. This lets
+    // users drop a custom DSO next to the llamafile binary and have it take
+    // precedence over the bundled and home-directory copies.
+    const char *exe = GetProgramExecutableName();
+    if (exe && *exe) {
+        const char *slash = strrchr(exe, '/');
+        if (slash && slash > exe) {
+            size_t dir_len = (size_t)(slash - exe) + 1;  // include trailing '/'
+            if (dir_len + strlen(name) < PATH_MAX) {
+                memcpy(dso, exe, dir_len);
+                memcpy(dso + dir_len, name, strlen(name) + 1);
+                if (try_link_dso_from(dso, backend_name, "executable directory", link_fn))
+                    return true;
+            }
+        }
+    }
+
+    // Try loading from /zip/ (bundled in executable). cosmo_dlopen can't load
+    // from /zip/, so we extract to the app dir first and link from there.
     snprintf(dso, PATH_MAX, "/zip/%s", name);
     if (llamafile_file_exists(dso)) {
-        // Extract to app dir first (cosmo_dlopen can't load from /zip/)
         llamafile_get_app_dir(app_dir, PATH_MAX);
         if (llamafile_makedirs(app_dir, 0755) != 0) {
             perror(app_dir);
@@ -717,49 +748,32 @@ bool llamafile_try_load_prebuilt_dso(const char *name, const char *backend_name,
             fprintf(stderr, "%s: path too long: %s%s\n", backend_name, app_dir, name);
             return false;
         }
-        // Check if extraction needed
         switch (llamafile_is_file_newer_than(dso, extracted)) {
         case -1:
             return false;
         case 0:
-            // Already extracted and up to date
             break;
         case 1:
-            if (!llamafile_extract(dso, extracted)) {
+            if (!llamafile_extract(dso, extracted))
                 return false;
-            }
             break;
         }
-
-        llamafile_info(backend_name, "probing library %s (bundled)", extracted);
-        if (link_fn(extracted)) {
-            llamafile_info(backend_name, "loaded bundled library %s", extracted);
+        if (try_link_dso_from(extracted, backend_name, "bundled", link_fn))
             return true;
-        }
     }
 
     // Try loading from app directory
     llamafile_get_app_dir(app_dir, PATH_MAX);
     snprintf(dso, PATH_MAX, "%s%s", app_dir, name);
-    if (llamafile_file_exists(dso)) {
-        llamafile_info(backend_name, "probing library %s (app directory)", dso);
-        if (link_fn(dso)) {
-            llamafile_info(backend_name, "loaded library %s from app directory", dso);
-            return true;
-        }
-    }
+    if (try_link_dso_from(dso, backend_name, "app directory", link_fn))
+        return true;
 
     // Try loading from home directory (common build location)
     const char *home = getenv("HOME");
     if (home && *home) {
         snprintf(dso, PATH_MAX, "%s/%s", home, name);
-        if (llamafile_file_exists(dso)) {
-            llamafile_info(backend_name, "probing library %s (home directory)", dso);
-            if (link_fn(dso)) {
-                llamafile_info(backend_name, "loaded library %s from home directory", dso);
-                return true;
-            }
-        }
+        if (try_link_dso_from(dso, backend_name, "home directory", link_fn))
+            return true;
     }
 
     return false;
