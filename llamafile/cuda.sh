@@ -47,12 +47,16 @@ MINIMAL_ARCHS=0
 NO_IQ_QUANTS=0
 STRIP=0
 COMPRESS=0
+FA_ALL_QUANTS=0
 ARGS=()
 
 for arg in "$@"; do
     case "$arg" in
         --cublas)
             USE_CUBLAS=1
+            ;;
+        --fa-all-quants)
+            FA_ALL_QUANTS=1
             ;;
         --minimize-size)
             MINIMAL_ARCHS=1
@@ -78,6 +82,8 @@ for arg in "$@"; do
             echo "  --clean          Clean build directory before building"
             echo "  --cublas         Use NVIDIA cuBLAS instead of TinyBLAS"
             echo "  --output         Output path for shared library"
+            echo "  --fa-all-quants  Compile all flash-attention vec quant combos"
+            echo "                   (default: f16-f16, q4_0-q4_0, q8_0-q8_0 only)"
             echo ""
             echo "Size reduction options (all off by default):"
             echo "  --minimize-size  Enable all size reduction options below"
@@ -164,6 +170,7 @@ if [ "$MINIMAL_ARCHS" = "1" ] || [ "$NO_IQ_QUANTS" = "1" ] || [ "$STRIP" = "1" ]
     [ "$STRIP" = "1" ]        && echo "    - Strip enabled"
     [ "$COMPRESS" = "1" ]     && echo "    - Compress mode enabled"
 fi
+[ "$FA_ALL_QUANTS" = "1" ] && echo "  FA all quants: all fattn-vec template instances included"
 
 # Copy TinyBLAS files if needed
 if [ "$USE_CUBLAS" = "0" ]; then
@@ -243,9 +250,12 @@ COMMON_FLAGS="\
 if [ "$NO_IQ_QUANTS" = "1" ]; then
     COMMON_FLAGS="$COMMON_FLAGS -DGGML_CUDA_NO_IQ_QUANTS"
 fi
+if [ "$FA_ALL_QUANTS" = "1" ]; then
+    COMMON_FLAGS="$COMMON_FLAGS -DGGML_CUDA_FA_ALL_QUANTS"
+fi
 
 # Collect sources
-collect_gpu_sources "$GGML_CUDA_DIR" "$EXTRA_SOURCES" "$NO_IQ_QUANTS"
+collect_gpu_sources "$GGML_CUDA_DIR" "$EXTRA_SOURCES" "$NO_IQ_QUANTS" "$FA_ALL_QUANTS"
 echo "  Sources: $NUM_SOURCES .cu files"
 echo ""
 

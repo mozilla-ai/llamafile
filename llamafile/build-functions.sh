@@ -104,10 +104,13 @@ setup_build_dir() {
 #       $2 = caller-supplied sources prepended to the list (e.g., tinyblas.cu
 #            for the default TinyBLAS build; empty for the --cublas build)
 #       $3 = NO_IQ_QUANTS (optional, "1" to exclude IQ quant MMQ templates)
+#       $4 = FA_ALL_QUANTS (optional, "1" to include all fattn-vec quant combos
+#            instead of the 3 default ones; mirrors upstream's GGML_CUDA_FA_ALL_QUANTS)
 collect_gpu_sources() {
     local ggml_cuda_dir="$1"
     local caller_sources="$2"
     local no_iq_quants="${3:-0}"
+    local fa_all_quants="${4:-0}"
 
     CUDA_SOURCES="$caller_sources"
 
@@ -123,13 +126,20 @@ collect_gpu_sources() {
         [ -f "$f" ] && CUDA_SOURCES="$CUDA_SOURCES $f"
     done
 
-    # 3. fattn-vec: only the 3 default quant combos (f16-f16, q4_0-q4_0, q8_0-q8_0).
-    #    Upstream CMake compiles only these unless GGML_CUDA_FA_ALL_QUANTS is set.
-    for f in "$ti_dir"/fattn-vec-instance-f16-f16.cu \
-             "$ti_dir"/fattn-vec-instance-q4_0-q4_0.cu \
-             "$ti_dir"/fattn-vec-instance-q8_0-q8_0.cu; do
-        [ -f "$f" ] && CUDA_SOURCES="$CUDA_SOURCES $f"
-    done
+    # 3. fattn-vec: default to the 3 common quant combos (f16-f16, q4_0-q4_0,
+    #    q8_0-q8_0), matching upstream CMake. With FA_ALL_QUANTS=1 include all
+    #    fattn-vec instances (mirrors upstream's GGML_CUDA_FA_ALL_QUANTS opt-in).
+    if [ "$fa_all_quants" = "1" ]; then
+        for f in "$ti_dir"/fattn-vec-instance-*.cu; do
+            [ -f "$f" ] && CUDA_SOURCES="$CUDA_SOURCES $f"
+        done
+    else
+        for f in "$ti_dir"/fattn-vec-instance-f16-f16.cu \
+                 "$ti_dir"/fattn-vec-instance-q4_0-q4_0.cu \
+                 "$ti_dir"/fattn-vec-instance-q8_0-q8_0.cu; do
+            [ -f "$f" ] && CUDA_SOURCES="$CUDA_SOURCES $f"
+        done
+    fi
 
     # 4. mmf instances (always included)
     for f in "$ti_dir"/mmf-*.cu; do
