@@ -64,6 +64,7 @@ __static_yoink("llama.cpp/ggml/include/gguf.h");
 __static_yoink("llama.cpp/ggml/include/ggml-cpu.h");
 __static_yoink("llama.cpp/ggml/include/ggml-alloc.h");
 __static_yoink("llama.cpp/ggml/include/ggml-backend.h");
+__static_yoink("llama.cpp/ggml/include/ggml-cpp.h");
 __static_yoink("llama.cpp/ggml/include/ggml-metal.h");
 __static_yoink("llama.cpp/ggml/src/ggml-impl.h");
 __static_yoink("llama.cpp/ggml/src/ggml-common.h");
@@ -97,6 +98,7 @@ static const struct MetalSource {
     {"/zip/llama.cpp/ggml/include/ggml-cpu.h", "ggml-cpu.h"},
     {"/zip/llama.cpp/ggml/include/ggml-alloc.h", "ggml-alloc.h"},
     {"/zip/llama.cpp/ggml/include/ggml-backend.h", "ggml-backend.h"},
+    {"/zip/llama.cpp/ggml/include/ggml-cpp.h", "ggml-cpp.h"},
     {"/zip/llama.cpp/ggml/include/ggml-metal.h", "ggml-metal.h"},
     {"/zip/llama.cpp/ggml/src/ggml-impl.h", "ggml-impl.h"},
     {"/zip/llama.cpp/ggml/src/ggml-common.h", "ggml-common.h"},
