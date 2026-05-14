@@ -72,6 +72,13 @@ benefit of letting you run llamafiles greater than 4GB on Windows.
 On Linux, NVIDIA users will need to install the CUDA SDK (ideally using
 the shell script installer) and ROCm users need to install the HIP SDK.
 They're detected by looking to see if `nvcc` or `hipcc` are on the PATH.
+For AMD systems, make sure the executable directory containing `hipcc` is
+on your `PATH` and that it can be executed by your user; a `hipcc:
+Permission denied` message means ROCm was found but can't be run, so GPU
+offload will not be available until the SDK permissions or installation
+are fixed. Running with `--gpu amd` or `--gpu nvidia` is a useful way to
+turn an otherwise quiet CPU fallback into an explicit startup error while
+you diagnose the toolchain.
 
 If you have both an AMD GPU *and* an NVIDIA GPU in your machine, then
 you may need to qualify which one you want used, by passing either
