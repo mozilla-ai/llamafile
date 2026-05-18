@@ -16,8 +16,10 @@ include build/rules.mk
 include third_party/BUILD.mk
 include llama.cpp/BUILD.mk
 include whisper.cpp/BUILD.mk
+include stable-diffusion.cpp/BUILD.mk
 include llamafile/BUILD.mk
 include whisperfile/BUILD.mk
+include diffusionfile/BUILD.mk
 include tests/BUILD.mk
 endif
 
@@ -27,7 +29,9 @@ endif
 o/$(MODE)/:	o/$(MODE)/llamafile	\
 		o/$(MODE)/llama.cpp \
 		o/$(MODE)/whisper.cpp \
+		o/$(MODE)/stable-diffusion.cpp \
 		o/$(MODE)/whisperfile \
+		o/$(MODE)/diffusionfile \
 		o/$(MODE)/third_party/zipalign
 
 .PHONY: install
@@ -35,6 +39,7 @@ install: o/$(MODE)/llamafile/llamafile
 	mkdir -p $(PREFIX)/bin
 	$(INSTALL) o/$(MODE)/llamafile/llamafile $(PREFIX)/bin/llamafile
 	$(INSTALL) o/$(MODE)/whisperfile/whisperfile $(PREFIX)/bin/whisperfile
+	$(INSTALL) o/$(MODE)/diffusionfile/diffusionfile $(PREFIX)/bin/diffusionfile
 	$(INSTALL) o/$(MODE)/third_party/zipalign/zipalign $(PREFIX)/bin/zipalign
 
 .PHONY: check

@@ -1,0 +1,38 @@
+diff --git a/examples/cli/main.cpp b/examples/cli/main.cpp
+index dc5013b..926cd85 100644
+--- a/examples/cli/main.cpp
++++ b/examples/cli/main.cpp
+@@ -11,6 +11,11 @@
+ #include <sstream>
+ #include <string>
+ #include <vector>
++#include <algorithm>
++#ifdef DIFFUSIONFILE
++#include <cosmo.h>
++#include "llamafile/llamafile.h"
++#endif
+ 
+ // #include "preprocessing.hpp"
+ #include "stable-diffusion.h"
+@@ -538,7 +543,8 @@ bool save_results(const SDCliParams& cli_params,
+     return sucessful_reults != 0;
+ }
+ 
+-int main(int argc, const char* argv[]) {
++// Core diffusion-cli logic - can be called from diffusionfile main or standalone
++int diffusion_cli_main(int argc, const char* argv[]) {
+     if (argc > 1 && std::string(argv[1]) == "--version") {
+         std::cout << version_string() << "\n";
+         return EXIT_SUCCESS;
+@@ -835,3 +841,11 @@ int main(int argc, const char* argv[]) {
+ 
+     return 0;
+ }
++
++// Standalone entry point for sd-cli executable
++// Not compiled when building as part of diffusionfile (which has its own main)
++#ifndef DIFFUSIONFILE
++int main(int argc, const char* argv[]) {
++    return diffusion_cli_main(argc, argv);
++}
++#endif
