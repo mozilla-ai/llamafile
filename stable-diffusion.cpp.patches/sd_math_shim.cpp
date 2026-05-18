@@ -22,12 +22,12 @@
 
 extern "C" {
     long long llround(double x) {
-        return static_cast<long long>(x >= 0.0 ? x + 0.5 : x - 0.5);
+        return round(x);
     }
     long long llroundf(float x) {
-        return static_cast<long long>(x >= 0.0f ? x + 0.5f : x - 0.5f);
+        return roundf(x);
     }
     long long llroundl(long double x) {
-        return static_cast<long long>(x >= 0.0L ? x + 0.5L : x - 0.5L);
+        return roundl(x);
     }
 }
