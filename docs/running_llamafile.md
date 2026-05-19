@@ -1,4 +1,4 @@
-You have just downloaded a llamafile from the [Example llamafiles](example_llamafiles.md) 
+You have just downloaded a llamafile from the [Pre-built llamafiles](pre-built-llamafiles.md) 
 section. Now what? Here are a few examples to get you started.
 
 > **NOTE**

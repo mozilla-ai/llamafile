@@ -5,7 +5,7 @@
 ## Getting Started
 
 * [Quickstart](quickstart.md)
-* [Example llamafiles](example_llamafiles.md)
+* [Pre-built llamafiles](pre-built-llamafiles.md)
 
 ## Using llamafile
 
