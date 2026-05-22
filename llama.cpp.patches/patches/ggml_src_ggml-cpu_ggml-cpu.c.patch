@@ -1,6 +1,7 @@
 diff --git a/ggml/src/ggml-cpu/ggml-cpu.c b/ggml/src/ggml-cpu/ggml-cpu.c
---- a/llama.cpp/ggml/src/ggml-cpu/ggml-cpu.c
-+++ b/llama.cpp/ggml/src/ggml-cpu/ggml-cpu.c
+index 2b3eb5b5c..cca917fd2 100644
+--- a/ggml/src/ggml-cpu/ggml-cpu.c
++++ b/ggml/src/ggml-cpu/ggml-cpu.c
 @@ -1520,6 +1520,26 @@ static void ggml_compute_forward_mul_mat_id(
      const struct ggml_tensor * src1 = dst->src[1];
      const struct ggml_tensor * ids = dst->src[2];
@@ -53,3 +54,23 @@ diff --git a/ggml/src/ggml-cpu/ggml-cpu.c b/ggml/src/ggml-cpu/ggml-cpu.c
          int chunk_size = 16;
          if (nr0 == 1 || nr1 == 1) {
              chunk_size = 64;
+@@ -2827,6 +2865,19 @@ struct ggml_cplan ggml_graph_plan(
+                         cur += n_as*ids->ne[0]*ids->ne[1]*sizeof(struct mmid_row_mapping) + sizeof(int64_t);
+                         // atomic_current_chunk
+                         cur += CACHE_LINE_SIZE*n_as + CACHE_LINE_SIZE;
++#if GGML_USE_LLAMAFILE
++                        // [jart] reserve work-buffer space for llamafile_mixmul.
++                        // Without this, MixMul::allocate_shared_memory() in
++                        // tinyblas_cpu_mixmul.inc may fail (returns nullptr from
++                        // allocate() when toto > params->wsize), causing the
++                        // outer llamafile_mixmul() hook in mul_mat_id to silently
++                        // return false. Mirrors 0.9.3 ggml.c:17531.
++                        extern size_t llamafile_mixmul_needs(const struct ggml_tensor *,
++                                                              const struct ggml_tensor *,
++                                                              const struct ggml_tensor *);
++                        size_t cur2 = llamafile_mixmul_needs(src0, src1, ids);
++                        if (cur2 > cur) cur = cur2;
++#endif
+                     } break;
+                 case GGML_OP_OUT_PROD:
+                     {
