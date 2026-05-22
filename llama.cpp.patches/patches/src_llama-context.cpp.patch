@@ -1,0 +1,20 @@
+diff --git a/src/llama-context.cpp b/src/llama-context.cpp
+--- a/llama.cpp/src/llama-context.cpp
++++ b/llama.cpp/src/llama-context.cpp
+@@ -426,6 +426,16 @@ void llama_context::sched_reserve() {
+     LLAMA_LOG_DEBUG("%s: worst-case: n_tokens = %d, n_seqs = %d, n_outputs = %d\n", __func__, n_tokens, n_seqs, n_outputs);
+ 
+     // resolve automatic Flash Attention use
++    if (cparams.auto_fa && model.devices.empty()) {
++        // llamafile: the CPU Flash Attention path (f16 mad/dot) is significantly
++        // slower than the non-FA path on x86 (see mozilla-ai/llamafile#975).
++        // When no GPU devices are present, default -fa auto to OFF. Users who
++        // want FA for memory savings on long contexts can still pass -fa on.
++        cparams.flash_attn = false;
++        cparams.auto_fa    = false;
++        LLAMA_LOG_INFO("%s: Flash Attention was auto, set to disabled (CPU-only)\n", __func__);
++    }
++
+     if (cparams.auto_fa) {
+         auto * gf = graph_reserve(1, n_seqs, n_outputs, mctx.get(), true);
+         if (!gf) {
