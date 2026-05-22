@@ -1,7 +1,6 @@
 diff --git a/ggml/src/ggml-cpu/ggml-cpu.c b/ggml/src/ggml-cpu/ggml-cpu.c
-index 2b3eb5b5c..cca917fd2 100644
---- a/ggml/src/ggml-cpu/ggml-cpu.c
-+++ b/ggml/src/ggml-cpu/ggml-cpu.c
+--- a/llama.cpp/ggml/src/ggml-cpu/ggml-cpu.c
++++ b/llama.cpp/ggml/src/ggml-cpu/ggml-cpu.c
 @@ -1520,6 +1520,26 @@ static void ggml_compute_forward_mul_mat_id(
      const struct ggml_tensor * src1 = dst->src[1];
      const struct ggml_tensor * ids = dst->src[2];
