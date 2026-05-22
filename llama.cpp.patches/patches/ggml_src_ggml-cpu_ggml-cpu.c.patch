@@ -1,0 +1,55 @@
+diff --git a/ggml/src/ggml-cpu/ggml-cpu.c b/ggml/src/ggml-cpu/ggml-cpu.c
+--- a/llama.cpp/ggml/src/ggml-cpu/ggml-cpu.c
++++ b/llama.cpp/ggml/src/ggml-cpu/ggml-cpu.c
+@@ -1520,6 +1520,26 @@ static void ggml_compute_forward_mul_mat_id(
+     const struct ggml_tensor * src1 = dst->src[1];
+     const struct ggml_tensor * ids = dst->src[2];
+ 
++#if GGML_USE_LLAMAFILE
++    // [jart] route MoE matmul through llamafile's batched MoE kernels
++    // when possible. Mirrors the dense-matmul llamafile_sgemm hook above.
++    // The full declarations live in /llamafile/sgemm.h but that header
++    // is shadowed inside the submodule by an upstream sgemm.h that only
++    // declares llamafile_sgemm; forward-declare here to keep the patch
++    // self-contained.
++    extern bool llamafile_mixmul(const struct ggml_compute_params *,
++                                 const struct ggml_tensor *,
++                                 const struct ggml_tensor *,
++                                 const struct ggml_tensor *,
++                                 struct ggml_tensor *);
++    extern bool llamafile_mixmul_iqk(long, long, long, int, int,
++                                     const void *, const void *, float *,
++                                     long, long, const void *, int, int);
++    if (llamafile_mixmul(params, src0, src1, ids, dst)) {
++        return;
++    }
++#endif
++
+     GGML_TENSOR_BINARY_OP_LOCALS
+ 
+     const int ith = params->ith;
+@@ -1639,6 +1659,24 @@ static void ggml_compute_forward_mul_mat_id(
+         const int64_t nr0 = ne01;
+         const int64_t nr1 = cne1;
+ 
++#if GGML_USE_LLAMAFILE
++        // [jart] inner hook for K-quant/Q8 MoE matmul, mirrors 0.9.3
++        // ggml.c:11360. Catches the cases the top-level llamafile_mixmul
++        // doesn't claim (notably Q4_K/Q5_K/Q6_K weights with Q8_K vec_dot).
++        if ((vec_dot_type == GGML_TYPE_Q8_K || vec_dot_type == GGML_TYPE_Q8_0 ||
++             vec_dot_type == GGML_TYPE_Q8_1) &&
++            dst->type == GGML_TYPE_F32 && ne13 == 1) {
++            if (llamafile_mixmul_iqk(nr0, nr1, ne00, ne11, src0->type,
++                                     (const char *)src0_cur,
++                                     (const char *)wdata,
++                                     (float *)dst->data, nb1, nb2,
++                                     matrix_rows + cur_a*ids->ne[0]*ids->ne[1],
++                                     ith, nth)) {
++                continue;
++            }
++        }
++#endif
++
+         int chunk_size = 16;
+         if (nr0 == 1 || nr1 == 1) {
+             chunk_size = 64;
