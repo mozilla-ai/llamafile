@@ -1,24 +1,26 @@
 diff --git a/ggml/src/ggml-cpu/ops.cpp b/ggml/src/ggml-cpu/ops.cpp
 --- a/llama.cpp/ggml/src/ggml-cpu/ops.cpp
 +++ b/llama.cpp/ggml/src/ggml-cpu/ops.cpp
-@@ -12,6 +12,16 @@
+@@ -12,6 +12,18 @@
  #include <cfloat>
  #include <cmath>
  
 +#if GGML_USE_LLAMAFILE
 +// [jart] llamafile #975: forward declarations for the optimized AVX-512
-+// flash-attention helpers implemented in llamafile/fa_helpers_*. extern
-+// "C" because the implementations are exported as C symbols from
-+// llamafile/sgemm.cpp; can't use llamafile/sgemm.h directly because the
-+// submodule includes a shadowing upstream sgemm.h.
++// flash-attention helpers implemented in llamafile/fa_helpers_* and
++// fa_simd_gemm_*. extern "C" because the implementations are exported
++// as C symbols from llamafile/sgemm.cpp; can't use llamafile/sgemm.h
++// directly because the submodule includes a shadowing upstream sgemm.h.
 +extern "C" bool llamafile_fa_vec_dot_f16(int, float *, const void *, const void *);
 +extern "C" bool llamafile_fa_fp16_to_fp32_row(const void *, float *, int64_t);
++extern "C" bool llamafile_fa_simd_gemm(float *, const float *, const float *,
++                                        int, int, int);
 +#endif
 +
  // ggml_compute_forward_dup
  
  static void ggml_compute_forward_dup_same_cont(
-@@ -8247,6 +8257,15 @@ static void ggml_compute_forward_flash_attn_ext_f16_one_chunk(
+@@ -8247,6 +8259,15 @@ static void ggml_compute_forward_flash_attn_ext_f16_one_chunk(
      GGML_ASSERT((                            q_to_vec_dot) && "fattn: unsupported K-type");
      GGML_ASSERT((v->type == GGML_TYPE_F32 || v_to_float  ) && "fattn: unsupported V-type");
  
@@ -34,7 +36,7 @@ diff --git a/ggml/src/ggml-cpu/ops.cpp b/ggml/src/ggml-cpu/ops.cpp
      int ith = params->ith;
  
      for (int ir = ir0; ir < ir1; ++ir) {
-@@ -8266,10 +8285,22 @@ static void ggml_compute_forward_flash_attn_ext_f16_one_chunk(
+@@ -8266,10 +8287,22 @@ static void ggml_compute_forward_flash_attn_ext_f16_one_chunk(
          ggml_fp16_t * VKQ16 = (ggml_fp16_t *) (VKQ32 + 1*DV); // (temporary) FP16 VKQ accumulator
          ggml_fp16_t * Q_q   = (ggml_fp16_t *) (VKQ32 + 2*DV); // (temporary) buffer for Q converted to quantized/FP16
  
@@ -60,7 +62,7 @@ diff --git a/ggml/src/ggml-cpu/ops.cpp b/ggml/src/ggml-cpu/ops.cpp
          }
  
          const ggml_fp16_t * mp = mask ? (ggml_fp16_t *)((char *) mask->data + iq1*mask->nb[1] + (iq2%mask->ne[2])*mask->nb[2] + (iq3%mask->ne[3])*mask->nb[3]) : NULL;
-@@ -8298,7 +8329,13 @@ static void ggml_compute_forward_flash_attn_ext_f16_one_chunk(
+@@ -8298,7 +8331,13 @@ static void ggml_compute_forward_flash_attn_ext_f16_one_chunk(
              float s; // KQ value
  
              const char * k_data = (const char *) k->data + ( ic*nbk1 + ik2*nbk2 + ik3*nbk3);
@@ -74,7 +76,7 @@ diff --git a/ggml/src/ggml-cpu/ops.cpp b/ggml/src/ggml-cpu/ops.cpp
  
              s = s*scale; // scale KQ value
  
-@@ -8315,21 +8352,36 @@ static void ggml_compute_forward_flash_attn_ext_f16_one_chunk(
+@@ -8315,21 +8354,36 @@ static void ggml_compute_forward_flash_attn_ext_f16_one_chunk(
  
              const char * v_data = ((const char *) v->data + (ic*nbv1 + iv2*nbv2 + iv3*nbv3));
  
@@ -114,7 +116,7 @@ diff --git a/ggml/src/ggml-cpu/ops.cpp b/ggml/src/ggml-cpu/ops.cpp
              } else {
                  if (s > M) {
                      // s is new maximum, ms < 1.0f, vs == expf(s - s) == 1.0f
-@@ -8337,26 +8389,20 @@ static void ggml_compute_forward_flash_attn_ext_f16_one_chunk(
+@@ -8337,26 +8391,20 @@ static void ggml_compute_forward_flash_attn_ext_f16_one_chunk(
                      ms = expf(Mold - M);
  
                      // V = V*expf(Mold - M)
@@ -144,7 +146,7 @@ diff --git a/ggml/src/ggml-cpu/ops.cpp b/ggml/src/ggml-cpu/ops.cpp
              for (int64_t d = 0; d < DV; ++d) {
                  VKQ32[d] = GGML_CPU_FP16_TO_FP32(VKQ16[d]);
              }
-@@ -8577,8 +8623,24 @@ static void ggml_compute_forward_flash_attn_ext_tiled(
+@@ -8577,8 +8625,24 @@ static void ggml_compute_forward_flash_attn_ext_tiled(
                  const char * k_data = (const char *)k->data + (ic + tk)*nbk1 + ik2*nbk2 + ik3*nbk3;
                  if (kv_type == GGML_TYPE_F16) {
                      const ggml_fp16_t * k_f16 = (const ggml_fp16_t *)k_data;
@@ -171,7 +173,26 @@ diff --git a/ggml/src/ggml-cpu/ops.cpp b/ggml/src/ggml-cpu/ops.cpp
                      }
                  } else {
                      const float * k_f32_src = (const float *)k_data;
-@@ -8641,7 +8703,15 @@ static void ggml_compute_forward_flash_attn_ext_tiled(
+@@ -8588,7 +8652,18 @@ static void ggml_compute_forward_flash_attn_ext_tiled(
+                 }
+             }
+             memset(KQ, 0, Q_TILE_SZ * KV_TILE_SZ * sizeof(float));
++#if GGML_USE_LLAMAFILE
++            // [jart] llamafile #975: prefer our AVX-512 simd_gemm wrapper
++            // (4x4 zmm tile, ~2.7x the FMA throughput of ops.cpp's
++            // default AVX2 6x2 ymm tile). Falls back to upstream's
++            // header-inlined simd_gemm on CPUs without AVX-512F.
++            if (!llamafile_fa_simd_gemm(KQ, (const float *)Q_q, K_f32,
++                                         Q_TILE_SZ, DK, KV_TILE_SZ)) {
++                simd_gemm(KQ, (const float *)Q_q, K_f32, Q_TILE_SZ, DK, KV_TILE_SZ);
++            }
++#else
+             simd_gemm(KQ, (const float *)Q_q, K_f32, Q_TILE_SZ, DK, KV_TILE_SZ);
++#endif
+             ggml_vec_scale_f32(Q_TILE_SZ * KV_TILE_SZ, KQ, scale);
+ 
+             // Set padded KQ entries to -inf so softmax gives them zero weight
+@@ -8641,7 +8716,15 @@ static void ggml_compute_forward_flash_attn_ext_tiled(
              for (int tk = 0; tk < kv_tile; tk++) {
                  const char * v_data = (const char *)v->data + (ic + tk)*nbv1 + iv2*nbv2 + iv3*nbv3;
                  if (kv_type == GGML_TYPE_F16) {
@@ -187,3 +208,20 @@ diff --git a/ggml/src/ggml-cpu/ops.cpp b/ggml/src/ggml-cpu/ops.cpp
                  } else {
                      memcpy(V32 + tk * DV, v_data, DV * sizeof(float));
                  }
+@@ -8651,7 +8734,16 @@ static void ggml_compute_forward_flash_attn_ext_tiled(
+                     memset(KQ + tq * KV_TILE_SZ, 0, KV_TILE_SZ * sizeof(float));
+                 }
+             }
++#if GGML_USE_LLAMAFILE
++            // [jart] llamafile #975: same AVX-512 simd_gemm wrapper as the
++            // KQ matmul above (4x4 zmm tile vs default AVX2 6x2).
++            if (!llamafile_fa_simd_gemm(VKQ32, KQ, V32,
++                                         Q_TILE_SZ, KV_TILE_SZ, DV)) {
++                simd_gemm(VKQ32, KQ, V32, Q_TILE_SZ, KV_TILE_SZ, DV);
++            }
++#else
+             simd_gemm(VKQ32, KQ, V32, Q_TILE_SZ, KV_TILE_SZ, DV);
++#endif
+         }
+ 
+         // sinks (apply only to valid rows in the tile)

@@ -343,6 +343,141 @@ TEST(dispatch_wiring) {
                 "fp16_to_fp32_row: if not handled, output must be untouched");
 }
 
+// ============================================================================
+// simd_gemm: C[M x N] += A[M x K] * B[K x N], all f32. We compare our
+// AVX-512 wrapper against a scalar reference because the upstream
+// ggml-cpu simd_gemm is `static inline` in a header and isn't directly
+// linkable here. The scalar reference is the exact math the wrapper
+// must reproduce; both implementations are well-defined up to FMA
+// associativity (FMA rounding doesn't commute across reduction orders).
+// Tolerance: 4 * K * eps * max(|A|*|B|) which matches the worst-case
+// summed-product bound.
+// ============================================================================
+
+static void scalar_gemm_reference(float *C, const float *A, const float *B,
+                                   int M, int K, int N) {
+    for (int i = 0; i < M; ++i) {
+        for (int j = 0; j < N; ++j) {
+            float acc = C[i * N + j];
+            for (int k = 0; k < K; ++k) {
+                acc += A[i * K + k] * B[k * N + j];
+            }
+            C[i * N + j] = acc;
+        }
+    }
+}
+
+static float gemm_tol(int K, float scale) {
+    return std::max(1e-4f, 8.0f * (float)K * FLT_EPSILON * scale * scale);
+}
+
+static void fill_random_f32(std::vector<float> &v, uint64_t seed,
+                             float stddev = 0.1f) {
+    std::mt19937_64 rng(seed);
+    std::normal_distribution<float> dist(0.0f, stddev);
+    for (auto &x : v) x = dist(rng);
+}
+
+TEST(simd_gemm_typical_fa_tile_shapes) {
+    // Shapes that match the FA tile dispatch in ops.cpp's tiled function
+    // (Q_TILE_SZ x KV_TILE_SZ for the KQ matmul, Q_TILE_SZ x DV for the
+    // VKQ accumulation). Common head dims: 64, 80, 96, 128. Common tile
+    // sizes from ggml_fa_tile_config: 4-16 Q rows, 32-128 KV columns.
+    struct Shape { int M, K, N; const char *label; };
+    Shape shapes[] = {
+        {  4, 128,  64, "KQ: Q4 x DK128 x KV64" },
+        {  8, 128,  64, "KQ: Q8 x DK128 x KV64" },
+        { 16, 128, 128, "KQ: Q16 x DK128 x KV128" },
+        {  4,  64, 128, "VKQ: Q4 x KV64 x DV128" },
+        {  8,  64, 128, "VKQ: Q8 x KV64 x DV128" },
+        { 16, 128, 128, "VKQ: Q16 x KV128 x DV128" },
+        {  4,  96,  80, "odd: Q4 x 96 x 80" },
+        { 16,  64,  32, "narrow: Q16 x 64 x 32" },
+    };
+    for (auto &s : shapes) {
+        std::vector<float> A(s.M * s.K), B(s.K * s.N);
+        std::vector<float> C_ref(s.M * s.N), C_our(s.M * s.N);
+        uint64_t seed = 0xC0FFEEull ^ (uint64_t)(s.M * 31 + s.K * 17 + s.N);
+        fill_random_f32(A, seed);
+        fill_random_f32(B, seed ^ 0xDEADBEEFull);
+        // Pre-fill C with random values to test the += accumulation.
+        fill_random_f32(C_ref, seed ^ 0xFACEFEEDull);
+        C_our = C_ref;
+
+        scalar_gemm_reference(C_ref.data(), A.data(), B.data(),
+                              s.M, s.K, s.N);
+        bool handled = llamafile_fa_simd_gemm(C_our.data(), A.data(),
+                                               B.data(), s.M, s.K, s.N);
+
+        if (!handled) {
+            skip_count++;
+            continue;
+        }
+
+        char msg[160];
+        float tol = gemm_tol(s.K, 0.5f);  // stddev 0.1 → max |a|*|b| ~ 0.5
+        for (int i = 0; i < s.M; ++i) {
+            for (int j = 0; j < s.N; ++j) {
+                snprintf(msg, sizeof(msg),
+                         "simd_gemm %s i=%d j=%d", s.label, i, j);
+                ASSERT_NEAR_F32(C_ref[i * s.N + j], C_our[i * s.N + j], tol, msg);
+            }
+        }
+    }
+}
+
+TEST(simd_gemm_zero_accumulator) {
+    // Start from C=0 so the result is purely A*B (no += round-off).
+    // Verifies the kernel handles a zero starting accumulator correctly.
+    int M = 8, K = 128, N = 128;
+    std::vector<float> A(M * K), B(K * N);
+    std::vector<float> C_ref(M * N, 0.0f), C_our(M * N, 0.0f);
+    fill_random_f32(A, 0x1234);
+    fill_random_f32(B, 0x5678);
+
+    scalar_gemm_reference(C_ref.data(), A.data(), B.data(), M, K, N);
+    bool handled = llamafile_fa_simd_gemm(C_our.data(), A.data(), B.data(),
+                                           M, K, N);
+    if (!handled) {
+        skip_count++;
+        return;
+    }
+    char msg[160];
+    float tol = gemm_tol(K, 0.5f);
+    for (int i = 0; i < M; ++i) {
+        for (int j = 0; j < N; ++j) {
+            snprintf(msg, sizeof(msg),
+                     "simd_gemm zero-acc i=%d j=%d", i, j);
+            ASSERT_NEAR_F32(C_ref[i * N + j], C_our[i * N + j], tol, msg);
+        }
+    }
+}
+
+TEST(simd_gemm_dispatch_wiring) {
+    int M = 4, K = 16, N = 32;
+    std::vector<float> A(M * K, 1.0f), B(K * N, 1.0f);
+    std::vector<float> C(M * N, -777.0f);
+    bool handled = llamafile_fa_simd_gemm(C.data(), A.data(), B.data(),
+                                           M, K, N);
+    ASSERT_TRUE(handled || C[0] == -777.0f,
+                "simd_gemm: if not handled, output must be untouched");
+    if (handled) {
+        // Each C[i,j] = -777 + sum_k(1 * 1) = -777 + K = -761
+        for (int i = 0; i < M; ++i) {
+            for (int j = 0; j < N; ++j) {
+                test_count++;
+                float expected = -777.0f + (float)K;
+                if (fabsf(C[i * N + j] - expected) > 1e-5f) {
+                    fprintf(stderr, "FAIL: simd_gemm dispatch i=%d j=%d "
+                            "expected %.3f got %.3f\n",
+                            i, j, expected, C[i * N + j]);
+                    fail_count++;
+                }
+            }
+        }
+    }
+}
+
 // ggml's f16↔f32 lookup table (used by ggml_vec_dot_f16's scalar tail
 // in simd-mappings.h via GGML_CPU_FP16_TO_FP32). Populated by ggml's
 // graph compute first-call init; we replicate the population here so

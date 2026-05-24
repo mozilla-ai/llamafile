@@ -186,7 +186,8 @@ TINYBLAS_CPU_IQK_SRCS := \
 
 TINYBLAS_CPU_FA_HELPERS_SRCS := \
 	llamafile/fa_helpers_amd_avx512f.cpp \
-	llamafile/fa_helpers_unsupported.cpp
+	llamafile/fa_helpers_unsupported.cpp \
+	llamafile/fa_simd_gemm_amd_avx512f.cpp
 
 TINYBLAS_CPU_SRCS := \
 	llamafile/sgemm.cpp \
@@ -404,7 +405,8 @@ o/$(MODE)/llamafile/iqk_mul_mat_amd_zen4.o: \
 	private TARGET_ARCH += -Xx86_64-mtune=skylake -Xx86_64-mavx -Xx86_64-mavx2 -Xx86_64-mfma -Xx86_64-mf16c -Xx86_64-mavx512f -Xx86_64-mavx512vl -Xx86_64-mavx512vnni -Xx86_64-mavx512bw -Xx86_64-mavx512dq
 
 # Flash-attention helpers (issue #975) - AVX-512F variant
-o/$(MODE)/llamafile/fa_helpers_amd_avx512f.o: \
+o/$(MODE)/llamafile/fa_helpers_amd_avx512f.o \
+o/$(MODE)/llamafile/fa_simd_gemm_amd_avx512f.o: \
 	private TARGET_ARCH += -Xx86_64-mtune=cannonlake -Xx86_64-mavx -Xx86_64-mf16c -Xx86_64-mfma -Xx86_64-mavx2 -Xx86_64-mavx512f
 
 # ARM82 variant (Apple M1+, Raspberry Pi 5)

@@ -65,6 +65,7 @@ FA_HELPERS_TEST_DEPS := \
 	o/$(MODE)/llamafile/llamafile.o \
 	o/$(MODE)/llamafile/fa_helpers_amd_avx512f.o \
 	o/$(MODE)/llamafile/fa_helpers_unsupported.o \
+	o/$(MODE)/llamafile/fa_simd_gemm_amd_avx512f.o \
 	o/$(MODE)/llamafile/tinyblas_cpu_sgemm_amd_avx.o \
 	o/$(MODE)/llamafile/tinyblas_cpu_sgemm_amd_fma.o \
 	o/$(MODE)/llamafile/tinyblas_cpu_sgemm_amd_avx2.o \

@@ -23,4 +23,9 @@ bool llamafile_fa_fp16_to_fp32_row_unsupported(const void *, float *,
     return false;
 }
 
+bool llamafile_fa_simd_gemm_unsupported(float *, const float *, const float *,
+                                         int, int, int) {
+    return false;
+}
+
 } // extern "C"
