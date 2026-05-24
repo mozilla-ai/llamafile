@@ -50,9 +50,58 @@ o/$(MODE)/tests/extract_data_uris_test: \
 	$(CXX) $(LDFLAGS) -o $@ $^ $(LDLIBS)
 
 # ==============================================================================
+# Test: fa_helpers_test (issue #975 numerical equivalence)
+# ==============================================================================
+#
+# Compares llamafile_fa_vec_dot_f16 / llamafile_fa_fp16_to_fp32_row
+# against upstream ggml_vec_dot_f16 / ggml_fp16_to_fp32_row on the
+# same random + edge-case inputs. Catches numerical regressions in
+# the alternative AVX-512F implementations we ship via sgemm.cpp's
+# dispatch. On CPUs without AVX-512F the helpers report unsupported
+# and the corresponding assertions are skipped.
+
+FA_HELPERS_TEST_DEPS := \
+	o/$(MODE)/llamafile/sgemm.o \
+	o/$(MODE)/llamafile/llamafile.o \
+	o/$(MODE)/llamafile/fa_helpers_amd_avx512f.o \
+	o/$(MODE)/llamafile/fa_helpers_unsupported.o \
+	o/$(MODE)/llamafile/tinyblas_cpu_sgemm_amd_avx.o \
+	o/$(MODE)/llamafile/tinyblas_cpu_sgemm_amd_fma.o \
+	o/$(MODE)/llamafile/tinyblas_cpu_sgemm_amd_avx2.o \
+	o/$(MODE)/llamafile/tinyblas_cpu_sgemm_amd_avxvnni.o \
+	o/$(MODE)/llamafile/tinyblas_cpu_sgemm_amd_avx512f.o \
+	o/$(MODE)/llamafile/tinyblas_cpu_sgemm_amd_zen4.o \
+	o/$(MODE)/llamafile/tinyblas_cpu_sgemm_arm80.o \
+	o/$(MODE)/llamafile/tinyblas_cpu_sgemm_arm82.o \
+	o/$(MODE)/llamafile/tinyblas_cpu_unsupported.o \
+	o/$(MODE)/llamafile/tinyblas_cpu_mixmul_amd_avx.o \
+	o/$(MODE)/llamafile/tinyblas_cpu_mixmul_amd_fma.o \
+	o/$(MODE)/llamafile/tinyblas_cpu_mixmul_amd_avx2.o \
+	o/$(MODE)/llamafile/tinyblas_cpu_mixmul_amd_avxvnni.o \
+	o/$(MODE)/llamafile/tinyblas_cpu_mixmul_amd_avx512f.o \
+	o/$(MODE)/llamafile/tinyblas_cpu_mixmul_amd_zen4.o \
+	o/$(MODE)/llamafile/tinyblas_cpu_mixmul_arm80.o \
+	o/$(MODE)/llamafile/tinyblas_cpu_mixmul_arm82.o \
+	o/$(MODE)/llamafile/iqk_mul_mat_amd_avx2.o \
+	o/$(MODE)/llamafile/iqk_mul_mat_amd_zen4.o \
+	o/$(MODE)/llamafile/iqk_mul_mat_arm82.o \
+	o/$(MODE)/llama.cpp/llama.cpp.a
+
+o/$(MODE)/tests/fa_helpers_test.o: tests/fa_helpers_test.cpp
+	@mkdir -p $(@D)
+	$(CXX) $(CXXFLAGS) $(TESTS_CPPFLAGS) -fopenmp -c -o $@ $<
+
+o/$(MODE)/tests/fa_helpers_test: \
+		o/$(MODE)/tests/fa_helpers_test.o \
+		$(FA_HELPERS_TEST_DEPS)
+	@mkdir -p $(@D)
+	$(CXX) $(LDFLAGS) -fopenmp -o $@ $^ $(LDLIBS)
+
+# ==============================================================================
 # Phony targets
 # ==============================================================================
 
 .PHONY: o/$(MODE)/tests
 o/$(MODE)/tests: \
-	o/$(MODE)/tests/extract_data_uris_test.runs
+	o/$(MODE)/tests/extract_data_uris_test.runs \
+	o/$(MODE)/tests/fa_helpers_test.runs
