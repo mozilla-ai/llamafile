@@ -144,3 +144,46 @@ diff --git a/ggml/src/ggml-cpu/ops.cpp b/ggml/src/ggml-cpu/ops.cpp
              for (int64_t d = 0; d < DV; ++d) {
                  VKQ32[d] = GGML_CPU_FP16_TO_FP32(VKQ16[d]);
              }
+@@ -8577,8 +8623,24 @@ static void ggml_compute_forward_flash_attn_ext_tiled(
+                 const char * k_data = (const char *)k->data + (ic + tk)*nbk1 + ik2*nbk2 + ik3*nbk3;
+                 if (kv_type == GGML_TYPE_F16) {
+                     const ggml_fp16_t * k_f16 = (const ggml_fp16_t *)k_data;
+-                    for (int64_t dk = 0; dk < DK; dk++) {
+-                        K_f32[dk * KV_TILE_SZ + tk] = GGML_CPU_FP16_TO_FP32(k_f16[dk]);
++#if GGML_USE_LLAMAFILE
++                    // [jart] llamafile #975: dequant the K row contiguously
++                    // via SIMD (AVX-512 cvtph_ps), then scalar-transpose into
++                    // K_f32. ~2x faster than the upstream per-element table
++                    // lookup. Falls back to upstream's scalar loop on CPUs
++                    // without our optimized helper. DK up to 1024 covers all
++                    // realistic attention head dims (Qwen3=128, DeepSeek-MLA=576).
++                    alignas(64) float k_scratch[1024];
++                    if (DK <= 1024 && llamafile_fa_fp16_to_fp32_row(k_f16, k_scratch, DK)) {
++                        for (int64_t dk = 0; dk < DK; dk++) {
++                            K_f32[dk * KV_TILE_SZ + tk] = k_scratch[dk];
++                        }
++                    } else
++#endif
++                    {
++                        for (int64_t dk = 0; dk < DK; dk++) {
++                            K_f32[dk * KV_TILE_SZ + tk] = GGML_CPU_FP16_TO_FP32(k_f16[dk]);
++                        }
+                     }
+                 } else {
+                     const float * k_f32_src = (const float *)k_data;
+@@ -8641,7 +8703,15 @@ static void ggml_compute_forward_flash_attn_ext_tiled(
+             for (int tk = 0; tk < kv_tile; tk++) {
+                 const char * v_data = (const char *)v->data + (ic + tk)*nbv1 + iv2*nbv2 + iv3*nbv3;
+                 if (kv_type == GGML_TYPE_F16) {
++#if GGML_USE_LLAMAFILE
++                    // [jart] llamafile #975: route through optimized AVX-512
++                    // dequant when available; fall back to upstream's helper.
++                    if (!llamafile_fa_fp16_to_fp32_row((const ggml_fp16_t *)v_data, V32 + tk * DV, DV)) {
++                        ggml_fp16_to_fp32_row((const ggml_fp16_t *)v_data, V32 + tk * DV, DV);
++                    }
++#else
+                     ggml_fp16_to_fp32_row((const ggml_fp16_t *)v_data, V32 + tk * DV, DV);
++#endif
+                 } else {
+                     memcpy(V32 + tk * DV, v_data, DV * sizeof(float));
+                 }
