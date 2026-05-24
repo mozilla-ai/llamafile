@@ -1,7 +1,40 @@
 diff --git a/ggml/src/ggml-cpu/ops.cpp b/ggml/src/ggml-cpu/ops.cpp
 --- a/llama.cpp/ggml/src/ggml-cpu/ops.cpp
 +++ b/llama.cpp/ggml/src/ggml-cpu/ops.cpp
-@@ -8266,10 +8266,22 @@ static void ggml_compute_forward_flash_attn_ext_f16_one_chunk(
+@@ -12,6 +12,16 @@
+ #include <cfloat>
+ #include <cmath>
+ 
++#if GGML_USE_LLAMAFILE
++// [jart] llamafile #975: forward declarations for the optimized AVX-512
++// flash-attention helpers implemented in llamafile/fa_helpers_*. extern
++// "C" because the implementations are exported as C symbols from
++// llamafile/sgemm.cpp; can't use llamafile/sgemm.h directly because the
++// submodule includes a shadowing upstream sgemm.h.
++extern "C" bool llamafile_fa_vec_dot_f16(int, float *, const void *, const void *);
++extern "C" bool llamafile_fa_fp16_to_fp32_row(const void *, float *, int64_t);
++#endif
++
+ // ggml_compute_forward_dup
+ 
+ static void ggml_compute_forward_dup_same_cont(
+@@ -8247,6 +8257,15 @@ static void ggml_compute_forward_flash_attn_ext_f16_one_chunk(
+     GGML_ASSERT((                            q_to_vec_dot) && "fattn: unsupported K-type");
+     GGML_ASSERT((v->type == GGML_TYPE_F32 || v_to_float  ) && "fattn: unsupported V-type");
+ 
++#if GGML_USE_LLAMAFILE
++    // [jart] llamafile #975: see file-scope extern "C" declarations of
++    // llamafile_fa_vec_dot_f16 / llamafile_fa_fp16_to_fp32_row above.
++    // Their multi-arch implementations live in llamafile/fa_helpers_*
++    // and are runtime-dispatched via llamafile/sgemm.cpp.
++    const bool kq_is_f16 = (k->type == GGML_TYPE_F16 && k_vec_dot_type == GGML_TYPE_F16);
++    const bool v_is_f16  = (v->type == GGML_TYPE_F16);
++#endif
++
+     int ith = params->ith;
+ 
+     for (int ir = ir0; ir < ir1; ++ir) {
+@@ -8266,10 +8285,22 @@ static void ggml_compute_forward_flash_attn_ext_f16_one_chunk(
          ggml_fp16_t * VKQ16 = (ggml_fp16_t *) (VKQ32 + 1*DV); // (temporary) FP16 VKQ accumulator
          ggml_fp16_t * Q_q   = (ggml_fp16_t *) (VKQ32 + 2*DV); // (temporary) buffer for Q converted to quantized/FP16
  
@@ -27,7 +60,21 @@ diff --git a/ggml/src/ggml-cpu/ops.cpp b/ggml/src/ggml-cpu/ops.cpp
          }
  
          const ggml_fp16_t * mp = mask ? (ggml_fp16_t *)((char *) mask->data + iq1*mask->nb[1] + (iq2%mask->ne[2])*mask->nb[2] + (iq3%mask->ne[3])*mask->nb[3]) : NULL;
-@@ -8315,21 +8327,30 @@ static void ggml_compute_forward_flash_attn_ext_f16_one_chunk(
+@@ -8298,7 +8329,13 @@ static void ggml_compute_forward_flash_attn_ext_f16_one_chunk(
+             float s; // KQ value
+ 
+             const char * k_data = (const char *) k->data + ( ic*nbk1 + ik2*nbk2 + ik3*nbk3);
++#if GGML_USE_LLAMAFILE
++            if (!kq_is_f16 || !llamafile_fa_vec_dot_f16(DK, &s, k_data, Q_q)) {
++                kq_vec_dot(DK, &s, 0, k_data, 0, Q_q, 0, 1);
++            }
++#else
+             kq_vec_dot(DK, &s, 0, k_data, 0, Q_q, 0, 1);
++#endif
+ 
+             s = s*scale; // scale KQ value
+ 
+@@ -8315,21 +8352,36 @@ static void ggml_compute_forward_flash_attn_ext_f16_one_chunk(
  
              const char * v_data = ((const char *) v->data + (ic*nbv1 + iv2*nbv2 + iv3*nbv3));
  
@@ -52,7 +99,13 @@ diff --git a/ggml/src/ggml-cpu/ops.cpp b/ggml/src/ggml-cpu/ops.cpp
 +                    // f16/quant -> f32 (covers GGML_TYPE_F16 too once
 +                    // we're in the f32 accumulator path; v_to_float is
 +                    // ggml_fp16_to_fp32_row for V=f16)
++#if GGML_USE_LLAMAFILE
++                    if (!v_is_f16 || !llamafile_fa_fp16_to_fp32_row(v_data, V32, DV)) {
++                        v_to_float(v_data, V32, DV);
++                    }
++#else
 +                    v_to_float(v_data, V32, DV);
++#endif
 +                    ggml_vec_mad_f32(DV, VKQ32, V32, vs);
 +                } else {
 +                    // V is F32
@@ -61,7 +114,7 @@ diff --git a/ggml/src/ggml-cpu/ops.cpp b/ggml/src/ggml-cpu/ops.cpp
              } else {
                  if (s > M) {
                      // s is new maximum, ms < 1.0f, vs == expf(s - s) == 1.0f
-@@ -8337,26 +8358,20 @@ static void ggml_compute_forward_flash_attn_ext_f16_one_chunk(
+@@ -8337,26 +8389,20 @@ static void ggml_compute_forward_flash_attn_ext_f16_one_chunk(
                      ms = expf(Mold - M);
  
                      // V = V*expf(Mold - M)

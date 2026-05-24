@@ -86,6 +86,19 @@ bool llamafile_mixmul_arm82(const struct ggml_compute_params *, const struct ggm
 bool llamafile_mixmul_iqk(long, long, long, int, int, const void *, const void *, float *, long,
                           long, const void *, int, int);
 
+// Flash-attention helpers (issue #975). Optimized replacements for two
+// ggml-cpu f16 inner-loop helpers. Returns true when handled by the
+// optimized kernel; caller falls back to upstream's ggml helper on
+// false. Public API takes void* so callers don't need ggml.h.
+bool llamafile_fa_vec_dot_f16(int n, float *s, const void *x, const void *y);
+bool llamafile_fa_fp16_to_fp32_row(const void *x, float *y, int64_t n);
+
+// Internal arch-specific implementations of the FA helpers.
+bool llamafile_fa_vec_dot_f16_amd_avx512f(int, float *, const void *, const void *);
+bool llamafile_fa_vec_dot_f16_unsupported(int, float *, const void *, const void *);
+bool llamafile_fa_fp16_to_fp32_row_amd_avx512f(const void *, float *, int64_t);
+bool llamafile_fa_fp16_to_fp32_row_unsupported(const void *, float *, int64_t);
+
 #ifdef __cplusplus
 }
 #endif
