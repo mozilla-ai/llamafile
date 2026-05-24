@@ -133,21 +133,13 @@ static void fill_random_f16(std::vector<ggml_fp16_t> &out, uint64_t seed) {
     }
 }
 
-// Fill with adversarial alternating ±large values that stress
-// reduction order — different chunk widths (AVX2 8-wide vs AVX-512
-// 16-wide) will pair these up differently and amplify any precision
-// issue.
-static void fill_adversarial_f16(std::vector<ggml_fp16_t> &out, float scale) {
-    for (size_t i = 0; i < out.size(); ++i) {
-        out[i] = ggml_fp32_to_fp16((i & 1) ? -scale : scale);
-    }
-}
-
 // Tolerance for vec_dot_f16: both implementations convert to f32 and
 // sum, but in different chunk sizes (AVX2: 8-wide; AVX-512: 16-wide).
 // The reduction order differs, so we allow a relative error
-// proportional to n. 2 * n * eps * max_abs is the worst-case bound for
-// summed-product accumulation.
+// proportional to n (Wilkinson-style summed-product bound: O(n) terms
+// each at unit-roundoff eps/2, with a small safety factor). max_abs
+// here is the peak |x[i]*y[i]|, an upper bound for the running partial
+// sum scale.
 static float vec_dot_tol(int n, const std::vector<ggml_fp16_t> &x,
                           const std::vector<ggml_fp16_t> &y) {
     float max_abs = 0.0f;
@@ -156,7 +148,7 @@ static float vec_dot_tol(int n, const std::vector<ggml_fp16_t> &x,
         float yv = ggml_fp16_to_fp32(y[i]);
         max_abs = std::max(max_abs, std::fabs(xv) * std::fabs(yv));
     }
-    return std::max(1e-6f, 2.0f * (float)n * FLT_EPSILON * max_abs * (float)n);
+    return std::max(1e-5f, 8.0f * (float)n * FLT_EPSILON * max_abs);
 }
 
 // ============================================================================
@@ -268,15 +260,24 @@ TEST(vec_dot_f16_normal_inputs) {
 }
 
 TEST(vec_dot_f16_adversarial_reduction_order) {
-    // Alternating ±scale: x[i]*y[i] terms alternate sign, so the running
-    // sum depends heavily on pairing order. Different SIMD widths fold
-    // them differently — this is the worst case for reduction-order
-    // sensitivity. Tolerance is intentionally relaxed.
+    // To actually stress reduction-order sensitivity, the per-element
+    // products x[i]*y[i] must alternate sign — otherwise SIMD width
+    // doesn't change the result. Use a scale of 10 so |product| = 100
+    // (well within f16 range): partial sums oscillate by ±100 across
+    // steps, and AVX2 (8-wide) vs AVX-512 (16-wide) reduction trees
+    // pair the cancelling terms in different orders, amplifying any
+    // floating-point drift.
+    //   x[i] = (i & 1) ? -10 : +10                 → [+, -, +, -, ...]
+    //   y[i] = ((i / 2) & 1) ? -10 : +10           → [+, +, -, -, ...]
+    //   products = x[i]*y[i] alternate as          [+, -, -, +, +, -, -, +, ...]
     for (int n : kTestSizes) {
         if (n < 2) continue;
         std::vector<ggml_fp16_t> x(n), y(n);
-        fill_adversarial_f16(x, 1.0f);
-        fill_adversarial_f16(y, 1.0f);
+        const float scale = 10.0f;
+        for (int i = 0; i < n; ++i) {
+            x[i] = ggml_fp32_to_fp16((i & 1)        ? -scale : scale);
+            y[i] = ggml_fp32_to_fp16(((i / 2) & 1) ? -scale : scale);
+        }
 
         float ref = 0.0f, our = 0.0f;
         ggml_vec_dot_f16(n, &ref, 0, x.data(), 0, y.data(), 0, 1);
@@ -287,12 +288,13 @@ TEST(vec_dot_f16_adversarial_reduction_order) {
             continue;
         }
 
-        // Both should sum to n (all terms are +1) with at most a few
-        // ULPs of drift. Allow 4 * n * eps for safety.
-        float tol = std::max(1e-5f, 4.0f * (float)n * FLT_EPSILON * (float)n);
+        // Worst-case drift bound: ~n * eps * max_partial_sum_scale.
+        // max |x[i]*y[i]| = scale^2 = 100. Use 4 * n * eps * 100 with
+        // a small absolute floor for tiny n.
+        float tol = std::max(1e-4f, 4.0f * (float)n * FLT_EPSILON * scale * scale);
         char msg[128];
         snprintf(msg, sizeof(msg),
-                 "vec_dot_f16 n=%d (adversarial alternating ±1)", n);
+                 "vec_dot_f16 n=%d (adversarial alternating-sign products)", n);
         ASSERT_NEAR_F32(ref, our, tol, msg);
     }
 }

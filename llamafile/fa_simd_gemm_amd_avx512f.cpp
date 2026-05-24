@@ -11,8 +11,8 @@
 // ops.cpp's default-ISA build gets. Roughly 2.7x peak FMA throughput
 // on Skylake-X+ CPUs (4x16 vs 6x8 lane-FMAs).
 //
-// Called from the tiled FA function at ops.cpp:8653 (KQ = Q @ K) and
-// :8724 (VKQ += KQ @ V). Runtime-dispatched via sgemm.cpp; falls back
+// Called from the tiled FA function at ops.cpp:8660 (KQ = Q @ K) and
+// :8740 (VKQ += KQ @ V). Runtime-dispatched via sgemm.cpp; falls back
 // to upstream's simd_gemm (already inlined in ops.cpp) on CPUs without
 // AVX-512F by returning false.
 
