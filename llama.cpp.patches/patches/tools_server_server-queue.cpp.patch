@@ -28,26 +28,29 @@ diff --git a/tools/server/server-queue.cpp b/tools/server/server-queue.cpp
      }
  }
  
-@@ -123,6 +130,18 @@ void server_queue::terminate() {
+@@ -123,6 +130,21 @@ void server_queue::terminate() {
  }
  
  void server_queue::start_loop(int64_t idle_sleep_ms) {
-+    // Block SIGINT and SIGTERM on this thread to prevent EINTR during
-+    // condition_variable::wait(). In Cosmopolitan libc, condition_variable
-+    // throws std::system_error(EINTR) when interrupted by signals, and this
-+    // exception cannot be caught (goes directly to std::terminate).
-+    // The main thread handles these signals, sets running=false, and calls
-+    // notify_all() to wake us up cleanly.
++    // Block every signal on this thread so pthread_cond_timedwait() can't
++    // be interrupted with EINTR (libcxx rethrows EINTR as
++    // std::system_error and std::terminates the process). Keep synchronous
++    // fault signals deliverable so real crashes still surface.
 +    sigset_t block_mask;
-+    sigemptyset(&block_mask);
-+    sigaddset(&block_mask, SIGINT);
-+    sigaddset(&block_mask, SIGTERM);
++    sigfillset(&block_mask);
++    sigdelset(&block_mask, SIGSEGV);
++    sigdelset(&block_mask, SIGBUS);
++    sigdelset(&block_mask, SIGILL);
++    sigdelset(&block_mask, SIGFPE);
++    sigdelset(&block_mask, SIGABRT);
++    sigdelset(&block_mask, SIGSYS);
++    sigdelset(&block_mask, SIGTRAP);
 +    pthread_sigmask(SIG_BLOCK, &block_mask, nullptr);
 +
      running = true;
      time_last_task = ggml_time_ms();
  
-@@ -181,9 +200,13 @@ void server_queue::start_loop(int64_t idle_sleep_ms) {
+@@ -181,9 +203,13 @@ void server_queue::start_loop(int64_t idle_sleep_ms) {
                  callback_sleeping_state(true);
                  req_stop_sleeping = false;
                  // wait until we are requested to exit sleeping state
@@ -64,7 +67,7 @@ diff --git a/tools/server/server-queue.cpp b/tools/server/server-queue.cpp
                  if (!running) { // may changed during sleep
                      break; // terminate
                  }
-@@ -266,13 +289,17 @@ void server_response::remove_waiting_task_ids(const std::unordered_set<int> & id
+@@ -266,13 +292,17 @@ void server_response::remove_waiting_task_ids(const std::unordered_set<int> & id
  server_task_result_ptr server_response::recv(const std::unordered_set<int> & id_tasks) {
      while (true) {
          std::unique_lock<std::mutex> lock(mutex_results);

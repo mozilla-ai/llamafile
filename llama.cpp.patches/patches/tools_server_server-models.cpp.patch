@@ -25,22 +25,30 @@ diff --git a/tools/server/server-models.cpp b/tools/server/server-models.cpp
          }
      }
  }
-@@ -826,6 +830,14 @@ void server_models::load(const std::string & name) {
+@@ -826,6 +830,22 @@ void server_models::load(const std::string & name) {
          });
  
          std::thread stopping_thread([&]() {
-+            // Block SIGINT/SIGTERM on this thread to prevent EINTR during
-+            // condition_variable waits. Signals are handled by the main thread.
++            // Block every signal on this thread so pthread_cond_timedwait()
++            // can't be interrupted with EINTR (libcxx rethrows EINTR as
++            // std::system_error and std::terminates the process). Keep
++            // synchronous fault signals deliverable so real crashes still
++            // surface.
 +            sigset_t block_mask;
-+            sigemptyset(&block_mask);
-+            sigaddset(&block_mask, SIGINT);
-+            sigaddset(&block_mask, SIGTERM);
++            sigfillset(&block_mask);
++            sigdelset(&block_mask, SIGSEGV);
++            sigdelset(&block_mask, SIGBUS);
++            sigdelset(&block_mask, SIGILL);
++            sigdelset(&block_mask, SIGFPE);
++            sigdelset(&block_mask, SIGABRT);
++            sigdelset(&block_mask, SIGSYS);
++            sigdelset(&block_mask, SIGTRAP);
 +            pthread_sigmask(SIG_BLOCK, &block_mask, nullptr);
 +
              // thread to monitor stopping signal OR child crash
              auto is_stopping = [this, &name]() {
                  return this->stopping_models.find(name) != this->stopping_models.end();
-@@ -835,7 +847,10 @@ void server_models::load(const std::string & name) {
+@@ -835,7 +855,10 @@ void server_models::load(const std::string & name) {
              };
              {
                  std::unique_lock<std::mutex> lk(this->mutex);
@@ -52,7 +60,7 @@ diff --git a/tools/server/server-models.cpp b/tools/server/server-models.cpp
              }
              // child may have already exited (e.g. crashed) — skip shutdown sequence
              if (!subprocess_alive(child_proc.get())) {
-@@ -984,13 +999,14 @@ void server_models::update_loaded_info(const std::string & name, std::string & r
+@@ -984,13 +1007,14 @@ void server_models::update_loaded_info(const std::string & name, std::string & r
  
  void server_models::wait_until_loading_finished(const std::string & name) {
      std::unique_lock<std::mutex> lk(mutex);

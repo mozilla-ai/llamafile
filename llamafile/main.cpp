@@ -35,6 +35,7 @@
 #include "version.h"
 
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <functional>
 #include <mutex>
@@ -42,9 +43,58 @@
 #include <vector>
 #include <condition_variable>
 
+#include <signal.h>
+#include <string.h>
+#include <unistd.h>
+
 #ifdef COSMOCC
 #include <cosmo.h>
 #endif
+
+namespace {
+
+// Diagnostic signal logger. Installed before any worker thread spawns so
+// we can see what signal is being delivered when something interrupts a
+// cv.wait_for() and trips libcxx's EINTR throw. Async-signal-safe:
+// touches only signal-safe writes and a fixed-size buffer on the stack.
+void diag_signal_log(int sig, siginfo_t * /*info*/, void * /*ctx*/) {
+    char buf[128];
+    const char *name = strsignal(sig);
+    int n = snprintf(buf, sizeof(buf),
+                     "[diag-signal] sig=%d (%s) tid=%lu\n",
+                     sig, name ? name : "?", (unsigned long)pthread_self());
+    if (n > 0) {
+        if ((size_t)n > sizeof(buf)) n = sizeof(buf);
+        (void)write(STDERR_FILENO, buf, (size_t)n);
+    }
+}
+
+void install_diag_signal_handlers() {
+    struct sigaction sa;
+    memset(&sa, 0, sizeof(sa));
+    sa.sa_sigaction = diag_signal_log;
+    sa.sa_flags = SA_SIGINFO | SA_RESTART;
+    sigemptyset(&sa.sa_mask);
+
+    // Every async signal we plausibly receive but never installed a
+    // handler for. SIGINT/SIGTERM are intentionally left alone — those
+    // already have a graceful-shutdown handler upstream and we don't
+    // want to clobber it.
+    int sigs[] = {
+        SIGCHLD, SIGPIPE, SIGURG, SIGIO, SIGALRM,
+        SIGHUP,  SIGUSR1, SIGUSR2, SIGWINCH,
+#ifdef SIGINFO
+        SIGINFO,
+#endif
+        SIGCONT, SIGTSTP, SIGTTIN, SIGTTOU,
+        SIGXCPU, SIGXFSZ, SIGVTALRM, SIGPROF,
+    };
+    for (size_t i = 0; i < sizeof(sigs)/sizeof(sigs[0]); ++i) {
+        sigaction(sigs[i], &sa, nullptr);
+    }
+}
+
+}  // namespace
 
 // Forward declarations
 extern int server_main(int argc, char **argv,
@@ -230,6 +280,16 @@ int main(int argc, char **argv) {
     if (llamafile_has(argv, "--version")) {
         puts("llamafile v" LLAMAFILE_VERSION_STRING);
         return 0;
+    }
+
+    // Diagnostic: when LLAMAFILE_TRACE_SIGNALS=1 is set, log every
+    // unexpected async signal we receive. Useful for tracking down
+    // future EINTR-style crashes (see the widened pthread_sigmask in
+    // common/log.cpp, server-queue.cpp, server-models.cpp, and
+    // vendor/cpp-httplib/httplib.cpp). Off by default so normal runs
+    // stay quiet on terminal resizes (SIGWINCH) and similar.
+    if (getenv("LLAMAFILE_TRACE_SIGNALS")) {
+        install_diag_signal_handlers();
     }
 
     // Parse llamafile arguments and determine execution mode

@@ -1,23 +1,30 @@
 diff --git a/vendor/cpp-httplib/httplib.cpp b/vendor/cpp-httplib/httplib.cpp
 --- a/llama.cpp/vendor/cpp-httplib/httplib.cpp
 +++ b/llama.cpp/vendor/cpp-httplib/httplib.cpp
-@@ -6291,6 +6291,15 @@ void ThreadPool::cleanup_finished_threads() {
+@@ -6291,6 +6291,22 @@ void ThreadPool::cleanup_finished_threads() {
  }
  
  void ThreadPool::worker(bool is_dynamic) {
 +#ifndef _WIN32
-+  // Block SIGINT/SIGTERM on pool threads to prevent EINTR during
-+  // condition_variable waits. Signals are handled by the main thread.
++  // Block every signal on this thread so pthread_cond_timedwait() can't
++  // be interrupted with EINTR (libcxx rethrows EINTR as std::system_error
++  // and std::terminates the process). Keep synchronous fault signals
++  // deliverable so real crashes still surface.
 +  sigset_t block_mask;
-+  sigemptyset(&block_mask);
-+  sigaddset(&block_mask, SIGINT);
-+  sigaddset(&block_mask, SIGTERM);
++  sigfillset(&block_mask);
++  sigdelset(&block_mask, SIGSEGV);
++  sigdelset(&block_mask, SIGBUS);
++  sigdelset(&block_mask, SIGILL);
++  sigdelset(&block_mask, SIGFPE);
++  sigdelset(&block_mask, SIGABRT);
++  sigdelset(&block_mask, SIGSYS);
++  sigdelset(&block_mask, SIGTRAP);
 +  pthread_sigmask(SIG_BLOCK, &block_mask, nullptr);
 +#endif
    for (;;) {
      std::function<void()> fn;
      {
-@@ -6308,7 +6317,13 @@ void ThreadPool::worker(bool is_dynamic) {
+@@ -6308,7 +6324,13 @@ void ThreadPool::worker(bool is_dynamic) {
            break;
          }
        } else {
