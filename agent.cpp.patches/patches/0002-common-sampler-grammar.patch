@@ -1,0 +1,167 @@
+From: Mozilla.ai <noreply@mozilla.ai>
+Date: 2026-05-26
+Subject: [PATCH] model: use common_sampler and wire chat-template grammar
+
+agent.cpp's Model uses raw llama_sampler_chain, which can't take a
+grammar. Without grammar constraints the model can emit malformed tool
+calls that the post-hoc PEG parser then fails to extract. Switch to
+common_sampler (the grammar-aware wrapper) and re-initialize it per
+generate() call when the chat template supplies a tool-calling grammar.
+
+This mirrors llama-server's wiring at
+llama.cpp/tools/server/server-task.cpp:379-476.
+
+After this patch, granite-4.0-micro and Qwen3.5-9B emit syntactically
+valid tool calls on the first try (no empty-args misfire), and
+common_chat_parse populates parsed_msg.tool_calls without falling back
+to the heuristic <tool_call>{json} extractor from patch 0001.
+--- a/agent.cpp/src/model.cpp
++++ b/agent.cpp/src/model.cpp
+@@ -1,6 +1,7 @@
+ #include "model.h"
+ #include "chat.h"
+ #include "error.h"
++#include "sampling.h"  // common_sampler, common_sampler_*
+ #include <nlohmann/json.hpp>
+ #include <algorithm>
+ #include <cstdio>
+@@ -59,7 +60,7 @@
+ Model::~Model()
+ {
+     if (sampler_ != nullptr) {
+-        llama_sampler_free(sampler_);
++        common_sampler_free(sampler_);
+     }
+     if (ctx_ != nullptr) {
+         llama_free(ctx_);
+@@ -85,7 +86,7 @@
+ {
+     if (this != &other) {
+         if (sampler_ != nullptr) {
+-            llama_sampler_free(sampler_);
++            common_sampler_free(sampler_);
+         }
+         if (ctx_ != nullptr) {
+             llama_free(ctx_);
+@@ -123,17 +124,19 @@
+         throw ModelError("failed to create llama context");
+     }
+ 
+-    sampler_ = llama_sampler_chain_init(llama_sampler_chain_default_params());
+-    llama_sampler_chain_add(sampler_,
+-                            llama_sampler_init_top_k(model_config.top_k));
+-    llama_sampler_chain_add(sampler_,
+-                            llama_sampler_init_top_p(model_config.top_p, 1));
+-    llama_sampler_chain_add(sampler_,
+-                            llama_sampler_init_min_p(model_config.min_p, 1));
+-    llama_sampler_chain_add(sampler_,
+-                            llama_sampler_init_temp(model_config.temp));
+-    llama_sampler_chain_add(sampler_,
+-                            llama_sampler_init_dist(model_config.seed));
++    // Build a grammar-aware common_sampler. No grammar at this stage — if
++    // generate() is called with tools whose chat template provides a grammar,
++    // the sampler is re-initialized there with the grammar wired in.
++    common_params_sampling sp;
++    sp.temp  = model_config.temp;
++    sp.top_k = model_config.top_k;
++    sp.top_p = model_config.top_p;
++    sp.min_p = model_config.min_p;
++    sp.seed  = model_config.seed;
++    sampler_ = common_sampler_init(weights_->get_model(), sp);
++    if (sampler_ == nullptr) {
++        throw ModelError("failed to initialize common_sampler");
++    }
+ }
+ 
+ std::vector<llama_token>
+@@ -175,7 +178,66 @@
+ 
+     auto params =
+       common_chat_templates_apply(weights_->get_templates(), inputs);
++
++    // Re-init the sampler when the chat template provides a tool-calling
++    // grammar (or preserved tokens / triggers). This constrains generation
++    // to syntactically valid tool calls so common_chat_parse can extract
++    // them. Mirrors what llama-server does in server-task.cpp:379-476.
++    if (!params.grammar.empty() ||
++        !params.grammar_triggers.empty() ||
++        !params.preserved_tokens.empty()) {
++        common_params_sampling sp;
++        sp.temp  = config_.temp;
++        sp.top_k = config_.top_k;
++        sp.top_p = config_.top_p;
++        sp.min_p = config_.min_p;
++        sp.seed  = config_.seed;
++        sp.generation_prompt = params.generation_prompt;
++        sp.grammar = { COMMON_GRAMMAR_TYPE_TOOL_CALLS, params.grammar };
++        sp.grammar_lazy = params.grammar_lazy;
++
++        const llama_vocab* vocab = weights_->get_vocab();
+ 
++        // Resolve preserved-token strings to single token ids.
++        for (const auto& t : params.preserved_tokens) {
++            auto ids = common_tokenize(vocab, t,
++                                       /*add_special=*/false,
++                                       /*parse_special=*/true);
++            if (ids.size() == 1) {
++                sp.preserved_tokens.insert(ids[0]);
++            }
++        }
++
++        // Resolve WORD-type triggers: convert to TOKEN-type when the word
++        // is a single preserved token, else keep as WORD. Mirrors
++        // server-task.cpp:443-471.
++        for (const auto& t : params.grammar_triggers) {
++            if (t.type == COMMON_GRAMMAR_TRIGGER_TYPE_WORD) {
++                auto ids = common_tokenize(vocab, t.value,
++                                           /*add_special=*/false,
++                                           /*parse_special=*/true);
++                if (ids.size() == 1 &&
++                    sp.preserved_tokens.count(ids[0])) {
++                    common_grammar_trigger trig;
++                    trig.type = COMMON_GRAMMAR_TRIGGER_TYPE_TOKEN;
++                    trig.value = t.value;
++                    trig.token = ids[0];
++                    sp.grammar_triggers.push_back(std::move(trig));
++                } else {
++                    sp.grammar_triggers.push_back(t);
++                }
++            } else {
++                sp.grammar_triggers.push_back(t);
++            }
++        }
++
++        common_sampler_free(sampler_);
++        sampler_ = common_sampler_init(weights_->get_model(), sp);
++        if (sampler_ == nullptr) {
++            throw ModelError("failed to re-init common_sampler with grammar");
++        }
++    }
++
+     // Tokenize the prompt
+     std::vector<llama_token> prompt_tokens = tokenize(params.prompt);
+     if (prompt_tokens.empty()) {
+@@ -319,7 +381,11 @@
+ 
+     llama_token new_token_id{};
+     while (true) {
+-        new_token_id = llama_sampler_sample(sampler_, ctx_, -1);
++        new_token_id = common_sampler_sample(sampler_, ctx_, -1);
++        // Accept the sampled token in both the sampling chain and the
++        // grammar (no-op when no grammar is active).
++        common_sampler_accept(sampler_, new_token_id,
++                              /*accept_grammar=*/true);
+ 
+         if (llama_vocab_is_eog(vocab, new_token_id)) {
+             break;
+--- a/agent.cpp/src/model.h
++++ b/agent.cpp/src/model.h
+@@ -183,7 +183,7 @@
+ 
+     std::shared_ptr<ModelWeights> weights_;
+     llama_context* ctx_ = nullptr;
+-    llama_sampler* sampler_ = nullptr;
++    struct common_sampler* sampler_ = nullptr; // grammar-aware sampler
+     std::vector<llama_token> processed_tokens_; // Track tokens in KV cache
+     int n_past_ = 0;                            // Track position in KV cache
+     ModelConfig config_;
