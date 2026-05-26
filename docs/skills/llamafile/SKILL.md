@@ -1,7 +1,7 @@
 ---
 name: llamafile
 description: This skill should be used when the user asks to "build llamafile", "rebuild llamafile", "run llamafile", "run llamafile tests", "debug llamafile", "set up llamafile", "update patches", "fix patch conflict", "update llama.cpp", "pull latest llama.cpp", "sync upstream llama.cpp", "reset submodules", "write a test for llamafile", "how does llamafile work", "llamafile architecture", or needs guidance on the llamafile build system, patch workflow, submodule integration, cosmocc toolchain, or development practices.
-version: 0.1.2
+version: 0.1.3
 ---
 
 # Llamafile Development Guide

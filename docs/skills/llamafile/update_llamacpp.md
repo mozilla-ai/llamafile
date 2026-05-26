@@ -4,7 +4,18 @@ llamafile relies on llama.cpp for many of its functionalities. Keeping it up-to-
 with the latest version upstream is generally a good practice, as it brings both
 bugfixes and support for recent models and features.
 
-This document describes the steps to keep llamafile updated with upstream.
+This document describes the steps to keep llamafile updated with upstream. At a high-level,
+a llama.cpp consists in the following tasks
+
+1. Updating the submodule
+2. Verifying and updating the current patches (important: never create patches manually,
+   but run `../tools/generate-patches.sh --output-dir ../llama.cpp.patches` from the
+   llama.cpp directory)
+3. Updating build dependencies, to make sure new/changed deps are taken into account
+4. Updating llamafile code: llamafile is built on top of llama.cpp and you want to
+   make sure its code still works with the new, updated submodule. NOTE that this also
+   includes GPU acceleration libs (cuda, rocm, vulkan .sh and .bat scripts in the
+   `llamafile/` directory)
 
 ## Step 1: Update the submodule
 
@@ -78,6 +89,8 @@ target.
 - Check if the llamafile code that calls llama.cpp server/main needs updates
 - Review `llamafile/` for any API changes in llama.cpp that need to be reflected
 - Pay attention to changes in `llama.cpp/include/` for API modifications
+- Also check GPU acceleration libraries code (cuda, rocm, vulkan .sh and .bat
+  scripts in the `llamafile/` directory)
 
 At the end of this step, you should be able to build all targets in this repo,
 i.e. the following verification step should return a successful result
