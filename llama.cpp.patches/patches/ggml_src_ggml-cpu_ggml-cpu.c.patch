@@ -1,7 +1,7 @@
 diff --git a/ggml/src/ggml-cpu/ggml-cpu.c b/ggml/src/ggml-cpu/ggml-cpu.c
 --- a/llama.cpp/ggml/src/ggml-cpu/ggml-cpu.c
 +++ b/llama.cpp/ggml/src/ggml-cpu/ggml-cpu.c
-@@ -1520,6 +1520,26 @@ static void ggml_compute_forward_mul_mat_id(
+@@ -1530,6 +1530,26 @@ static void ggml_compute_forward_mul_mat_id(
      const struct ggml_tensor * src1 = dst->src[1];
      const struct ggml_tensor * ids = dst->src[2];
  
@@ -28,7 +28,7 @@ diff --git a/ggml/src/ggml-cpu/ggml-cpu.c b/ggml/src/ggml-cpu/ggml-cpu.c
      GGML_TENSOR_BINARY_OP_LOCALS
  
      const int ith = params->ith;
-@@ -1639,6 +1659,24 @@ static void ggml_compute_forward_mul_mat_id(
+@@ -1649,6 +1669,24 @@ static void ggml_compute_forward_mul_mat_id(
          const int64_t nr0 = ne01;
          const int64_t nr1 = cne1;
  
@@ -53,7 +53,7 @@ diff --git a/ggml/src/ggml-cpu/ggml-cpu.c b/ggml/src/ggml-cpu/ggml-cpu.c
          int chunk_size = 16;
          if (nr0 == 1 || nr1 == 1) {
              chunk_size = 64;
-@@ -2827,6 +2865,19 @@ struct ggml_cplan ggml_graph_plan(
+@@ -2837,6 +2875,19 @@ struct ggml_cplan ggml_graph_plan(
                          cur += n_as*ids->ne[0]*ids->ne[1]*sizeof(struct mmid_row_mapping) + sizeof(int64_t);
                          // atomic_current_chunk
                          cur += CACHE_LINE_SIZE*n_as + CACHE_LINE_SIZE;

@@ -21,15 +21,22 @@ diff --git a/tools/server/server.cpp b/tools/server/server.cpp
  static std::function<void(int)> shutdown_handler;
  static std::atomic_flag is_terminating = ATOMIC_FLAG_INIT;
  
-@@ -71,12 +77,22 @@ static server_http_context::handler_t ex_wrapper(server_http_context::handler_t
+@@ -71,15 +77,26 @@ static server_http_context::handler_t ex_wrapper(server_http_context::handler_t
      };
  }
  
--int main(int argc, char ** argv) {
+-// satisfies -Wmissing-declarations
+-int llama_server(int argc, char ** argv);
+-
+-int llama_server(int argc, char ** argv) {
 +// Core server logic - can be called from llamafile main.cpp or standalone main()
 +// Optional callbacks for combined mode:
 +//   on_ready: called when server is fully loaded and accepting requests
 +//   on_shutdown_available: provides a function to trigger server shutdown
++int server_main(int argc, char ** argv,
++                std::function<void(const std::string &)> on_ready,
++                std::function<void(std::function<void()>)> on_shutdown_available);
++
 +int server_main(int argc, char ** argv,
 +                std::function<void(const std::string &)> on_ready,
 +                std::function<void(std::function<void()>)> on_shutdown_available) {
@@ -45,7 +52,7 @@ diff --git a/tools/server/server.cpp b/tools/server/server.cpp
      common_init();
  
      if (!common_params_parse(argc, argv, params, LLAMA_EXAMPLE_SERVER)) {
-@@ -295,6 +311,13 @@ int main(int argc, char ** argv) {
+@@ -309,6 +326,13 @@ int llama_server(int argc, char ** argv) {
              // this will unblock start_loop()
              ctx_server.terminate();
          };
@@ -59,9 +66,9 @@ diff --git a/tools/server/server.cpp b/tools/server/server.cpp
      }
  
      // TODO: refactor in common/console
-@@ -326,6 +349,11 @@ int main(int argc, char ** argv) {
-         LOG_INF("%s: server is listening on %s\n", __func__, ctx_http.listening_address.c_str());
-         LOG_INF("%s: starting the main loop...\n", __func__);
+@@ -339,6 +363,11 @@ int llama_server(int argc, char ** argv) {
+     } else {
+         SRV_INF("server is listening on %s\n", ctx_http.listening_address.c_str());
  
 +        // Notify caller that server is ready (for combined mode TUI startup)
 +        if (on_ready) {
@@ -71,7 +78,7 @@ diff --git a/tools/server/server.cpp b/tools/server/server.cpp
          // optionally, notify router server that this instance is ready
          std::thread monitor_thread;
          if (server_models::is_child_server()) {
-@@ -349,5 +377,48 @@ int main(int argc, char ** argv) {
+@@ -363,5 +392,48 @@ int llama_server(int argc, char ** argv) {
          }
      }
  

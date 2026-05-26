@@ -9,7 +9,7 @@ diff --git a/common/log.cpp b/common/log.cpp
  #endif // defined(_WIN32)
  
  int common_log_verbosity_thold = LOG_DEFAULT_LLAMA;
-@@ -261,10 +262,27 @@ public:
+@@ -260,10 +261,27 @@ public:
          running = true;
  
          thrd = std::thread([this]() {
@@ -35,6 +35,6 @@ diff --git a/common/log.cpp b/common/log.cpp
 +                    while (head == tail) {
 +                        cv.wait_for(lock, std::chrono::seconds(30));
 +                    }
- 
                      cur = entries[head];
  
+                     head = (head + 1) % entries.size();

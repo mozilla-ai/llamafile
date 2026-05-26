@@ -1,7 +1,7 @@
 diff --git a/src/llama-context.cpp b/src/llama-context.cpp
 --- a/llama.cpp/src/llama-context.cpp
 +++ b/llama.cpp/src/llama-context.cpp
-@@ -426,6 +426,16 @@ void llama_context::sched_reserve() {
+@@ -448,6 +448,16 @@ void llama_context::sched_reserve() {
      LLAMA_LOG_DEBUG("%s: worst-case: n_tokens = %d, n_seqs = %d, n_outputs = %d\n", __func__, n_tokens, n_seqs, n_outputs);
  
      // resolve automatic Flash Attention use

@@ -111,7 +111,13 @@ These patches integrate llamafile's file handling APIs for loading models from b
 
 | Patch | Description |
 |-------|-------------|
-| `tools_server_server.cpp.patch` | Renames `main()` to `server_main()` with `on_ready`/`on_shutdown_available` callbacks for combined TUI+server mode; adds Metal/GPU backend trigger before `common_init()`; adds Cosmopolitan-specific standalone `main()` with `cosmo_args`, verbose flag handling, and GPU pre-initialization; handles `LLAMAFILE_TUI` exit to avoid Metal cleanup crashes |
+| `tools_server_server.cpp.patch` | Renames upstream's `llama_server()` to `server_main()` and adds `on_ready`/`on_shutdown_available` callbacks for combined TUI+server mode; adds Metal/GPU backend trigger before `common_init()`; adds Cosmopolitan-specific standalone `main()` with `cosmo_args`, verbose flag handling, and GPU pre-initialization; handles `LLAMAFILE_TUI` exit to avoid Metal cleanup crashes |
+
+The web UI moved upstream from prebuilt `tools/server/public/*` assets to a
+Svelte project under `tools/ui/` that is compiled at CMake time via
+`tools/ui/embed.cpp`. cosmocc has no JS toolchain, so `llamafile-files/tools/server/ui.{h,cpp}`
+ships a stub returning no assets; `server-http.cpp` already guards the UI
+routes behind `LLAMA_UI_HAS_ASSETS`, so the API still works.
 
 ### Bug Fixes
 
@@ -119,6 +125,7 @@ These patches integrate llamafile's file handling APIs for loading models from b
 |-------|-------------|
 | `ggml_src_ggml-backend-reg.cpp.patch` | Suppresses debug log noise for non-existent backend search paths (irrelevant for llamafile's DSO loading approach) |
 | `ggml_src_ggml-vulkan_ggml-vulkan.cpp.patch` | Fixes unsigned integer underflow in `ggml_backend_vk_get_device_memory` where Vulkan's `heapUsage` can exceed `heapBudget` (clamps to zero instead of wrapping) |
+| `src_models_t5.cpp.patch` | Forward-declares the `graph<false>`/`graph<true>` explicit specializations before `build_arch_graph` so clang's `-std=gnu++23` doesn't reject them as specializations after implicit instantiation |
 
 ## Creating New Patches
 
