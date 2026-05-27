@@ -65,6 +65,7 @@ o/$(MODE)/agentfile/%.o: agentfile/%.cpp agentfile/BUILD.mk
 #   - llamafile objects for runtime GPU dispatch + zip filesystem
 #   - LLAMAFILE_METAL_SOURCES: embedded Metal kernel sources (macOS)
 #   - TINYBLAS_CPU_OBJS for matmul kernels
+#   - HTTPLIB_OBJS: cpp-httplib implementation for the http_fetch tool
 
 o/$(MODE)/agentfile/agentfile: \
 		$(AGENTFILE_OBJS) \
@@ -72,9 +73,10 @@ o/$(MODE)/agentfile/agentfile: \
 		o/$(MODE)/llama.cpp/llama.cpp.a \
 		$(TOOL_LLAMAFILE_OBJS) \
 		$(LLAMAFILE_METAL_SOURCES) \
-		$(TINYBLAS_CPU_OBJS)
+		$(TINYBLAS_CPU_OBJS) \
+		$(HTTPLIB_OBJS)
 	@mkdir -p $(@D)
-	$(LINK.o) $(AGENTFILE_OBJS) o/$(MODE)/agent.cpp/agent.cpp.a $(TOOL_LLAMAFILE_OBJS) $(LLAMAFILE_METAL_SOURCES) $(TINYBLAS_CPU_OBJS) o/$(MODE)/llama.cpp/llama.cpp.a $(LOADLIBES) $(LDLIBS) -fopenmp -lpthread -o $@
+	$(LINK.o) $(AGENTFILE_OBJS) o/$(MODE)/agent.cpp/agent.cpp.a $(TOOL_LLAMAFILE_OBJS) $(LLAMAFILE_METAL_SOURCES) $(TINYBLAS_CPU_OBJS) $(HTTPLIB_OBJS) o/$(MODE)/llama.cpp/llama.cpp.a $(LOADLIBES) $(LDLIBS) -fopenmp -lpthread -o $@
 
 # ==============================================================================
 # Dependencies

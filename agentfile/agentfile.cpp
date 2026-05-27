@@ -75,7 +75,7 @@ void print_usage(const char *prog) {
             "                       or \"read_only\". Available tools:\n"
             "                       read_file, file_glob_search, grep_search,\n"
             "                       get_datetime, write_file, edit_file,\n"
-            "                       apply_diff, exec_shell_command\n"
+            "                       apply_diff, exec_shell_command, http_fetch\n"
             "  --yes                Skip confirmation prompts for destructive tools\n"
             "  --max-iterations N   Cap agent loop at N LLM calls (default: unlimited)\n"
             "  --quiet              Don't print tool-execution progress to stderr\n"

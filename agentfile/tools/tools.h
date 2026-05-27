@@ -18,6 +18,7 @@
 #include "file_glob_search.h"
 #include "get_datetime.h"
 #include "grep_search.h"
+#include "http_fetch.h"
 #include "read_file.h"
 #include "write_file.h"
 
@@ -47,6 +48,7 @@ build_default_tools() {
     tools.emplace_back(std::make_unique<EditFileTool>());
     tools.emplace_back(std::make_unique<ApplyDiffTool>());
     tools.emplace_back(std::make_unique<ExecShellCommandTool>());
+    tools.emplace_back(std::make_unique<HttpFetchTool>());
     return tools;
 }
 

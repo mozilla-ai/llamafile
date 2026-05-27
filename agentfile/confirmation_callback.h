@@ -32,6 +32,10 @@ class DestructiveOpsConfirmationCallback : public agent_cpp::Callback {
             "edit_file",
             "apply_diff",
             "exec_shell_command",
+            // http_fetch grants the model network access (DNS leaks, can hit
+            // internal endpoints, may leak tokens in URLs). Confirmation by
+            // default; --yes bypasses.
+            "http_fetch",
         };
         return s;
     }
