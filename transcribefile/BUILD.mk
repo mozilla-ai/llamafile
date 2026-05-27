@@ -3,19 +3,26 @@
 #
 # BUILD.mk for transcribefile.
 #
-# For the CPU milestone the entry point is transcribe.cpp's own example
-# CLI (examples/cli/main.cpp) plus its WAV loader (examples/common/wav.cpp),
-# linked against the cosmocc-built transcribe.cpp.a. A llamafile-style
-# wrapper (argument/zip machinery, packaged archives) can replace main.cpp
-# in a later phase.
+# Entry point is transcribefile/main.cpp, a thin wrapper that loads default
+# arguments from the executable's own zip store (/zip/.args, via cosmo_args)
+# and then calls transcribe.cpp's example CLI logic. The CLI lives in
+# transcribe.cpp/examples/cli/main.cpp, compiled with -DTRANSCRIBEFILE so its
+# main() is renamed to transcribe_cli_main() and our wrapper owns the entry
+# point (the standalone CLI main() is dropped). The WAV loader comes from
+# transcribe.cpp/examples/common/wav.cpp. Everything links against the
+# cosmocc-built transcribe.cpp.a.
 
 PKGS += TRANSCRIBEFILE
 
+# Version string surfaced by `transcribefile --version`.
+TRANSCRIBEFILE_VERSION_STRING := $(shell cd transcribe.cpp 2>/dev/null && git describe --tags --always 2>/dev/null || echo "0.0.0-dev")
+
 # ==============================================================================
-# Sources (upstream example CLI + WAV loader, from the submodule)
+# Sources (our wrapper + upstream example CLI + WAV loader)
 # ==============================================================================
 
 TRANSCRIBEFILE_SRCS_CPP := \
+	transcribefile/main.cpp \
 	transcribe.cpp/examples/cli/main.cpp \
 	transcribe.cpp/examples/common/wav.cpp
 
@@ -34,8 +41,12 @@ TRANSCRIBEFILE_INCLUDES := \
 	-iquote transcribe.cpp/include \
 	-iquote transcribe.cpp/examples/common
 
-# dr_wav.h trips a few warnings that are noise here.
+# -DTRANSCRIBEFILE renames the upstream CLI main() to transcribe_cli_main();
+# the version string feeds `--version`. dr_wav.h trips a couple of warnings
+# that are noise here.
 TRANSCRIBEFILE_CPPFLAGS := \
+	-DTRANSCRIBEFILE \
+	-DTRANSCRIBEFILE_VERSION_STRING=\"$(TRANSCRIBEFILE_VERSION_STRING)\" \
 	-Wno-sign-compare \
 	-Wno-unused-function
 
