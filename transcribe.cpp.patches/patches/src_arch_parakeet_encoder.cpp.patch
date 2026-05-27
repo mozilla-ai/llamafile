@@ -1,0 +1,26 @@
+diff --git a/transcribe.cpp/src/arch/parakeet/encoder.cpp b/transcribe.cpp/src/arch/parakeet/encoder.cpp
+index e07a510..a672c9d 100644
+--- a/transcribe.cpp/src/arch/parakeet/encoder.cpp
++++ b/transcribe.cpp/src/arch/parakeet/encoder.cpp
+@@ -279,12 +279,15 @@ EncoderBuild build_encoder_graph(ggml_context *          ctx,
+     policy.direct_pw               = conf::detect_direct_pw(backend_name);
+     policy.direct_dw_in_block      = detect_direct_dw_in_block(backend_name);
+     policy.direct_dw_in_pre_encode = false;
+-    // Cache-aware streaming variants set conv_context_{left,right} to
+-    // explicit causal values; that flag also drives NeMo's
+-    // ConvSubsampling to use CausalConv2D (left=k-1, right=stride-1
+-    // pad on both spatial axes), so we mirror it here.
+-    policy.causal_pre_encode = (hp.enc_conv_context_left  >= 0 &&
+-                                hp.enc_conv_context_right >= 0);
++    // Cache-aware streaming variants set conv_context to NeMo's causal
++    // signature [k-1, 0] (right == 0), which drives ConvSubsampling to
++    // use CausalConv2D (left=k-1, right=stride-1 pad on both spatial
++    // axes), so we mirror it here. Offline variants emit the explicit
++    // symmetric pair [(k-1)/2, (k-1)/2] (both > 0), so test the causal
++    // signature directly rather than ">= 0 on both" (which would
++    // misclassify symmetric offline padding as causal).
++    policy.causal_pre_encode = (hp.enc_conv_context_left  >  0 &&
++                                hp.enc_conv_context_right == 0);
+ 
+     EncoderBuild eb {};
+ 
