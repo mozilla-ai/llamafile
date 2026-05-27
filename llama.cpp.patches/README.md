@@ -52,6 +52,7 @@ The `GGML_CALL` macro (defined as `__attribute__((__ms_abi__))` when `GGML_MULTI
 | `ggml_src_ggml-cuda_ggml-cuda.cu.patch` | Adds `GGML_CALL` to all CUDA backend callback implementations (60+ functions); also adds `free_struct` and TinyBLAS BF16 guard (see below) |
 | `ggml_src_ggml-metal_ggml-metal.cpp.patch` | Adds `GGML_CALL` to all Metal backend callback implementations (62 functions); also adds `free_struct` (see below) |
 | `ggml_src_ggml-vulkan_ggml-vulkan.cpp.patch` | Adds `GGML_CALL` to all Vulkan backend callback implementations; also adds `free_struct` and a heap memory underflow fix (see below) |
+| `ggml_src_ggml-backend-meta.cpp.patch` | Adds `GGML_CALL` to all meta-device, meta-buffer-type, meta-buffer, and meta-backend callback implementations (the meta backend aggregates several simple backends behind one interface, so its callbacks are reached through the same function-pointer structs) |
 
 ### Cross-Module Memory Management
 
@@ -96,6 +97,28 @@ Llamafile uses TinyBLAS as a lightweight replacement for cuBLAS, enabling GPU su
 | `ggml_src_ggml-cuda_vendors_cuda.h.patch` | Includes TinyBLAS headers (`tinyblas.h`, `tinyblas-compat.h`) instead of `cublas_v2.h` when `GGML_USE_TINYBLAS` is defined; guards backward-compat `CUBLAS_*` defines so they don't conflict with TinyBLAS's own definitions |
 | `ggml_src_ggml-cuda_common.cuh.patch` | Disables BF16 MMA when using TinyBLAS (TinyBLAS would incorrectly interpret BF16 as FP16) |
 | `ggml_src_ggml-cuda_ggml-cuda.cu.patch` | Disables BF16 in `ggml_cuda_op_mul_mat_cublas` when using TinyBLAS |
+
+### Optional IQ-Quant Exclusion (CUDA)
+
+The IQ ("importance") quantization formats (`IQ1_S`, `IQ2_XXS`/`XS`/`S`, `IQ3_S`/`XXS`, `IQ4_NL`/`XS`) pull in a large amount of CUDA template instantiation that inflates compile time and binary size. These patches gate every IQ code path behind `#ifndef GGML_CUDA_NO_IQ_QUANTS`, so a build can compile them out by defining `GGML_CUDA_NO_IQ_QUANTS`. When the macro is undefined (the default), behavior is unchanged.
+
+| Patch | Description |
+|-------|-------------|
+| `ggml_src_ggml-cuda_convert.cu.patch` | Guards IQ dequantization cases in `ggml_get_to_fp16_cuda` and `ggml_get_to_fp32_cuda` |
+| `ggml_src_ggml-cuda_cpy.cu.patch` | Guards the `f32 → IQ4_NL` copy helper and its dispatch case |
+| `ggml_src_ggml-cuda_mmq.cu.patch` | Guards IQ cases in `ggml_cuda_mul_mat_q_switch_type` and in the `ggml_cuda_should_use_mmq` support/heuristic switches |
+| `ggml_src_ggml-cuda_mmq.cuh.patch` | Guards the `extern DECL_MMQ_CASE(...)` declarations for IQ types |
+| `ggml_src_ggml-cuda_mmvq.cu.patch` | Guards IQ cases in `get_vec_dot_q_cuda` and `get_vdr_mmvq` |
+
+### CPU Performance Optimizations (llamafile #975)
+
+These patches restore llamafile's optimized CPU kernels (TinyBLAS matmul, AVX-512 flash-attention helpers) on top of upstream's CPU backend, and tune CPU-only defaults. The hooks call into symbols exported from `llamafile/sgemm.cpp` and are compiled only when `GGML_USE_LLAMAFILE` is defined.
+
+| Patch | Description |
+|-------|-------------|
+| `ggml_src_ggml-cpu_ggml-cpu.c.patch` | Routes MoE matmul (`ggml_compute_forward_mul_mat_id`) through `llamafile_mixmul` / `llamafile_mixmul_iqk`, mirroring the dense-matmul `llamafile_sgemm` hook; reserves work-buffer space for the MoE kernel in `ggml_graph_plan` via `llamafile_mixmul_needs` |
+| `ggml_src_ggml-cpu_ops.cpp.patch` | Routes flash-attention inner loops through llamafile's AVX-512 helpers (`llamafile_fa_vec_dot_f16`, `llamafile_fa_fp16_to_fp32_row`, `llamafile_fa_simd_gemm`) in both the one-chunk and tiled FA paths; also accumulates VKQ in f32 on CPUs lacking native f16 FMA (avoiding costly f16↔f32 round-trips per KV step) |
+| `src_llama-context.cpp.patch` | Defaults `-fa auto` to **off** on CPU-only setups (no GPU devices), since the CPU flash-attention path is slower than the non-FA path on x86; users can still force `-fa on` for memory savings on long contexts |
 
 ### Llamafile File Handling
 
