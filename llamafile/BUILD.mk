@@ -296,7 +296,7 @@ LLAMAFILE_SERVER_INCS := \
 	-iquote o/$(MODE)/llama.cpp/tools/server
 
 # Compile server.cpp
-o/$(MODE)/llamafile/server.cpp.o: llama.cpp/tools/server/server.cpp $(SERVER_ASSETS)
+o/$(MODE)/llamafile/server.cpp.o: llama.cpp/tools/server/server.cpp
 	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) $(LLAMAFILE_CPPFLAGS) $(LLAMAFILE_SERVER_INCS) -DLLAMA_BUILD_WEBUI -c -o $@ $<
 
@@ -313,8 +313,7 @@ o/$(MODE)/llamafile/llamafile: \
 		o/$(MODE)/llamafile/main.o \
 		o/$(MODE)/llamafile/server.cpp.o \
 		$(LLAMAFILE_OBJS) \
-		$(LLAMAFILE_DEPS) \
-		$(SERVER_ASSETS)
+		$(LLAMAFILE_DEPS)
 	@mkdir -p $(@D)
 	$(CXX) $(LDFLAGS) -o $@ $(filter %.o,$^) $(LDLIBS)
 
