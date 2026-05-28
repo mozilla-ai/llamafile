@@ -83,7 +83,6 @@ int llamafile_is_file_newer_than(const char *, const char *);
 // Common utilities for GPU backend loaders (defined in llamafile.c)
 const char *llamafile_get_dso_extension(void);
 bool llamafile_file_exists(const char *);
-int llamafile_makedirs(const char *, int);
 
 // Link function type for TryLoadPrebuiltDso
 typedef bool (*llamafile_link_dso_fn)(const char *dso_path);
