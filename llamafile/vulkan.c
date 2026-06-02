@@ -24,134 +24,33 @@
 //   2. Or try to load from ~/.llamafile/ (pre-compiled)
 //   3. Load the DSO with cosmo_dlopen() and register the Vulkan backend
 //
+// The load/probe/register mechanics live in gpu_backend.c, shared with the
+// CUDA/ROCm backends so all three behave identically.
+//
 
+#include "gpu_backend.h"
 #include "llamafile.h"
 #include <cosmo.h>
-#include <dlfcn.h>
-#include <errno.h>
-#include <limits.h>
-#include <pthread.h>
-#include <stdatomic.h>
 #include <stdbool.h>
+#include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <string.h>
-#include <sys/stat.h>
-#include <unistd.h>
 
-// Forward declarations for ggml backend types
-typedef struct ggml_backend * ggml_backend_t;
-typedef struct ggml_backend_reg * ggml_backend_reg_t;
+// Vulkan backend state and identity (log/display names + exported symbols).
+static GpuBackend g_vulkan;
 
-// Function to register a backend with ggml (from ggml-backend.h)
-extern void ggml_backend_register(ggml_backend_reg_t reg);
+static const GpuBackendDesc VULKAN_DESC = {
+    .tag = "vulkan",
+    .name = "Vulkan",
+    .init = "ggml_backend_vk_init",
+    .reg = "ggml_backend_vk_reg",
+    .get_device_count = "ggml_backend_vk_get_device_count",
+    .get_device_description = "ggml_backend_vk_get_device_description",
+};
 
-// Log callback type (must match ggml_log_callback from ggml.h)
-typedef void (*llamafile_log_callback)(int level, const char *text, void *user_data);
-
-// Vulkan backend state
-//
-// On Windows the DSO exports functions with ms_abi calling convention,
-// but the cosmocc host uses System V ABI.  We store each dlsym'd pointer
-// in a union so the correct ABI variant is called at each call site,
-// following the same pattern used in cuda.c and localscore/nvml.cpp.
-static struct VulkanBackend {
-    bool supported;
-    atomic_uint once;
-    void *lib_handle;
-
-    // Function pointers for Vulkan backend
-    union {
-        ggml_backend_t (*default_abi)(size_t device);
-        ggml_backend_t (__attribute__((__ms_abi__)) *windows_abi)(size_t device);
-    } backend_init;
-
-    union {
-        ggml_backend_reg_t (*default_abi)(void);
-        ggml_backend_reg_t (__attribute__((__ms_abi__)) *windows_abi)(void);
-    } backend_reg;
-
-    union {
-        int (*default_abi)(void);
-        int (__attribute__((__ms_abi__)) *windows_abi)(void);
-    } get_device_count;
-
-    union {
-        void (*default_abi)(int device, char *description, size_t description_size);
-        void (__attribute__((__ms_abi__)) *windows_abi)(int device, char *description, size_t description_size);
-    } get_device_description;
-
-    // Logging control
-    union {
-        void (*default_abi)(llamafile_log_callback log_callback, void *user_data);
-        void (__attribute__((__ms_abi__)) *windows_abi)(llamafile_log_callback log_callback, void *user_data);
-    } log_set;
-} g_vulkan;
-
+// Thin llamafile_link_dso_fn thunk over the shared linker.
 static bool LinkVulkan(const char *dso) {
-    // Load dynamic shared object using Cosmopolitan's dlopen
-    void *lib = cosmo_dlopen(dso, RTLD_LAZY);
-    if (!lib) {
-        char *err = cosmo_dlerror();
-        llamafile_info("vulkan", "failed to load library %s: %s",
-                       dso, err ? err : "unknown error");
-        return false;
-    }
-
-    // Import functions into the correct ABI union member
-    bool ok = true;
-    void *sym;
-
-    sym = cosmo_dlsym(lib, "ggml_backend_vk_init");
-    ok &= (sym != NULL);
-    if (IsWindows())
-        *(void **)(&g_vulkan.backend_init.windows_abi) = sym;
-    else
-        *(void **)(&g_vulkan.backend_init.default_abi) = sym;
-
-    sym = cosmo_dlsym(lib, "ggml_backend_vk_reg");
-    ok &= (sym != NULL);
-    if (IsWindows())
-        *(void **)(&g_vulkan.backend_reg.windows_abi) = sym;
-    else
-        *(void **)(&g_vulkan.backend_reg.default_abi) = sym;
-
-    // Optional - don't fail if not found
-    sym = cosmo_dlsym(lib, "ggml_backend_vk_get_device_count");
-    if (IsWindows())
-        *(void **)(&g_vulkan.get_device_count.windows_abi) = sym;
-    else
-        *(void **)(&g_vulkan.get_device_count.default_abi) = sym;
-
-    // Optional - don't fail if not found
-    sym = cosmo_dlsym(lib, "ggml_backend_vk_get_device_description");
-    if (IsWindows())
-        *(void **)(&g_vulkan.get_device_description.windows_abi) = sym;
-    else
-        *(void **)(&g_vulkan.get_device_description.default_abi) = sym;
-
-    // Import logging control (optional)
-    sym = cosmo_dlsym(lib, "ggml_log_set");
-    if (IsWindows())
-        *(void **)(&g_vulkan.log_set.windows_abi) = sym;
-    else
-        *(void **)(&g_vulkan.log_set.default_abi) = sym;
-
-    if (!ok) {
-        char *err = cosmo_dlerror();
-        llamafile_info("vulkan", "could not import all symbols from %s: %s",
-                       dso, err ? err : "unknown error");
-        memset(&g_vulkan.backend_init, 0, sizeof(g_vulkan.backend_init));
-        memset(&g_vulkan.backend_reg, 0, sizeof(g_vulkan.backend_reg));
-        memset(&g_vulkan.get_device_count, 0, sizeof(g_vulkan.get_device_count));
-        memset(&g_vulkan.get_device_description, 0, sizeof(g_vulkan.get_device_description));
-        memset(&g_vulkan.log_set, 0, sizeof(g_vulkan.log_set));
-        cosmo_dlclose(lib);
-        return false;
-    }
-
-    g_vulkan.lib_handle = lib;
-    return true;
+    return gpu_backend_link(&g_vulkan, dso, &VULKAN_DESC);
 }
 
 static bool ImportVulkanImpl(void) {
@@ -181,29 +80,14 @@ static bool ImportVulkanImpl(void) {
         return false;
     }
 
-    // Suppress DSO's ggml logging before backend registration, which triggers
-    // device enumeration inside the DSO. Without this, Vulkan device messages
-    // appear even when --verbose is not set.
-    if (!FLAG_verbose && (g_vulkan.log_set.default_abi || g_vulkan.log_set.windows_abi)) {
-        if (IsWindows())
-            g_vulkan.log_set.windows_abi(llamafile_log_callback_null, NULL);
-        else
-            g_vulkan.log_set.default_abi(llamafile_log_callback_null, NULL);
-    }
+    // Gate on device count before registering (issue #988). The DSO loads even
+    // when Vulkan has no usable device; without this check we'd register a
+    // 0-device backend and block fallback to CPU. gpu_backend_probe() unlinks
+    // and returns false in that case so AUTO mode moves on.
+    if (!gpu_backend_probe(&g_vulkan))
+        return false;
 
-    // Register the Vulkan backend with GGML
-    if (g_vulkan.backend_reg.default_abi || g_vulkan.backend_reg.windows_abi) {
-        ggml_backend_reg_t reg;
-        if (IsWindows())
-            reg = g_vulkan.backend_reg.windows_abi();
-        else
-            reg = g_vulkan.backend_reg.default_abi();
-        if (reg) {
-            ggml_backend_register(reg);
-            llamafile_info("vulkan", "Vulkan backend registered with GGML");
-        }
-    }
-
+    gpu_backend_register(&g_vulkan);
     return true;
 }
 
@@ -211,14 +95,8 @@ static void ImportVulkan(void) {
     if (ImportVulkanImpl()) {
         g_vulkan.supported = true;
         llamafile_info("vulkan", "Vulkan GPU support successfully loaded");
-        if (g_vulkan.get_device_count.default_abi || g_vulkan.get_device_count.windows_abi) {
-            int count;
-            if (IsWindows())
-                count = g_vulkan.get_device_count.windows_abi();
-            else
-                count = g_vulkan.get_device_count.default_abi();
-            llamafile_info("vulkan", "found %d GPU device(s)", count);
-        }
+        int count = gpu_call_device_count(g_vulkan.get_device_count);
+        llamafile_info("vulkan", "found %d GPU device(s)", count);
     } else if (FLAG_gpu == LLAMAFILE_GPU_VULKAN) {
         fprintf(stderr, "fatal error: support for --gpu vulkan was explicitly requested, "
                 "but it wasn't available\n");
@@ -236,21 +114,20 @@ bool llamafile_has_vulkan(void) {
 ggml_backend_t ggml_backend_vk_init(size_t device) {
     if (!llamafile_has_vulkan())
         return NULL;
-    if (!g_vulkan.backend_init.default_abi && !g_vulkan.backend_init.windows_abi)
+    void *fp = g_vulkan.backend_init;
+    if (!fp)
         return NULL;
+    // backend_init has a Vulkan-specific signature (size_t device), so it is
+    // called here rather than through a shared gpu_call_* helper.
     if (IsWindows())
-        return g_vulkan.backend_init.windows_abi(device);
-    return g_vulkan.backend_init.default_abi(device);
+        return ((ggml_backend_t(__attribute__((__ms_abi__)) *)(size_t))fp)(device);
+    return ((ggml_backend_t(*)(size_t))fp)(device);
 }
 
 int ggml_backend_vk_get_device_count(void) {
     if (!llamafile_has_vulkan())
         return 0;
-    if (!g_vulkan.get_device_count.default_abi && !g_vulkan.get_device_count.windows_abi)
-        return 0;
-    if (IsWindows())
-        return g_vulkan.get_device_count.windows_abi();
-    return g_vulkan.get_device_count.default_abi();
+    return gpu_call_device_count(g_vulkan.get_device_count);
 }
 
 void ggml_backend_vk_get_device_description(int device, char *description, size_t description_size) {
@@ -259,24 +136,16 @@ void ggml_backend_vk_get_device_description(int device, char *description, size_
             description[0] = '\0';
         return;
     }
-    if (!g_vulkan.get_device_description.default_abi && !g_vulkan.get_device_description.windows_abi) {
+    if (!g_vulkan.get_device_description) {
         if (description_size > 0)
             snprintf(description, description_size, "Vulkan GPU %d", device);
         return;
     }
-    if (IsWindows())
-        g_vulkan.get_device_description.windows_abi(device, description, description_size);
-    else
-        g_vulkan.get_device_description.default_abi(device, description, description_size);
+    gpu_call_get_description(g_vulkan.get_device_description, device, description, description_size);
 }
 
 void llamafile_vulkan_log_set(llamafile_log_callback log_callback, void *user_data) {
     if (!llamafile_has_vulkan())
         return;
-    if (g_vulkan.log_set.default_abi || g_vulkan.log_set.windows_abi) {
-        if (IsWindows())
-            g_vulkan.log_set.windows_abi(log_callback, user_data);
-        else
-            g_vulkan.log_set.default_abi(log_callback, user_data);
-    }
+    gpu_call_log_set(g_vulkan.log_set, log_callback, user_data);
 }

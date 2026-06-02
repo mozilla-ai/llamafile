@@ -1,7 +1,7 @@
 ---
 name: llamafile
 description: This skill should be used when the user asks to "build llamafile", "rebuild llamafile", "run llamafile", "run llamafile tests", "debug llamafile", "set up llamafile", "update patches", "fix patch conflict", "update llama.cpp", "pull latest llama.cpp", "sync upstream llama.cpp", "reset submodules", "write a test for llamafile", "how does llamafile work", "llamafile architecture", or needs guidance on the llamafile build system, patch workflow, submodule integration, cosmocc toolchain, or development practices.
-version: 0.1.3
+version: 0.1.4
 ---
 
 # Llamafile Development Guide
@@ -119,6 +119,10 @@ Outputs: `o/$(MODE)/package/file.o`
 ### Multi-Architecture Support
 
 Binaries include both x86_64 and aarch64 code paths with runtime CPU feature detection (AVX, AVX2, AVX-512, ARM NEON).
+
+### GPU Backend Loaders
+
+Dynamically-loaded backends that export the ggml C ABI — CUDA, ROCm, Vulkan — all go through the shared probe core in `llamafile/gpu_backend.c`. Each is just a `GpuBackendDesc` + a link thunk; the core does load → log-suppress → **device-count gate** (reject 0-device DSOs so AUTO falls back) → register, with a SIGSEGV/SIGABRT crash guard around the foreign probe call (driver init can fault across the cosmo/ms_abi boundary — issue #988). Metal stays separate by design (runtime-compiled, no ms_abi split, no device gate). When adding/changing a backend: route it through the core, keep the gate, and add a case to `tests/gpu_backend_test.cpp`. A more detailed design doc lives separately.
 
 ## Main Executables
 

@@ -78,6 +78,7 @@ DIFFUSIONFILE_LLAMAFILE_OBJS := \
 	o/$(MODE)/llamafile/llamafile.o \
 	o/$(MODE)/llamafile/metal.o \
 	o/$(MODE)/llamafile/cuda.o \
+	o/$(MODE)/llamafile/gpu_backend.o \
 	o/$(MODE)/llamafile/vulkan.o \
 	o/$(MODE)/llamafile/zip.o \
 	o/$(MODE)/llamafile/check_cpu.o

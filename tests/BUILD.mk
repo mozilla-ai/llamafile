@@ -99,10 +99,33 @@ o/$(MODE)/tests/fa_helpers_test: \
 	$(CXX) $(LDFLAGS) -fopenmp -o $@ $^ $(LDLIBS)
 
 # ==============================================================================
+# Test: gpu_backend_test (issue #988 device-count gate / fallback)
+# ==============================================================================
+#
+# Exercises the shared GPU backend probe core. The test injects stub entry
+# points into a GpuBackend and provides its own doubles for gpu_backend.c's
+# externs, so it links against gpu_backend.o alone — no DSO, no GPU, no
+# llamafile.o/llama.cpp.a.
+
+GPU_BACKEND_TEST_DEPS := \
+	o/$(MODE)/llamafile/gpu_backend.o
+
+o/$(MODE)/tests/gpu_backend_test.o: tests/gpu_backend_test.cpp
+	@mkdir -p $(@D)
+	$(CXX) $(CXXFLAGS) $(TESTS_CPPFLAGS) -c -o $@ $<
+
+o/$(MODE)/tests/gpu_backend_test: \
+		o/$(MODE)/tests/gpu_backend_test.o \
+		$(GPU_BACKEND_TEST_DEPS)
+	@mkdir -p $(@D)
+	$(CXX) $(LDFLAGS) -o $@ $^ $(LDLIBS)
+
+# ==============================================================================
 # Phony targets
 # ==============================================================================
 
 .PHONY: o/$(MODE)/tests
 o/$(MODE)/tests: \
 	o/$(MODE)/tests/extract_data_uris_test.runs \
-	o/$(MODE)/tests/fa_helpers_test.runs
+	o/$(MODE)/tests/fa_helpers_test.runs \
+	o/$(MODE)/tests/gpu_backend_test.runs

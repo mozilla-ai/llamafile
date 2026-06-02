@@ -23,187 +23,60 @@
 // At runtime on Linux/Windows with NVIDIA or AMD GPU:
 //   1. Try to load pre-built DSO from /zip/ggml-cuda.so (bundled)
 //   2. Or try to load from ~/.llamafile/ (pre-compiled)
-//   3. Or compile at runtime if nvcc/hipcc is available
-//   4. Load the DSO with cosmo_dlopen() and register the CUDA backend
+//   3. Load the DSO with cosmo_dlopen() and register the CUDA backend
+//
+// The load/probe/register mechanics live in gpu_backend.c, shared with the
+// Vulkan backend so all of them behave identically. CUDA and ROCm use the same
+// exported symbols and the same DSO-loading machinery, so they share one
+// GpuBackend; which descriptor loaded records whether it's NVIDIA or AMD.
 //
 
+#include "gpu_backend.h"
 #include "llamafile.h"
 #include <cosmo.h>
-#include <dlfcn.h>
-#include <errno.h>
-#include <limits.h>
-#include <pthread.h>
-#include <stdatomic.h>
 #include <stdbool.h>
+#include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <string.h>
-#include <sys/stat.h>
-#include <sys/wait.h>
-#include <unistd.h>
 
-// Forward declarations for ggml backend types
-typedef struct ggml_backend * ggml_backend_t;
-typedef struct ggml_backend_reg * ggml_backend_reg_t;
+// CUDA and ROCm share symbol names but differ in display name, so they are two
+// descriptors over one GpuBackend. The loaded descriptor tells NVIDIA vs AMD.
+static GpuBackend g_cuda;
 
-// Function to register a backend with ggml (from ggml-backend.h)
-extern void ggml_backend_register(ggml_backend_reg_t reg);
+static const GpuBackendDesc CUDA_DESC = {
+    .tag = "cuda",
+    .name = "CUDA",
+    .init = "ggml_backend_cuda_init",
+    .reg = "ggml_backend_cuda_reg",
+    .get_device_count = "ggml_backend_cuda_get_device_count",
+    .get_device_description = "ggml_backend_cuda_get_device_description",
+};
 
-// Log callback type (must match ggml_log_callback from ggml.h)
-typedef void (*llamafile_log_callback)(int level, const char *text, void *user_data);
+static const GpuBackendDesc ROCM_DESC = {
+    .tag = "cuda",
+    .name = "ROCm",
+    .init = "ggml_backend_cuda_init",
+    .reg = "ggml_backend_cuda_reg",
+    .get_device_count = "ggml_backend_cuda_get_device_count",
+    .get_device_description = "ggml_backend_cuda_get_device_description",
+};
 
-// CUDA backend state
-//
-// On Windows the DSO exports functions with ms_abi calling convention,
-// but the cosmocc host uses System V ABI.  We store each dlsym'd pointer
-// in a union so the correct ABI variant is called at each call site,
-// following the same pattern used in localscore/nvml.cpp.
-static struct CudaBackend {
-    bool supported;
-    bool is_amd;  // true if this is ROCm/AMD, false if NVIDIA
-    atomic_uint once;
-    void *lib_handle;
-
-    // Function pointers for CUDA backend
-    union {
-        ggml_backend_t (*default_abi)(int device);
-        ggml_backend_t (__attribute__((__ms_abi__)) *windows_abi)(int device);
-    } backend_init;
-
-    union {
-        ggml_backend_reg_t (*default_abi)(void);
-        ggml_backend_reg_t (__attribute__((__ms_abi__)) *windows_abi)(void);
-    } backend_reg;
-
-    union {
-        int (*default_abi)(void);
-        int (__attribute__((__ms_abi__)) *windows_abi)(void);
-    } get_device_count;
-
-    union {
-        void (*default_abi)(int device, char *description, size_t description_size);
-        void (__attribute__((__ms_abi__)) *windows_abi)(int device, char *description, size_t description_size);
-    } get_device_description;
-
-    // Logging control
-    union {
-        void (*default_abi)(llamafile_log_callback log_callback, void *user_data);
-        void (__attribute__((__ms_abi__)) *windows_abi)(llamafile_log_callback log_callback, void *user_data);
-    } log_set;
-} g_cuda;
-
-static bool LinkCuda(const char *dso) {
-    // Load dynamic shared object using Cosmopolitan's dlopen
-    void *lib = cosmo_dlopen(dso, RTLD_LAZY);
-    if (!lib) {
-        char *err = cosmo_dlerror();
-        llamafile_info("cuda", "failed to load library %s: %s",
-                       dso, err ? err : "unknown error");
-        return false;
-    }
-
-    // Import functions into the correct ABI union member
-    bool ok = true;
-    void *sym;
-
-    sym = cosmo_dlsym(lib, "ggml_backend_cuda_init");
-    ok &= (sym != NULL);
-    if (IsWindows())
-        *(void **)(&g_cuda.backend_init.windows_abi) = sym;
-    else
-        *(void **)(&g_cuda.backend_init.default_abi) = sym;
-
-    sym = cosmo_dlsym(lib, "ggml_backend_cuda_reg");
-    ok &= (sym != NULL);
-    if (IsWindows())
-        *(void **)(&g_cuda.backend_reg.windows_abi) = sym;
-    else
-        *(void **)(&g_cuda.backend_reg.default_abi) = sym;
-
-    // Required: TryGpuBackend uses this to reject 0-device DSOs
-    sym = cosmo_dlsym(lib, "ggml_backend_cuda_get_device_count");
-    ok &= (sym != NULL);
-    if (IsWindows())
-        *(void **)(&g_cuda.get_device_count.windows_abi) = sym;
-    else
-        *(void **)(&g_cuda.get_device_count.default_abi) = sym;
-
-    // Optional - don't fail if not found
-    sym = cosmo_dlsym(lib, "ggml_backend_cuda_get_device_description");
-    if (IsWindows())
-        *(void **)(&g_cuda.get_device_description.windows_abi) = sym;
-    else
-        *(void **)(&g_cuda.get_device_description.default_abi) = sym;
-
-    // Import logging control (optional)
-    sym = cosmo_dlsym(lib, "ggml_log_set");
-    if (IsWindows())
-        *(void **)(&g_cuda.log_set.windows_abi) = sym;
-    else
-        *(void **)(&g_cuda.log_set.default_abi) = sym;
-
-    if (!ok) {
-        char *err = cosmo_dlerror();
-        llamafile_info("cuda", "could not import all symbols from %s: %s",
-                       dso, err ? err : "unknown error");
-        memset(&g_cuda.backend_init, 0, sizeof(g_cuda.backend_init));
-        memset(&g_cuda.backend_reg, 0, sizeof(g_cuda.backend_reg));
-        memset(&g_cuda.get_device_count, 0, sizeof(g_cuda.get_device_count));
-        memset(&g_cuda.get_device_description, 0, sizeof(g_cuda.get_device_description));
-        memset(&g_cuda.log_set, 0, sizeof(g_cuda.log_set));
-        cosmo_dlclose(lib);
-        return false;
-    }
-
-    g_cuda.lib_handle = lib;
-    return true;
+// Thin llamafile_link_dso_fn thunks over the shared linker, one per identity.
+static bool LinkCudaNvidia(const char *dso) {
+    return gpu_backend_link(&g_cuda, dso, &CUDA_DESC);
 }
 
-static void UnlinkCuda(void) {
-    if (g_cuda.lib_handle) {
-        cosmo_dlclose(g_cuda.lib_handle);
-        g_cuda.lib_handle = NULL;
-    }
-    memset(&g_cuda.backend_init, 0, sizeof(g_cuda.backend_init));
-    memset(&g_cuda.backend_reg, 0, sizeof(g_cuda.backend_reg));
-    memset(&g_cuda.get_device_count, 0, sizeof(g_cuda.get_device_count));
-    memset(&g_cuda.get_device_description, 0, sizeof(g_cuda.get_device_description));
-    memset(&g_cuda.log_set, 0, sizeof(g_cuda.log_set));
+static bool LinkCudaAmd(const char *dso) {
+    return gpu_backend_link(&g_cuda, dso, &ROCM_DESC);
 }
 
-static bool TryGpuBackend(const char *dso, bool is_amd) {
-    if (!llamafile_try_load_prebuilt_dso(dso, "cuda", LinkCuda))
+// Load a prebuilt DSO and commit to it only if it exposes a usable device. The
+// DSO loads fine even with no compatible hardware, so gpu_backend_probe()
+// rejects 0-device backends and lets AUTO mode fall through to the next one.
+static bool TryGpuBackend(const char *dso, llamafile_link_dso_fn link_fn) {
+    if (!llamafile_try_load_prebuilt_dso(dso, "cuda", link_fn))
         return false;
-
-    // Suppress the DSO's ggml logging before we touch any function that
-    // triggers ggml_cuda_init() (e.g. get_device_count). Without this, a
-    // failed init on the wrong backend would print a confusing error to
-    // stderr even when --verbose is not set.
-    if (!FLAG_verbose && (g_cuda.log_set.default_abi || g_cuda.log_set.windows_abi)) {
-        if (IsWindows())
-            g_cuda.log_set.windows_abi(llamafile_log_callback_null, NULL);
-        else
-            g_cuda.log_set.default_abi(llamafile_log_callback_null, NULL);
-    }
-
-    // Verify the backend has at least one device before committing. The DSO
-    // loads fine even when no compatible hardware is present, so we must
-    // probe device count to avoid registering a 0-device backend (which
-    // would then prevent fallback to other GPU backends in AUTO mode).
-    int count;
-    if (IsWindows())
-        count = g_cuda.get_device_count.windows_abi();
-    else
-        count = g_cuda.get_device_count.default_abi();
-    if (count <= 0) {
-        llamafile_info("cuda", "%s library loaded but no devices detected; trying next backend",
-                       is_amd ? "ROCm" : "CUDA");
-        UnlinkCuda();
-        return false;
-    }
-
-    g_cuda.is_amd = is_amd;
-    return true;
+    return gpu_backend_probe(&g_cuda);
 }
 
 static bool ImportCudaImpl(void) {
@@ -232,12 +105,12 @@ static bool ImportCudaImpl(void) {
     // In AUTO mode, prefer CUDA over ROCm: it covers the common NVIDIA case
     // and lets ROCm be the fallback when CUDA is absent or has no devices.
     if (FLAG_gpu == LLAMAFILE_GPU_NVIDIA || FLAG_gpu == LLAMAFILE_GPU_AUTO) {
-        if (TryGpuBackend(cuda_dso, false))
+        if (TryGpuBackend(cuda_dso, LinkCudaNvidia))
             goto RegisterBackend;
     }
 
     if (FLAG_gpu == LLAMAFILE_GPU_AMD || FLAG_gpu == LLAMAFILE_GPU_AUTO) {
-        if (TryGpuBackend(rocm_dso, true))
+        if (TryGpuBackend(rocm_dso, LinkCudaAmd))
             goto RegisterBackend;
     }
 
@@ -249,20 +122,7 @@ static bool ImportCudaImpl(void) {
     return false;
 
 RegisterBackend:
-    // Register the CUDA backend with GGML
-    if (g_cuda.backend_reg.default_abi || g_cuda.backend_reg.windows_abi) {
-        ggml_backend_reg_t reg;
-        if (IsWindows())
-            reg = g_cuda.backend_reg.windows_abi();
-        else
-            reg = g_cuda.backend_reg.default_abi();
-        if (reg) {
-            ggml_backend_register(reg);
-            llamafile_info("cuda", "%s backend registered with GGML",
-                           g_cuda.is_amd ? "ROCm" : "CUDA");
-        }
-    }
-
+    gpu_backend_register(&g_cuda);
     return true;
 }
 
@@ -270,12 +130,8 @@ static void ImportCuda(void) {
     if (ImportCudaImpl()) {
         g_cuda.supported = true;
         llamafile_info("cuda", "%s GPU support successfully loaded",
-                       g_cuda.is_amd ? "AMD ROCm" : "NVIDIA CUDA");
-        int count;
-        if (IsWindows())
-            count = g_cuda.get_device_count.windows_abi();
-        else
-            count = g_cuda.get_device_count.default_abi();
+                       g_cuda.desc == &ROCM_DESC ? "AMD ROCm" : "NVIDIA CUDA");
+        int count = gpu_call_device_count(g_cuda.get_device_count);
         llamafile_info("cuda", "found %d GPU device(s)", count);
     } else if (FLAG_gpu == LLAMAFILE_GPU_NVIDIA || FLAG_gpu == LLAMAFILE_GPU_AMD) {
         fprintf(stderr, "fatal error: support for --gpu %s was explicitly requested, "
@@ -286,12 +142,12 @@ static void ImportCuda(void) {
 
 bool llamafile_has_cuda(void) {
     cosmo_once(&g_cuda.once, ImportCuda);
-    return g_cuda.supported && !g_cuda.is_amd;
+    return g_cuda.supported && g_cuda.desc != &ROCM_DESC;
 }
 
 bool llamafile_has_amd_gpu(void) {
     cosmo_once(&g_cuda.once, ImportCuda);
-    return g_cuda.supported && g_cuda.is_amd;
+    return g_cuda.supported && g_cuda.desc == &ROCM_DESC;
 }
 
 // Wrapper functions for dynamically loaded CUDA backend
@@ -299,21 +155,20 @@ bool llamafile_has_amd_gpu(void) {
 ggml_backend_t ggml_backend_cuda_init(int device) {
     if (!llamafile_has_cuda() && !llamafile_has_amd_gpu())
         return NULL;
-    if (!g_cuda.backend_init.default_abi && !g_cuda.backend_init.windows_abi)
+    void *fp = g_cuda.backend_init;
+    if (!fp)
         return NULL;
+    // backend_init has a CUDA-specific signature (int device), so it is called
+    // here rather than through a shared gpu_call_* helper.
     if (IsWindows())
-        return g_cuda.backend_init.windows_abi(device);
-    return g_cuda.backend_init.default_abi(device);
+        return ((ggml_backend_t(__attribute__((__ms_abi__)) *)(int))fp)(device);
+    return ((ggml_backend_t(*)(int))fp)(device);
 }
 
 int ggml_backend_cuda_get_device_count(void) {
     if (!llamafile_has_cuda() && !llamafile_has_amd_gpu())
         return 0;
-    if (!g_cuda.get_device_count.default_abi && !g_cuda.get_device_count.windows_abi)
-        return 0;
-    if (IsWindows())
-        return g_cuda.get_device_count.windows_abi();
-    return g_cuda.get_device_count.default_abi();
+    return gpu_call_device_count(g_cuda.get_device_count);
 }
 
 void ggml_backend_cuda_get_device_description(int device, char *description, size_t description_size) {
@@ -322,24 +177,16 @@ void ggml_backend_cuda_get_device_description(int device, char *description, siz
             description[0] = '\0';
         return;
     }
-    if (!g_cuda.get_device_description.default_abi && !g_cuda.get_device_description.windows_abi) {
+    if (!g_cuda.get_device_description) {
         if (description_size > 0)
             snprintf(description, description_size, "GPU %d", device);
         return;
     }
-    if (IsWindows())
-        g_cuda.get_device_description.windows_abi(device, description, description_size);
-    else
-        g_cuda.get_device_description.default_abi(device, description, description_size);
+    gpu_call_get_description(g_cuda.get_device_description, device, description, description_size);
 }
 
 void llamafile_cuda_log_set(llamafile_log_callback log_callback, void *user_data) {
     if (!llamafile_has_cuda() && !llamafile_has_amd_gpu())
         return;
-    if (g_cuda.log_set.default_abi || g_cuda.log_set.windows_abi) {
-        if (IsWindows())
-            g_cuda.log_set.windows_abi(log_callback, user_data);
-        else
-            g_cuda.log_set.default_abi(log_callback, user_data);
-    }
+    gpu_call_log_set(g_cuda.log_set, log_callback, user_data);
 }
