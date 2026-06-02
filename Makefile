@@ -35,12 +35,19 @@ o/$(MODE)/:	o/$(MODE)/llamafile	\
 		o/$(MODE)/third_party/zipalign
 
 .PHONY: install
-install: o/$(MODE)/llamafile/llamafile
+install:	o/$(MODE)/llamafile/llamafile \
+		whisperfile/whisperfile.1 \
+		whisperfile/whisper-server.1 \
+		third_party/zipalign/zipalign.1
 	mkdir -p $(PREFIX)/bin
 	$(INSTALL) o/$(MODE)/llamafile/llamafile $(PREFIX)/bin/llamafile
 	$(INSTALL) o/$(MODE)/whisperfile/whisperfile $(PREFIX)/bin/whisperfile
 	$(INSTALL) o/$(MODE)/diffusionfile/diffusionfile $(PREFIX)/bin/diffusionfile
 	$(INSTALL) o/$(MODE)/third_party/zipalign/zipalign $(PREFIX)/bin/zipalign
+	mkdir -p $(PREFIX)/share/man/man1
+	$(INSTALL) -m 0644 whisperfile/whisperfile.1 $(PREFIX)/share/man/man1/whisperfile.1
+	$(INSTALL) -m 0644 whisperfile/whisper-server.1 $(PREFIX)/share/man/man1/whisper-server.1
+	$(INSTALL) -m 0644 third_party/zipalign/zipalign.1 $(PREFIX)/share/man/man1/zipalign.1
 
 .PHONY: check
 check: o/$(MODE)/tests
