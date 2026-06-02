@@ -173,8 +173,10 @@ static bool gpu_run_guarded(void (*fn)(void *), void *arg) {
         sigaction(kSignals[i], &sa, &old[i]);
 
     bool ok;
-    // savesigs=1 so the longjmp restores the signal mask (the trapped signal is
-    // blocked while its handler runs and must be unblocked again afterwards).
+    // SA_NODEFER (set above) leaves the trapped signal unblocked while the
+    // handler runs, so a re-fault in the tiny window before siglongjmp is not
+    // dropped. savesigs=1 makes siglongjmp restore the signal mask captured
+    // here, keeping the mask correct after we jump out of the fault.
     if (sigsetjmp(g_gpu_guard_jmp, 1) == 0) {
         g_gpu_guard_active = 1;
         fn(arg);
