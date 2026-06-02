@@ -23,3 +23,4 @@ uv.lock
 
 # docs build output (pushed to gitbook-docs branch by CI)
 /site
+/gh-pages-redirect
