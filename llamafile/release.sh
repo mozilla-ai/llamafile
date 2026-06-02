@@ -19,6 +19,9 @@ if [ ! -d "${ZIP_DIR}" ]; then
   exit 1
 fi
 
+# Copy the README into the release
+cp README.md "${ZIP_DIR}/README.md"
+
 # Make a copy of llamafile while it's thin
 cp "${ZIP_DIR}/bin/llamafile" "${ZIP_DIR}/bin/llamafile-thin"
 
