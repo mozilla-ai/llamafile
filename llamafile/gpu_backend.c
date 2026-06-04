@@ -399,8 +399,16 @@ bool gpu_backend_probe_oop(GpuBackend *b) {
                            "%s library loaded but no devices detected; trying next backend",
                            b->desc->name);
             gpu_backend_unlink(b);
+        } else if (code == GPU_PROBE_EXIT_LOAD_FAILED) {
+            // The child couldn't dlopen the DSO or resolve get_device_count.
+            // Unexpected (the parent already linked it), but report it for what
+            // it is rather than as a crash.
+            llamafile_info(b->desc->tag,
+                           "%s probe: failed to load/resolve library; trying next backend",
+                           b->desc->name);
+            gpu_backend_unlink(b);
         } else {
-            // 254/255 or killed by signal: load failed or the probe faulted.
+            // 255 or killed by an uncaught signal: the probe call faulted.
             llamafile_info(b->desc->tag, "%s crashed during device probe; trying next backend",
                            b->desc->name);
             gpu_backend_unlink(b);
