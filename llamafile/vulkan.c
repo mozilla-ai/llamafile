@@ -83,8 +83,10 @@ static bool ImportVulkanImpl(void) {
     // Gate on device count before registering (issue #988). The DSO loads even
     // when Vulkan has no usable device; without this check we'd register a
     // 0-device backend and block fallback to CPU. gpu_backend_probe() unlinks
-    // and returns false in that case so AUTO mode moves on.
-    if (!gpu_backend_probe(&g_vulkan))
+    // and returns false in that case so AUTO mode moves on. On Windows a
+    // faulting Vulkan driver init behind get_device_count() can corrupt the
+    // process if caught in-process, so probe out-of-process there (#988).
+    if (!(IsWindows() ? gpu_backend_probe_oop(&g_vulkan) : gpu_backend_probe(&g_vulkan)))
         return false;
 
     gpu_backend_register(&g_vulkan);

@@ -76,7 +76,9 @@ static bool LinkCudaAmd(const char *dso) {
 static bool TryGpuBackend(const char *dso, llamafile_link_dso_fn link_fn) {
     if (!llamafile_try_load_prebuilt_dso(dso, "cuda", link_fn))
         return false;
-    return gpu_backend_probe(&g_cuda);
+    // On Windows a faulting driver-init behind get_device_count() can corrupt
+    // the process if caught in-process; probe out-of-process there (#988).
+    return IsWindows() ? gpu_backend_probe_oop(&g_cuda) : gpu_backend_probe(&g_cuda);
 }
 
 static bool ImportCudaImpl(void) {

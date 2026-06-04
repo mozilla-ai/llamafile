@@ -17,6 +17,7 @@
 
 #ifndef LLAMAFILE_GPU_BACKEND_H_
 #define LLAMAFILE_GPU_BACKEND_H_
+#include <limits.h>
 #include <stdatomic.h>
 #include <stdbool.h>
 #include <stddef.h>
@@ -80,6 +81,9 @@ typedef struct GpuBackend {
     void *get_device_count;
     void *get_device_description;
     void *log_set;
+    // Resolved on-disk path of the loaded DSO, recorded by gpu_backend_link().
+    // The out-of-process probe needs it to tell the child what to dlopen.
+    char lib_path[PATH_MAX];
 } GpuBackend;
 
 // dlopen `dso` and resolve `desc`'s symbols into `b`, recording `desc` as the
@@ -100,6 +104,18 @@ void gpu_backend_unlink(GpuBackend *b);
 // through to the next backend and ultimately to CPU. Returns true if the
 // backend has at least one device and should be registered.
 bool gpu_backend_probe(GpuBackend *b);
+
+// Same contract as gpu_backend_probe(), but runs the device-count call in a
+// short-lived child process (a re-exec of this binary) instead of under an
+// in-process signal guard. Used on Windows, where the foreign driver-init code
+// behind get_device_count() can throw a C++/SEH exception across the
+// cosmo_dlopen/ms_abi boundary; catching it in-process and siglongjmp-ing out
+// leaves the process corrupted (silent exit later, issue #988 follow-up). A
+// crash here dies in the child, and the parent never executes the faulting
+// driver-init code for a device-less backend, so CPU fallback stays clean
+// regardless of how deep the fault is. Requires gpu_backend_link() to have run
+// (it needs b->lib_path).
+bool gpu_backend_probe_oop(GpuBackend *b);
 
 // Call backend_reg() and, if it returns a registry, hand it to
 // ggml_backend_register(), logging "<name> backend registered with GGML". Safe
