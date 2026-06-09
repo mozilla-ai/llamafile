@@ -30,6 +30,17 @@
 #include <sys/wait.h>
 #include <unistd.h>
 
+// Diagnostic only (issue #938): raw Win32 imports used to identify foreign C++
+// exceptions on Windows. These are kernel32 thunks with no cosmo-TIB
+// dependency, so they are safe to call from a vectored handler that may run on
+// a driver-spawned (non-cosmo) thread.
+#include "libc/nt/enum/exceptionhandleractions.h"
+#include "libc/nt/runtime.h"
+#include "libc/nt/signals.h"
+#include "libc/nt/struct/ntexceptionpointers.h"
+#include "libc/nt/struct/ntexceptionrecord.h"
+#include "libc/nt/thread.h"
+
 extern char **environ;
 
 // Register a backend with ggml (from ggml-backend.h).
@@ -204,6 +215,176 @@ static bool gpu_run_guarded(void (*fn)(void *), void *arg) {
 }
 
 // =============================================================================
+// Diagnostic: identify foreign C++ exceptions during probe (issue #938)
+//
+// On Windows a 0xE06D7363 ("msc") exception is an MSVC C++ throw. Cosmo's
+// vectored handler (__sig_crash, registered First=TRUE) converts any code it
+// does not recognise into SIGSEGV before the throwing module's own catch can
+// run. That makes every Vulkan probe crash look identical, whether the throw is
+//   (a) a genuine vk::SystemError from ggml-vulkan.dll (a real init failure), or
+//   (b) a benign exception thrown-and-meant-to-be-caught inside the Vulkan
+//       loader / Intel ICD (possibly on a driver-spawned thread).
+// To tell them apart we install our own vectored handler that runs BEFORE
+// cosmo's, records the throwing module + C++ type + thread, then returns
+// CONTINUE_SEARCH so the existing crash/fallback behaviour is unchanged.
+//
+// This is investigative instrumentation; remove once #938 is understood. The
+// handler may run on a foreign (non-cosmo) thread, so it touches nothing but
+// raw kernel32 thunks and stack memory -- no cosmo libc, no allocation.
+// =============================================================================
+
+#ifdef __x86_64__
+
+#define GPU_DIAG_CXX_EXCEPTION 0xE06D7363u  // MSVC C++ throw, magic "msc"
+
+// Minimal views of the MSVC throw metadata. Inner links are 32-bit RVAs
+// relative to ExceptionInformation[3] (the throwing module's image base).
+struct GpuDiagThrowInfo {
+    uint32_t attributes;
+    int32_t pmfn_unwind;
+    int32_t p_forward_compat;
+    int32_t p_catchable_type_array;  // RVA -> GpuDiagCatchableTypeArray
+};
+struct GpuDiagCatchableTypeArray {
+    int32_t n_catchable_types;
+    int32_t catchable_types[1];  // RVAs -> GpuDiagCatchableType
+};
+struct GpuDiagCatchableType {
+    uint32_t properties;
+    int32_t p_type;  // RVA -> GpuDiagTypeDescriptor
+    // remaining fields unused
+};
+struct GpuDiagTypeDescriptor {
+    const void *vftable;
+    void *spare;
+    char name[1];  // NUL-terminated mangled name, e.g. ".?AVSystemError@vk@@"
+};
+
+static uint32_t g_gpu_diag_caller_tid;
+
+// Allocation-free, libc-free formatting helpers (handler may run on a thread
+// with no cosmo TIB).
+static void gpu_diag_puts(char *b, int *p, int cap, const char *s) {
+    if (!s)
+        s = "?";
+    while (*s && *p < cap - 1)
+        b[(*p)++] = *s++;
+}
+static void gpu_diag_putx(char *b, int *p, int cap, uint64_t v) {
+    static const char hx[] = "0123456789abcdef";
+    char tmp[16];
+    int n = 0;
+    do {
+        tmp[n++] = hx[v & 15];
+        v >>= 4;
+    } while (v && n < 16);
+    gpu_diag_puts(b, p, cap, "0x");
+    while (n > 0 && *p < cap - 1)
+        b[(*p)++] = tmp[--n];
+}
+static void gpu_diag_putu(char *b, int *p, int cap, uint32_t v) {
+    char tmp[12];
+    int n = 0;
+    do {
+        tmp[n++] = (char)('0' + (v % 10));
+        v /= 10;
+    } while (v && n < 12);
+    while (n > 0 && *p < cap - 1)
+        b[(*p)++] = tmp[--n];
+}
+
+// Returns true if an RVA looks sane enough to dereference against image base
+// (guards against a corrupt/unexpected throw record faulting our handler).
+static bool gpu_diag_rva_ok(int32_t rva) {
+    return rva > 0 && rva < 0x10000000;
+}
+
+static int32_t __attribute__((__ms_abi__))
+gpu_diag_veh(struct NtExceptionPointers *ep) {
+    struct NtExceptionRecord *er = ep->ExceptionRecord;
+    if (er->ExceptionCode != GPU_DIAG_CXX_EXCEPTION || er->NumberParameters < 4)
+        return kNtExceptionContinueSearch;
+
+    uint64_t base = er->ExceptionInformation[3];
+    uint64_t throw_info = er->ExceptionInformation[2];
+    const char *type_name = "<unknown>";
+    if (throw_info && base) {
+        struct GpuDiagThrowInfo *ti = (struct GpuDiagThrowInfo *)throw_info;
+        if (gpu_diag_rva_ok(ti->p_catchable_type_array)) {
+            struct GpuDiagCatchableTypeArray *cta =
+                (struct GpuDiagCatchableTypeArray *)(base +
+                                                     (uint32_t)ti->p_catchable_type_array);
+            if (cta->n_catchable_types > 0 &&
+                gpu_diag_rva_ok(cta->catchable_types[0])) {
+                struct GpuDiagCatchableType *ct =
+                    (struct GpuDiagCatchableType *)(base +
+                                                    (uint32_t)cta->catchable_types[0]);
+                if (gpu_diag_rva_ok(ct->p_type)) {
+                    struct GpuDiagTypeDescriptor *td =
+                        (struct GpuDiagTypeDescriptor *)(base + (uint32_t)ct->p_type);
+                    type_name = td->name;
+                }
+            }
+        }
+    }
+
+    // Resolve the throwing module's path. GetModuleFileName (wide) is the
+    // thunked entry point in cosmo; convert the UTF-16 result to ASCII for the
+    // log (paths here are ASCII in practice; non-ASCII -> '?').
+    char16_t wpath[260];
+    char modpath[260];
+    wpath[0] = 0;
+    GetModuleFileName((int64_t)base, wpath, 260);
+    int mi = 0;
+    for (; mi < 259 && wpath[mi]; ++mi)
+        modpath[mi] = wpath[mi] < 128 ? (char)wpath[mi] : '?';
+    modpath[mi] = '\0';
+    uint32_t tid = GetCurrentThreadId();
+
+    char line[512];
+    int p = 0;
+    gpu_diag_puts(line, &p, sizeof(line), "vulkan-diag: C++ throw code=");
+    gpu_diag_putx(line, &p, sizeof(line), er->ExceptionCode);
+    gpu_diag_puts(line, &p, sizeof(line), " thrower-module-base=");
+    gpu_diag_putx(line, &p, sizeof(line), base);
+    gpu_diag_puts(line, &p, sizeof(line), " (");
+    gpu_diag_puts(line, &p, sizeof(line), modpath[0] ? modpath : "?");
+    gpu_diag_puts(line, &p, sizeof(line), ") type=");
+    gpu_diag_puts(line, &p, sizeof(line), type_name);
+    gpu_diag_puts(line, &p, sizeof(line), " tid=");
+    gpu_diag_putu(line, &p, sizeof(line), tid);
+    gpu_diag_puts(line, &p, sizeof(line),
+                  tid == g_gpu_diag_caller_tid ? " [caller/cosmo thread]"
+                                               : " [OTHER/driver thread]");
+    gpu_diag_puts(line, &p, sizeof(line), "\n");
+
+    uint32_t wrote;
+    WriteFile(GetStdHandle(kNtStdErrorHandle), line, p, &wrote, 0);
+    return kNtExceptionContinueSearch;
+}
+
+// Install our diagnostic handler ahead of cosmo's. No-op off Windows.
+static int64_t gpu_diag_install(void) {
+    if (!IsWindows())
+        return 0;
+    g_gpu_diag_caller_tid = GetCurrentThreadId();
+    return AddVectoredExceptionHandler(1, (NtVectoredExceptionHandler)(void *)gpu_diag_veh);
+}
+static void gpu_diag_remove(int64_t h) {
+    if (h)
+        RemoveVectoredExceptionHandler(h);
+}
+
+#else  // !__x86_64__
+static int64_t gpu_diag_install(void) {
+    return 0;
+}
+static void gpu_diag_remove(int64_t h) {
+    (void)h;
+}
+#endif
+
+// =============================================================================
 // Probe (device-count gate) and register
 // =============================================================================
 
@@ -232,7 +413,10 @@ bool gpu_backend_probe(GpuBackend *b) {
     // treated exactly like "no usable device": unlink and let AUTO mode fall
     // through to the next backend and ultimately to CPU.
     struct gpu_device_count_call call = {b->get_device_count, 0};
-    if (!gpu_run_guarded(gpu_device_count_thunk, &call)) {
+    int64_t diag = gpu_diag_install();  // issue #938 instrumentation
+    bool guarded_ok = gpu_run_guarded(gpu_device_count_thunk, &call);
+    gpu_diag_remove(diag);
+    if (!guarded_ok) {
         llamafile_info(b->desc->tag, "%s crashed during device probe; trying next backend",
                        b->desc->name);
         gpu_backend_unlink(b);
@@ -320,6 +504,7 @@ __attribute__((constructor)) static void gpu_probe_child(void) {
     if (!fp)
         _Exit(GPU_PROBE_EXIT_LOAD_FAILED);
 
+    gpu_diag_install();  // issue #938 instrumentation; child _Exit()s, no remove
     int n = gpu_call_device_count(fp);
     if (n < 0)
         n = 0;

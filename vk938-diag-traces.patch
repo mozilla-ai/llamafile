@@ -1,0 +1,129 @@
+diff --git a/ggml/src/ggml-vulkan/ggml-vulkan.cpp b/ggml/src/ggml-vulkan/ggml-vulkan.cpp
+index aa289220a..411467a54 100644
+--- a/ggml/src/ggml-vulkan/ggml-vulkan.cpp
++++ b/ggml/src/ggml-vulkan/ggml-vulkan.cpp
+@@ -5983,16 +5978,32 @@ DispatchLoaderDynamic & ggml_vk_default_dispatcher() {
+     return ggml_vk_default_dispatcher_instance;
+ }
+ 
++// ===== DIAGNOSTIC (issue #938): trace the Vulkan instance/device probe so the
++// last "before X" line with no matching "after X" names the call that throws
++// under llamafile on Windows. Crash-safe (fflush after each). Remove before
++// merging. =====
++#define VK938(...)                              \
++    do {                                        \
++        fprintf(stderr, "vk-dll-diag: " __VA_ARGS__); \
++        fputc('\n', stderr);                    \
++        fflush(stderr);                         \
++    } while (0)
++
+ static void ggml_vk_instance_init() {
+     if (vk_instance_initialized) {
+         return;
+     }
+     VK_LOG_DEBUG("ggml_vk_instance_init()");
++    VK938("instance_init: enter");
+ 
+     // See https://github.com/KhronosGroup/Vulkan-Hpp?tab=readme-ov-file#extensions--per-device-function-pointers-
++    VK938("before dispatcher.init(vkGetInstanceProcAddr)");
+     ggml_vk_default_dispatcher_instance.init(vkGetInstanceProcAddr);
++    VK938("after dispatcher.init");
+ 
++    VK938("before enumerateInstanceVersion");
+     uint32_t api_version = vk::enumerateInstanceVersion();
++    VK938("after enumerateInstanceVersion: api_version=0x%x", api_version);
+ 
+     if (api_version < VK_API_VERSION_1_2) {
+         std::cerr << "ggml_vulkan: Error: Vulkan 1.2 required." << std::endl;
+@@ -6001,8 +6012,12 @@ static void ggml_vk_instance_init() {
+ 
+     vk::ApplicationInfo app_info{ "ggml-vulkan", 1, nullptr, 0, api_version };
+ 
++    VK938("before enumerateInstanceExtensionProperties");
+     const std::vector<vk::ExtensionProperties> instance_extensions = vk::enumerateInstanceExtensionProperties();
++    VK938("after enumerateInstanceExtensionProperties: %zu ext(s)", instance_extensions.size());
++    VK938("before layer_settings_available");
+     const bool layer_settings = ggml_vk_instance_layer_settings_available();
++    VK938("after layer_settings_available: %d", (int)layer_settings);
+ #ifdef __APPLE__
+     const bool portability_enumeration_ext = ggml_vk_instance_portability_enumeration_ext_available(instance_extensions);
+ #endif
+@@ -6042,7 +6057,9 @@ static void ggml_vk_instance_init() {
+     }
+ #endif
+ 
++    VK938("before createInstance (layers=%zu extensions=%zu)", layers.size(), extensions.size());
+     vk_instance.instance = vk::createInstance(instance_create_info);
++    VK938("after createInstance");
+     vk_instance_initialized = true;
+ 
+     if (debug_utils_ext) {
+@@ -6070,9 +6087,13 @@ static void ggml_vk_instance_init() {
+     }
+ 
+     // See https://github.com/KhronosGroup/Vulkan-Hpp?tab=readme-ov-file#extensions--per-device-function-pointers-
++    VK938("before DEFAULT_DISPATCHER.init(instance)");
+     VULKAN_HPP_DEFAULT_DISPATCHER.init(vk_instance.instance);
++    VK938("after DEFAULT_DISPATCHER.init(instance)");
+ 
++    VK938("before enumeratePhysicalDevices");
+     std::vector<vk::PhysicalDevice> devices = vk_instance.instance.enumeratePhysicalDevices();
++    VK938("after enumeratePhysicalDevices: %zu device(s)", devices.size());
+ 
+     // Emulate behavior of CUDA_VISIBLE_DEVICES for Vulkan
+     char * devices_env = getenv("GGML_VK_VISIBLE_DEVICES");
+@@ -6105,9 +6126,16 @@ static void ggml_vk_instance_init() {
+             vk::PhysicalDeviceIDProperties new_id;
+             new_props.pNext = &new_driver;
+             new_driver.pNext = &new_id;
++            VK938("before getProperties2(dev %zu)", i);
+             devices[i].getProperties2(&new_props);
+-
+-            if ((new_props.properties.deviceType == vk::PhysicalDeviceType::eDiscreteGpu || new_props.properties.deviceType == vk::PhysicalDeviceType::eIntegratedGpu) && ggml_vk_device_is_supported(devices[i])) {
++            VK938("after getProperties2(dev %zu): type=%d vendor=0x%x \"%s\"", i,
++                  (int)new_props.properties.deviceType, new_props.properties.vendorID,
++                  new_props.properties.deviceName.data());
++
++            VK938("before device_is_supported(dev %zu)", i);
++            bool dev_supported = ggml_vk_device_is_supported(devices[i]);
++            VK938("after device_is_supported(dev %zu): %d", i, (int)dev_supported);
++            if ((new_props.properties.deviceType == vk::PhysicalDeviceType::eDiscreteGpu || new_props.properties.deviceType == vk::PhysicalDeviceType::eIntegratedGpu) && dev_supported) {
+                 // Check if there are two physical devices corresponding to the same GPU
+                 // This handles the case where the same GPU appears with different drivers (e.g., RADV + AMDVLK on Linux),
+                 // see https://github.com/ggml-org/llama.cpp/pull/7582 for original deduplication.
+@@ -6215,9 +6243,12 @@ static void ggml_vk_instance_init() {
+     }
+     GGML_LOG_DEBUG("ggml_vulkan: Found %zu Vulkan devices:\n", vk_instance.device_indices.size());
+ 
++    VK938("selected %zu device(s); querying each", vk_instance.device_indices.size());
+     for (size_t i = 0; i < vk_instance.device_indices.size(); i++) {
+         vk::PhysicalDevice vkdev = devices[vk_instance.device_indices[i]];
++        VK938("before enumerateDeviceExtensionProperties(sel %zu)", i);
+         std::vector<vk::ExtensionProperties> extensionprops = vkdev.enumerateDeviceExtensionProperties();
++        VK938("after enumerateDeviceExtensionProperties(sel %zu): %zu ext(s)", i, extensionprops.size());
+ 
+         bool membudget_supported = false;
+         for (const auto & ext : extensionprops) {
+@@ -6229,8 +6260,11 @@ static void ggml_vk_instance_init() {
+ 
+         vk_instance.device_supports_membudget.push_back(membudget_supported);
+ 
++        VK938("before print_gpu_info(sel %zu)", i);
+         ggml_vk_print_gpu_info(i);
++        VK938("after print_gpu_info(sel %zu)", i);
+     }
++    VK938("instance_init: done (%zu device(s))", vk_instance.device_indices.size());
+ }
+ 
+ static void ggml_vk_init(ggml_backend_vk_context * ctx, size_t idx) {
+@@ -13845,8 +13879,9 @@ static void ggml_vk_cleanup(ggml_backend_vk_context * ctx) {
+ }
+ 
+ static int ggml_vk_get_device_count() {
++    VK938("get_device_count: enter");
+     ggml_vk_instance_init();
+-
++    VK938("get_device_count: returning %zu", vk_instance.device_indices.size());
+     return vk_instance.device_indices.size();
+ }
+ 
