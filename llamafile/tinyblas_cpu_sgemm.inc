@@ -95,8 +95,18 @@ bool llamafile_sgemm_impl(long m, long n, long k, const void *A, long lda, const
             return true;
         }
 #elif defined(__AVX512F__)
-        tinyBLAS<0, 16, __m512, __m512, ggml_bf16_t, float, TC> tb{
-            k, (const ggml_bf16_t *)A, lda, (const float *)B, ldb, C, ldc, ith, nth};
+        if (Btype == GGML_TYPE_F32) {
+            tinyBLAS<0, 16, __m512, __m512, ggml_bf16_t, float, TC> tb{
+                k, (const ggml_bf16_t *)A, lda, (const float *)B, ldb, C, ldc, ith, nth};
+            tb.matmul(m, n);
+            return true;
+        }
+        // ggml-cpu may hand us B converted to the bf16 vec_dot_type (e.g. when
+        // src1 is not contiguous); reading that buffer as f32 yields garbage.
+        if (Btype != GGML_TYPE_BF16)
+            return NOT_SUPPORTED;
+        tinyBLAS<0, 16, __m512, __m512, ggml_bf16_t, ggml_bf16_t, TC> tb{
+            k, (const ggml_bf16_t *)A, lda, (const ggml_bf16_t *)B, ldb, C, ldc, ith, nth};
         tb.matmul(m, n);
         return true;
 #elif defined(__AVX2__)

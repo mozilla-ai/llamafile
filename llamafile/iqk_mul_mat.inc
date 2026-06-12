@@ -768,6 +768,27 @@ inline void multiply_add(const Bits& bits, const __m256i * scales, int j, int i,
     }
 }
 
+// Like multiply_add, but for signed int8 values (iq4_xs). maddubs needs an
+// unsigned first operand, so multiply |v| by sign(v)*q8; pair sums stay
+// within int16 range because |v| <= 127.
+template <typename Q8, typename Bits>
+inline void multiply_add_iq4xs(const Bits& bits, const __m256i * scales, int j, int i, const Q8& q8, __m256i * sumi) {
+    for (int iy = 0; iy < Q8::nrc_y; ++iy) {
+        __m256i p[4];
+        for (int k = 0; k < 4; ++k) {
+            const __m256i av = _mm256_sign_epi8(bits.values[k], bits.values[k]);
+            const __m256i sy = _mm256_sign_epi8(q8.load_quants(iy, i, 4*j+k), bits.values[k]);
+            p[k] = _mm256_madd_epi16(scales[k], _mm256_maddubs_epi16(av, sy));
+        }
+        if (j == 0) {
+            sumi[iy] = _mm256_add_epi32(_mm256_add_epi32(p[0], p[2]), _mm256_add_epi32(p[1], p[3]));
+        } else {
+            sumi[iy] = _mm256_add_epi32(sumi[iy], _mm256_add_epi32(p[0], p[2]));
+            sumi[iy] = _mm256_add_epi32(sumi[iy], _mm256_add_epi32(p[1], p[3]));
+        }
+    }
+}
+
 struct DequantizerQ4K final : public BaseDequantizer<block_q4_K> {
     DequantizerQ4K(const void * vx, size_t bx) : BaseDequantizer(vx, bx) {}
     template <typename Q8>
@@ -789,7 +810,6 @@ struct DequantizerIQ4XS final : public BaseDequantizer<block_iq4_xs> {
     inline __m256i new_block(int i, const Q8& q8, __m256 * accd) {
         d = GGML_FP16_TO_FP32(x[i].d);
         auto scales128 = siq4.make_scales(*(const uint32_t *)x[i].scales_l, x[i].scales_h);
-        s8k.accum_mins(scales128, q8, i, -128.f*d, accd);
         return MM256_SET_M128I(scales128, scales128);
     }
     inline void prepare(int i, int j) {
@@ -801,13 +821,17 @@ struct DequantizerIQ4XS final : public BaseDequantizer<block_iq4_xs> {
     }
 
     static __m256i load_values() {
-        static const uint8_t kvalues_iq4nl[16] = {1, 24, 45, 63, 79, 93, 106, 118, 129, 141, 153, 166, 181, 197, 217, 241};
+        // Signed iq4_nl values. The +128 offset trick used on the AVX-512
+        // (FANCY_SIMD) path is not usable here: _mm256_maddubs_epi16 pair
+        // sums of offset values (up to 241) times q8 (up to 127) overflow
+        // and saturate int16 (2*241*127 > 32767). Signed values stay within
+        // range with the sign trick in multiply_add_iq4xs.
+        static const int8_t kvalues_iq4nl[16] = {-127, -104, -83, -65, -49, -35, -22, -10, 1, 13, 25, 38, 53, 69, 89, 113};
         auto val128 = _mm_loadu_si128((const __m128i *)kvalues_iq4nl);
         return MM256_SET_M128I(val128, val128);
     }
 
     Q4Bits bits;
-    Scales8K s8k;
     ScaleIQ4XS siq4;
     const __m256i values;
 };
@@ -992,7 +1016,11 @@ static void mul_mat_qX_K_q8_K_T(int n, const void * vx, size_t bx, const DataInf
 
                 set_scales_8(all_scales, j, scales);
 
-                multiply_add(deq.bits, scales, j, i, q8, sumi);
+                if constexpr (std::is_same_v<Dequantizer, DequantizerIQ4XS>) {
+                    multiply_add_iq4xs(deq.bits, scales, j, i, q8, sumi);
+                } else {
+                    multiply_add(deq.bits, scales, j, i, q8, sumi);
+                }
 
             }
 
