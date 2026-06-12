@@ -314,8 +314,15 @@ bool llamafile_sgemm(long m, long n, long k, const void *A, long lda, const void
     assert(nth > 0);
     assert(ith < nth);
 
+    // iqk_mul_mat has no lda/ldb parameters and assumes densely packed rows.
+    // Permuted or viewed tensors (e.g. ggml_permute'd src0) arrive with a
+    // larger row stride, so route those to the stride-aware kernels below
+    // or back to vanilla ggml.
+    const bool dense_rows = (lda == k && ldb == k);
+    (void)dense_rows;  // unused on ISAs without an iqk_mul_mat shortcut
+
 #if defined(__x86_64__)
-    if (X86_CHECK(AVX2) && X86_CHECK(FMA)) {
+    if (dense_rows && X86_CHECK(AVX2) && X86_CHECK(FMA)) {
         if (Btype == GGML_TYPE_Q8_K && Ctype == GGML_TYPE_F32) {
             if (iqk_mul_mat(m, n, k * QK_K, Atype, A, B, (float *)C, ldc, ith, nth)) {
                 return true;
@@ -334,12 +341,12 @@ bool llamafile_sgemm(long m, long n, long k, const void *A, long lda, const void
         }
     }
 #elif defined __aarch64__ && defined __ARM_FEATURE_DOTPROD && !defined _MSC_VER
-    if (Btype == GGML_TYPE_Q8_K && Ctype == GGML_TYPE_F32) {
+    if (dense_rows && Btype == GGML_TYPE_Q8_K && Ctype == GGML_TYPE_F32) {
         if (iqk_mul_mat(m, n, k * QK_K, Atype, A, B, (float *)C, ldc, ith, nth)) {
             return true;
         }
     }
-    if ((Btype == GGML_TYPE_Q8_0 || Btype == GGML_TYPE_Q8_1) && Ctype == GGML_TYPE_F32) {
+    if (dense_rows && (Btype == GGML_TYPE_Q8_0 || Btype == GGML_TYPE_Q8_1) && Ctype == GGML_TYPE_F32) {
         assert(QK8_0 == 32 && //
                QK8_1 == 32 && //
                QK4_0 == 32 && //
