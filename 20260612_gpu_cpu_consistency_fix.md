@@ -47,7 +47,10 @@ Fixes:
 | shadow, native upstream control (CMake+MSVC, same commit) | 947/947 | — | — |
 | shadow, after fixes #1+#2 | **947/947** | pending | pending (run in flight when shadow became unreachable) |
 | local (Apple Silicon, Metal) — before #3/#4 | 1032/1062 | 618/692 | — |
-| local, after all fixes | **1062/1062** | **692/692** | running |
+| local, after all fixes | **1062/1062** | **692/692** | **12006/12006** |
+
+`make check` also passes after the fixes (no regressions in the existing
+suite).
 
 The same-pin DLL rebuild also removed the version-skew caveat from the
 original document: the failure signature was identical with the freshly
