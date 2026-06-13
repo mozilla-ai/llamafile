@@ -45,12 +45,26 @@ Fixes:
 | shadow (Xeon W-3235 + Quadro RTX 6000, Vulkan DLL rebuilt from pin) — before | 868/947 | — | — |
 | shadow, `LLAMAFILE_DISABLE_SGEMM=1`, before CPU fixes | 947/947 | — | — |
 | shadow, native upstream control (CMake+MSVC, same commit) | 947/947 | — | — |
-| shadow, after fixes #1+#2 | **947/947** | pending | pending (run in flight when shadow became unreachable) |
+| shadow Vulkan, after all fixes | **947/947** | **764/764** | **14071/14071** |
 | local (Apple Silicon, Metal) — before #3/#4 | 1032/1062 | 618/692 | — |
-| local, after all fixes | **1062/1062** | **692/692** | **12006/12006** |
+| local Metal, after all fixes | **1062/1062** | **692/692** | **12006/12006** |
+| shadow CUDA (TinyBLAS, minimal-archs, IQ quants) | 1097/1103 † | 755/764 † | — |
 
 `make check` also passes after the fixes (no regressions in the existing
 suite).
+
+† The CUDA residuals are **not** bugs and not in any of the four families:
+every one is a sub-percent GPU-vs-CPU float-accumulation difference on the
+tiny `m=16, k=256` reductions, sitting just over the test's 5e-4 NMSE
+threshold. Proof: rerun with `LLAMAFILE_DISABLE_SGEMM=1` (vanilla ggml CPU
+reference) and the count *rises* to ~48 and now includes plain
+**`f32`×`f32`** (ERR 0.0006–0.003) — no defect can make an f32 matmul
+"wrong" by that much; it is pure FMA/reduction ordering. CUDA in fact
+agrees with llamafile's CPU path more closely than vanilla ggml does.
+iq4_xs, bf16, and q1_0 (the families that broke on CPU) all **pass** on
+CUDA — q1_0 MUL_MAT_ID is 74/74 OK. Conclusion: the inconsistency was
+CPU-side only; the Vulkan, Metal, and CUDA libraries are all numerically
+sound.
 
 The same-pin DLL rebuild also removed the version-skew caveat from the
 original document: the failure signature was identical with the freshly
@@ -118,15 +132,19 @@ Still open, and now *more* puzzling in one sense, less in another:
 | glslc probes in build scripts | commit on `vulkan-ggml-fix` |
 | shadow test area (untouched repo) | `C:\Users\Shadow\vkconsist\` (same-pin DLL, harness exe, native control build, run logs) |
 | backed-up vulkan build cache (other branch's) | `C:\Users\Shadow\.cache\llamafile-vulkan-build.bak-938` |
-| run logs (local copies) | `/tmp/run1-mulmat.log`, `/tmp/run2.log` (nosgemm), `/tmp/run3.log` (fixed), `/tmp/native-stock.log`, `/tmp/metal-*.log` |
+| backed-up cuda build cache (reduce-cuda-lib branch's) | `C:\Users\Shadow\.cache\llamafile-cuda-build.bak-reducecuda` |
+| CUDA test DLL (TinyBLAS, minimal-archs, IQ quants) | `C:\Users\Shadow\vkconsist\ggml-cuda.dll` |
+| run logs (local copies) | `/tmp/run1-mulmat.log`, `/tmp/run2.log` (nosgemm), `/tmp/run3.log` (fixed), `/tmp/native-stock.log`, `/tmp/metal-*.log`, `/tmp/run5-*.log` (shadow Vulkan fixed), `/tmp/cuda-mulmat*.log`, `/tmp/cuda-mmid.log` |
 
 ## Follow-ups
 
-- [ ] Rerun shadow full suite + MUL_MAT_ID with the fixed binary (was in
-      flight when shadow went unreachable).
-- [ ] CUDA leg on shadow: build `ggml-cuda.dll` (cuda.bat; caches exist at
-      `~/.cache/llamafile-cuda*-build`), run the harness against it.
-- [ ] ROCm: needs an AMD box; harness is ready.
+- [x] Rerun shadow full Vulkan suite + MUL_MAT_ID with the fixed binary:
+      947/947 MUL_MAT, 764/764 MUL_MAT_ID, 14071/14071 full — clean.
+- [x] CUDA leg on shadow: built `ggml-cuda.dll` (TinyBLAS, `--minimal-archs`
+      so IQ quants are kept) and ran the harness — no bug-family failures;
+      residuals are float-rounding noise (see † above).
+- [ ] ROCm: needs an AMD box; harness is ready (the other ROCm build cache
+      at `~/.cache/llamafile-rocm-build` is preserved).
 - [ ] Arc run (jmtor): new DLL (coopmat-enabled) + fixed harness; both
       `-o MUL_MAT` and `-o FLASH_ATTN_EXT`, each with/without
       `GGML_VK_DISABLE_COOPMAT=1`; then the deterministic e2e A/B from the
