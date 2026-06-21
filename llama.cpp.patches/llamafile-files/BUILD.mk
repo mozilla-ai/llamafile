@@ -355,16 +355,20 @@ HTTPLIB_OBJS := $(HTTPLIB_SRCS:%.cpp=o/$(MODE)/%.cpp.o)
 # ==============================================================================
 #
 # Upstream switched from prebuilt bundles in tools/server/public/ to a
-# Svelte project under tools/ui/, embedded at CMake time by
+# Svelte/PWA project under tools/ui/, embedded at CMake time by
 # tools/ui/embed.cpp into a generated ui.cpp + ui.h. cosmocc has no JS
 # toolchain, so apply-patches.sh (run by `make setup`) downloads the
-# prebuilt Svelte bundle from the ggml-org/llama-ui Hugging Face bucket
-# into llama.cpp/tools/ui/dist/. Here we compile embed.cpp with cosmocc
-# (its APE output runs on the host) and run it against whatever's in
-# dist/ to emit ui.cpp/ui.h. With assets present, ui.h defines
-# LLAMA_UI_HAS_ASSETS and server-http.cpp wires up /, /bundle.js,
-# /bundle.css; without them, embed.cpp emits a no-op llama_ui_find_asset
-# and the routes stay unregistered.
+# prebuilt site tarball (dist.tar.gz) from the ggml-org/llama-ui Hugging
+# Face bucket and extracts the whole static site into
+# llama.cpp/tools/ui/dist/ (see fetch-ui-assets.sh). embed.cpp then
+# recursively embeds every file under that directory, keyed by its
+# relative path (e.g. "_app/immutable/bundle.HASH.js"). fetch-ui-assets.sh
+# also builds a dist/_gzip/ mirror of gzip-compressed files; embed.cpp
+# auto-detects it and emits gzip-encoded assets (keeping the embedded
+# payload small), which server-http.cpp serves with Content-Encoding: gzip.
+# With assets present, ui.h defines LLAMA_UI_HAS_ASSETS and server-http.cpp
+# registers a route per asset (index.html at /); without them, embed.cpp
+# emits a no-op llama_ui_find_asset and the UI routes stay unregistered.
 
 UI_DIST       := llama.cpp/tools/ui/dist
 UI_GEN_DIR    := o/$(MODE)/llama.cpp/tools/ui
@@ -373,37 +377,29 @@ UI_EMBED_TOOL := $(UI_GEN_DIR)/llama-ui-embed
 UI_CPP_GEN    := $(UI_GEN_DIR)/ui.cpp
 UI_H_GEN      := $(UI_GEN_DIR)/ui.h
 
-# Assets we ask embed to bundle if they exist. wildcard returns "" for
-# missing files, which lets the build proceed UI-less when offline.
-UI_ASSETS_BUNDLE_CSS := $(wildcard $(UI_DIST)/bundle.css)
-UI_ASSETS_BUNDLE_JS  := $(wildcard $(UI_DIST)/bundle.js)
+# index.html exists iff fetch-ui-assets.sh successfully populated dist/. It
+# serves both as the "do we have a UI?" gate and as the rebuild trigger: it is
+# rewritten on every fetch and references the hashed bundle names, so it
+# changes whenever the embedded assets do. wildcard returns "" when absent,
+# letting the build proceed UI-less (offline / asset build not yet published).
 UI_ASSETS_INDEX_HTML := $(wildcard $(UI_DIST)/index.html)
-UI_ASSETS_LOADING_HTML := $(wildcard $(UI_DIST)/loading.html)
-UI_ASSETS_FILES := \
-	$(UI_ASSETS_BUNDLE_CSS) \
-	$(UI_ASSETS_BUNDLE_JS) \
-	$(UI_ASSETS_INDEX_HTML) \
-	$(UI_ASSETS_LOADING_HTML)
 
 # Build embed.cpp standalone (no llamafile flags, no llama.cpp includes).
 # cosmoc++ produces an APE that runs on the build host, so we don't need
-# a separate system compiler. Compiled with stock C++17 so the source
-# isn't entangled with -DCOSMOCC or the GGML defines.
+# a separate system compiler. Compiled with stock C++17 (embed.cpp uses
+# <filesystem>) so the source isn't entangled with -DCOSMOCC or GGML defines.
 $(UI_EMBED_TOOL): $(UI_EMBED_SRC) $(COSMOCC)
 	@mkdir -p $(@D)
 	$(CXX) -O2 -std=gnu++17 -o $@ $<
 
-# Generate ui.cpp/ui.h. Re-run whenever the embed tool or any dist asset
-# changes. The recipe passes <name> <path> pairs only for assets that
-# actually exist on disk; missing files are silently skipped, matching
-# the behaviour of embed.cpp's "no assets -> stub" mode.
-$(UI_CPP_GEN) $(UI_H_GEN) &: $(UI_EMBED_TOOL) $(UI_ASSETS_FILES)
+# Generate ui.cpp/ui.h. Re-run when the embed tool or the fetched UI changes.
+# When dist/ has assets, pass the directory: embed.cpp recurses it (auto-using
+# dist/_gzip when present). When dist/ is empty, pass no directory so embed
+# emits its no-asset stub.
+$(UI_CPP_GEN) $(UI_H_GEN) &: $(UI_EMBED_TOOL) $(UI_ASSETS_INDEX_HTML)
 	@mkdir -p $(UI_GEN_DIR)
 	$(UI_EMBED_TOOL) $(UI_CPP_GEN) $(UI_H_GEN) \
-		$(if $(UI_ASSETS_BUNDLE_CSS),bundle.css $(UI_ASSETS_BUNDLE_CSS)) \
-		$(if $(UI_ASSETS_BUNDLE_JS),bundle.js $(UI_ASSETS_BUNDLE_JS)) \
-		$(if $(UI_ASSETS_INDEX_HTML),index.html $(UI_ASSETS_INDEX_HTML)) \
-		$(if $(UI_ASSETS_LOADING_HTML),loading.html $(UI_ASSETS_LOADING_HTML))
+		$(if $(UI_ASSETS_INDEX_HTML),$(UI_DIST))
 
 # ==============================================================================
 # Tools (in tools/ directory)

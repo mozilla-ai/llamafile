@@ -136,19 +136,31 @@ These patches integrate llamafile's file handling APIs for loading models from b
 | `tools_server_server.cpp.patch` | Renames upstream's `llama_server()` to `server_main()` and adds `on_ready`/`on_shutdown_available` callbacks for combined TUI+server mode; adds Metal/GPU backend trigger before `common_init()`; adds Cosmopolitan-specific standalone `main()` with `cosmo_args`, verbose flag handling, and GPU pre-initialization; handles `LLAMAFILE_TUI` exit to avoid Metal cleanup crashes |
 
 The web UI moved upstream from prebuilt `tools/server/public/*` assets to
-a Svelte project under `tools/ui/`, embedded at CMake time via
-`tools/ui/embed.cpp`. cosmocc has no JS toolchain, so `apply-patches.sh`
-(run by `make setup`) downloads the prebuilt Svelte bundle from the
-`ggml-org/llama-ui` Hugging Face bucket into `llama.cpp/tools/ui/dist/`.
+a Svelte/PWA project under `tools/ui/`, embedded at CMake time via
+`tools/ui/embed.cpp`. cosmocc has no JS toolchain, so `fetch-ui-assets.sh`
+(run by `apply-patches.sh` / `make setup`) downloads the prebuilt site
+**tarball** `dist.tar.gz` (plus its `.sha256`) from the `ggml-org/llama-ui`
+Hugging Face bucket — picking the newest `bNNNN` tag `<=` our pinned build —
+verifies it, and extracts the whole static site into
+`llama.cpp/tools/ui/dist/`. The modern site is no longer four flat files
+(`bundle.css`/`bundle.js`/`index.html`/`loading.html`) but a hashed tree
+(`_app/immutable/bundle.HASH.js`, a service worker, manifest, icons, splash
+screens). To keep the embedded payload small, the script also builds a
+`dist/_gzip/` mirror with every file gzip-compressed under its original name.
+
 At build time, `llama.cpp/BUILD.mk` compiles `tools/ui/embed.cpp` with
-`cosmoc++` (its APE output runs on the host) and runs it against the
-downloaded assets to emit `o/$(MODE)/llama.cpp/tools/ui/ui.{cpp,h}`,
-which is then compiled like any other C++ source and linked into
-`llama-server` and `llamafile`. If the download fails (offline, version
-not yet on HF) `apply-patches.sh` warns and continues with `dist/`
-empty — `embed.cpp` then emits a no-op `llama_ui_find_asset`, and
-`server-http.cpp` skips UI route registration via its
-`LLAMA_UI_HAS_ASSETS` guard so the API still works.
+`cosmoc++` (its APE output runs on the host) and runs it against the `dist/`
+**directory** (the new `embed <out_cpp> <out_h> [<asset_dir>]` interface):
+`embed.cpp` recursively bakes every file — auto-detecting `dist/_gzip/` and
+emitting gzip-encoded assets keyed by relative path — into
+`o/$(MODE)/llama.cpp/tools/ui/ui.{cpp,h}`, which is compiled like any other
+C++ source and linked into `llama-server` and `llamafile`. Upstream's
+`server-http.cpp` (unpatched) registers a route per embedded asset
+(`index.html` at `/`) and serves gzip assets with `Content-Encoding: gzip`.
+If the download fails (offline, version not yet on HF) the script leaves
+`dist/` empty — `embed.cpp` then emits a no-op `llama_ui_find_asset` and the
+`LLAMA_UI_HAS_ASSETS` guard keeps the UI routes unregistered, so the REST
+API still works.
 
 ### Bug Fixes
 
