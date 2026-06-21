@@ -68,15 +68,18 @@ LLAMA_SRCS_CPP := \
 	llama.cpp/src/models/codeshell.cpp \
 	llama.cpp/src/models/cogvlm.cpp \
 	llama.cpp/src/models/cohere2.cpp \
+	llama.cpp/src/models/cohere2moe.cpp \
 	llama.cpp/src/models/command-r.cpp \
 	llama.cpp/src/models/dbrx.cpp \
 	llama.cpp/src/models/deci.cpp \
 	llama.cpp/src/models/deepseek.cpp \
 	llama.cpp/src/models/deepseek2.cpp \
 	llama.cpp/src/models/deepseek2ocr.cpp \
+	llama.cpp/src/models/deepseek32.cpp \
 	llama.cpp/src/models/delta-net-base.cpp \
 	llama.cpp/src/models/dots1.cpp \
 	llama.cpp/src/models/dream.cpp \
+	llama.cpp/src/models/eagle3.cpp \
 	llama.cpp/src/models/ernie4-5-moe.cpp \
 	llama.cpp/src/models/ernie4-5.cpp \
 	llama.cpp/src/models/eurobert.cpp \
@@ -90,6 +93,7 @@ LLAMA_SRCS_CPP := \
 	llama.cpp/src/models/gemma2.cpp \
 	llama.cpp/src/models/gemma3.cpp \
 	llama.cpp/src/models/gemma3n.cpp \
+	llama.cpp/src/models/gemma4-assistant.cpp \
 	llama.cpp/src/models/gemma4.cpp \
 	llama.cpp/src/models/glm-dsa.cpp \
 	llama.cpp/src/models/glm4-moe.cpp \
@@ -122,6 +126,7 @@ LLAMA_SRCS_CPP := \
 	llama.cpp/src/models/maincoder.cpp \
 	llama.cpp/src/models/mamba.cpp \
 	llama.cpp/src/models/mamba2.cpp \
+	llama.cpp/src/models/mellum.cpp \
 	llama.cpp/src/models/mimo2.cpp \
 	llama.cpp/src/models/minicpm.cpp \
 	llama.cpp/src/models/minicpm3.cpp \
@@ -192,6 +197,7 @@ LLAMA_SRCS_CPP := \
 	llama.cpp/src/llama-hparams.cpp \
 	llama.cpp/src/llama-impl.cpp \
 	llama.cpp/src/llama-io.cpp \
+	llama.cpp/src/llama-kv-cache-dsa.cpp \
 	llama.cpp/src/llama-kv-cache-iswa.cpp \
 	llama.cpp/src/llama-kv-cache.cpp \
 	llama.cpp/src/llama-memory-hybrid.cpp \
@@ -227,6 +233,7 @@ COMMON_SRCS_CPP := \
 	llama.cpp/common/download.cpp \
 	llama.cpp/common/fit.cpp \
 	llama.cpp/common/hf-cache.cpp \
+	llama.cpp/common/imatrix-loader.cpp \
 	llama.cpp/common/jinja/caps.cpp \
 	llama.cpp/common/jinja/lexer.cpp \
 	llama.cpp/common/jinja/parser.cpp \
@@ -302,12 +309,17 @@ MTMD_SRCS_CPP := \
 	llama.cpp/tools/mtmd/mtmd-image.cpp \
 	llama.cpp/tools/mtmd/models/cogvlm.cpp \
 	llama.cpp/tools/mtmd/models/deepseekocr.cpp \
+	llama.cpp/tools/mtmd/models/deepseekocr2.cpp \
 	llama.cpp/tools/mtmd/models/conformer.cpp \
 	llama.cpp/tools/mtmd/models/dotsocr.cpp \
+	llama.cpp/tools/mtmd/models/exaone4_5.cpp \
 	llama.cpp/tools/mtmd/models/gemma4a.cpp \
+	llama.cpp/tools/mtmd/models/gemma4ua.cpp \
+	llama.cpp/tools/mtmd/models/gemma4uv.cpp \
 	llama.cpp/tools/mtmd/models/gemma4v.cpp \
 	llama.cpp/tools/mtmd/models/glm4v.cpp \
 	llama.cpp/tools/mtmd/models/granite-speech.cpp \
+	llama.cpp/tools/mtmd/models/granite4-vision.cpp \
 	llama.cpp/tools/mtmd/models/hunyuanvl.cpp \
 	llama.cpp/tools/mtmd/models/internvl.cpp \
 	llama.cpp/tools/mtmd/models/kimik25.cpp \
@@ -411,6 +423,7 @@ TOOL_SERVER_SRCS := \
 	llama.cpp/tools/server/server-http.cpp \
 	llama.cpp/tools/server/server-models.cpp \
 	llama.cpp/tools/server/server-queue.cpp \
+	llama.cpp/tools/server/server-schema.cpp \
 	llama.cpp/tools/server/server-task.cpp \
 	llama.cpp/tools/server/server-tools.cpp
 

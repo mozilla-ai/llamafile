@@ -1,0 +1,41 @@
+diff --git a/src/models/eagle3.cpp b/src/models/eagle3.cpp
+--- a/llama.cpp/src/models/eagle3.cpp
++++ b/llama.cpp/src/models/eagle3.cpp
+@@ -91,18 +91,6 @@ void llama_model_eagle3::load_arch_tensors(llama_model_loader &) {
+     }
+ }
+ 
+-std::unique_ptr<llm_graph_context> llama_model_eagle3::build_arch_graph(const llm_graph_params & params) const {
+-    switch (params.gtype) {
+-        case LLM_GRAPH_TYPE_ENCODER:
+-            return std::make_unique<graph<true>>(*this, params);
+-        case LLM_GRAPH_TYPE_DEFAULT:
+-        case LLM_GRAPH_TYPE_DECODER:
+-            return std::make_unique<graph<false>>(*this, params);
+-        default:
+-            GGML_ABORT("invalid graph type");
+-    };
+-}
+-
+ template <>
+ ggml_tensor * llama_model_eagle3::graph<true>::build_inp_embd_enc() const {
+     ggml_tensor * cur = nullptr;
+@@ -321,3 +309,18 @@ llama_model_eagle3::graph<false>::graph(const llama_model & model, const llm_gra
+ 
+     ggml_build_forward_expand(gf, cur);
+ }
++
++// Defined after the graph<true>/graph<false> constructor specializations above:
++// cosmocc's clang rejects an explicit specialization that appears after the
++// point where make_unique<graph<...>> would implicitly instantiate it.
++std::unique_ptr<llm_graph_context> llama_model_eagle3::build_arch_graph(const llm_graph_params & params) const {
++    switch (params.gtype) {
++        case LLM_GRAPH_TYPE_ENCODER:
++            return std::make_unique<graph<true>>(*this, params);
++        case LLM_GRAPH_TYPE_DEFAULT:
++        case LLM_GRAPH_TYPE_DECODER:
++            return std::make_unique<graph<false>>(*this, params);
++        default:
++            GGML_ABORT("invalid graph type");
++    };
++}

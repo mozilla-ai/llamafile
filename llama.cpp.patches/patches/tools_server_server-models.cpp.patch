@@ -1,7 +1,7 @@
 diff --git a/tools/server/server-models.cpp b/tools/server/server-models.cpp
 --- a/llama.cpp/tools/server/server-models.cpp
 +++ b/llama.cpp/tools/server/server-models.cpp
-@@ -31,6 +31,7 @@
+@@ -33,6 +33,7 @@
  #include <netinet/in.h>
  #include <arpa/inet.h>
  #include <unistd.h>
@@ -9,7 +9,29 @@ diff --git a/tools/server/server-models.cpp b/tools/server/server-models.cpp
  extern char **environ;
  #endif
  
-@@ -715,9 +716,12 @@ void server_models::unload_lru() {
+@@ -496,13 +497,19 @@ void server_models::load_models() {
+         }
+ 
+         // wait for all targeted models to reach UNLOADED; cv.wait handles unlock/relock
+-        cv.wait(lk, [&]() {
++        // Use wait_for() instead of wait() to work around a Cosmopolitan libc bug
++        // where untimed futex waits on XNU (macOS) expire after ~72 minutes,
++        // causing condition_variable::wait() to throw ETIMEDOUT.
++        auto all_unloaded = [&]() {
+             for (const auto & name : to_unload) {
+                 auto it = mapping.find(name);
+                 if (it != mapping.end() && it->second.meta.is_running()) return false;
+             }
+             return true;
+-        });
++        };
++        while (!all_unloaded()) {
++            cv.wait_for(lk, std::chrono::seconds(30));
++        }
+ 
+         // collect all threads to join in one pass while the lock is held:
+         // - monitoring threads from just-unloaded models (to_unload)
+@@ -807,9 +814,12 @@ void server_models::unload_lru() {
          // wait for unload to complete
          {
              std::unique_lock<std::mutex> lk(mutex);
@@ -25,7 +47,19 @@ diff --git a/tools/server/server-models.cpp b/tools/server/server-models.cpp
          }
      }
  }
-@@ -826,6 +830,22 @@ void server_models::load(const std::string & name) {
+@@ -823,7 +833,10 @@ void server_models::load(const std::string & name) {
+     std::unique_lock<std::mutex> lk(mutex);
+     // edge case: block until any in-progress reload has finished so we always load
+     // against the freshest preset and a consistent mapping state
+-    cv.wait(lk, [this]() { return !is_reloading; });
++    // Use wait_for() instead of wait() to work around the XNU futex timeout bug.
++    while (is_reloading) {
++        cv.wait_for(lk, std::chrono::seconds(30));
++    }
+ 
+     auto meta = mapping[name].meta;
+     if (meta.status != SERVER_MODEL_STATUS_UNLOADED) {
+@@ -915,15 +928,34 @@ void server_models::load(const std::string & name) {
          });
  
          std::thread stopping_thread([&]() {
@@ -45,32 +79,38 @@ diff --git a/tools/server/server-models.cpp b/tools/server/server-models.cpp
 +            sigdelset(&block_mask, SIGTRAP);
 +            pthread_sigmask(SIG_BLOCK, &block_mask, nullptr);
 +
-             // thread to monitor stopping signal OR child crash
+             // thread to monitor explicit stop requests; child crash is signalled via child_proc->stopped
              auto is_stopping = [this, &name]() {
                  return this->stopping_models.find(name) != this->stopping_models.end();
-@@ -835,7 +855,10 @@ void server_models::load(const std::string & name) {
              };
              {
                  std::unique_lock<std::mutex> lk(this->mutex);
--                this->cv_stop.wait(lk, should_wake);
-+                // Use wait_for() instead of wait() to work around XNU futex timeout bug
-+                while (!should_wake()) {
+-                this->cv_stop.wait(lk, [&]() {
+-                    return is_stopping() || child_proc->stopped.load(std::memory_order_acquire);
+-                });
++                // Use wait_for() instead of wait() to work around a Cosmopolitan
++                // libc bug where untimed futex waits on XNU (macOS) expire after
++                // ~72 minutes, causing condition_variable::wait() to throw ETIMEDOUT.
++                while (!(is_stopping() || child_proc->stopped.load(std::memory_order_acquire))) {
 +                    this->cv_stop.wait_for(lk, std::chrono::seconds(30));
 +                }
              }
-             // child may have already exited (e.g. crashed) — skip shutdown sequence
-             if (!subprocess_alive(child_proc.get())) {
-@@ -984,13 +1007,14 @@ void server_models::update_loaded_info(const std::string & name, std::string & r
+             // child crashed or finished on its own — skip graceful shutdown sequence
+             if (child_proc->stopped.load(std::memory_order_acquire)) {
+@@ -1237,14 +1269,16 @@ void server_models::wait(const std::string & name, std::function<bool(const serv
+ }
  
- void server_models::wait_until_loading_finished(const std::string & name) {
-     std::unique_lock<std::mutex> lk(mutex);
--    cv.wait(lk, [this, &name]() {
-+    // Use wait_for() instead of wait() to work around XNU futex timeout bug
+ void server_models::wait(std::unique_lock<std::mutex> & lk, const std::string & name, std::function<bool(const server_model_meta &)> predicate) {
+-    cv.wait(lk, [this, &name, &predicate]() {
++    // Use wait_for() instead of wait() to work around a Cosmopolitan libc bug
++    // where untimed futex waits on XNU (macOS) expire after ~72 minutes,
++    // causing condition_variable::wait() to throw ETIMEDOUT.
 +    while (true) {
          auto it = mapping.find(name);
 -        if (it != mapping.end()) {
--            return it->second.meta.status != SERVER_MODEL_STATUS_LOADING;
-+        if (it != mapping.end() && it->second.meta.status != SERVER_MODEL_STATUS_LOADING) {
+-            return predicate(it->second.meta);
+-
++        if (it != mapping.end() && predicate(it->second.meta)) {
 +            break;
          }
 -        return false;
