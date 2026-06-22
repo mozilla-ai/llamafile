@@ -54,18 +54,15 @@ bool llamafile_sgemm_impl(long m, long n, long k, const void *A, long lda, const
 #if defined(__AVX512F__)
         tinyBLAS<0, 16, __m512, __m512, float, float, TC> tb{
             k, (const float *)A, lda, (const float *)B, ldb, C, ldc, ith, nth};
-        tb.matmul(m, n);
-        return true;
+        return tb.matmul(m, n);
 #elif defined(__AVX__) || defined(__AVX2__)
         tinyBLAS<0, 8, __m256, __m256, float, float, TC> tb{
             k, (const float *)A, lda, (const float *)B, ldb, C, ldc, ith, nth};
-        tb.matmul(m, n);
-        return true;
+        return tb.matmul(m, n);
 #elif defined(__ARM_NEON)
         tinyBLAS<0, 4, float32x4_t, float32x4_t, float, float, TC> tb{
             k, (const float *)A, lda, (const float *)B, ldb, C, ldc, ith, nth};
-        tb.matmul(m, n);
-        return true;
+        return tb.matmul(m, n);
 #else
         return NOT_SUPPORTED;
 #endif
@@ -73,11 +70,13 @@ bool llamafile_sgemm_impl(long m, long n, long k, const void *A, long lda, const
 
     case GGML_TYPE_BF16: {
 #if defined(__AVX512BF16__)
+        if (n < 2 && !FLAG_precise)
+            // TODO(jart): Why is ggml_vec_dot_bf16_unroll() so fast at matvec?
+            return NOT_PROFITABLE;
         if (Btype == GGML_TYPE_F32 && n <= 2) {
             tinyBLAS<0, 16, __m512, __m512, ggml_bf16_t, float, TC> tb{
                 k, (const ggml_bf16_t *)A, lda, (const float *)B, ldb, C, ldc, ith, nth};
-            tb.matmul(m, n);
-            return true;
+            return tb.matmul(m, n);
         }
         if (Btype == GGML_TYPE_F32)
             return WANT_QUANTIZATION;
@@ -86,33 +85,33 @@ bool llamafile_sgemm_impl(long m, long n, long k, const void *A, long lda, const
         if (n > 1) {
             tinyBLAS<0, 32, __m512, __m512bh, ggml_bf16_t, ggml_bf16_t, TC> tb{
                 k, (const ggml_bf16_t *)A, lda, (const ggml_bf16_t *)B, ldb, C, ldc, ith, nth};
-            tb.matmul(m, n);
-            return true;
+            return tb.matmul(m, n);
         } else {
             tinyBLAS<0, 16, __m512, __m512, ggml_bf16_t, ggml_bf16_t, TC> tb{
                 k, (const ggml_bf16_t *)A, lda, (const ggml_bf16_t *)B, ldb, C, ldc, ith, nth};
-            tb.matmul(m, n);
-            return true;
+            return tb.matmul(m, n);
         }
 #elif defined(__AVX512F__)
+        if (Btype != GGML_TYPE_F32)
+            return NOT_SUPPORTED;
         tinyBLAS<0, 16, __m512, __m512, ggml_bf16_t, float, TC> tb{
             k, (const ggml_bf16_t *)A, lda, (const float *)B, ldb, C, ldc, ith, nth};
-        tb.matmul(m, n);
-        return true;
+        return tb.matmul(m, n);
 #elif defined(__AVX2__)
+        if (n < 2 && !FLAG_precise)
+            // TODO(jart): Why is ggml_vec_dot_bf16_unroll() so fast at matvec?
+            return NOT_PROFITABLE;
         if (Btype != GGML_TYPE_F32)
             return NOT_SUPPORTED;
         tinyBLAS<0, 8, __m256, __m256, ggml_bf16_t, float, TC> tb{
             k, (const ggml_bf16_t *)A, lda, (const float *)B, ldb, C, ldc, ith, nth};
-        tb.matmul(m, n);
-        return true;
+        return tb.matmul(m, n);
 #elif defined(__ARM_NEON) && !defined(_MSC_VER)
         if (Btype != GGML_TYPE_F32)
             return NOT_SUPPORTED;
         tinyBLAS<0, 4, float32x4_t, float32x4_t, ggml_bf16_t, float, TC> tb{
             k, (const ggml_bf16_t *)A, lda, (const float *)B, ldb, C, ldc, ith, nth};
-        tb.matmul(m, n);
-        return true;
+        return tb.matmul(m, n);
 #else
         return NOT_SUPPORTED;
 #endif
@@ -120,11 +119,13 @@ bool llamafile_sgemm_impl(long m, long n, long k, const void *A, long lda, const
 
     case GGML_TYPE_F16: {
 #if defined(__AVX512F__)
+        if (n < 2 && !FLAG_precise)
+            // TODO(jart): Why is ggml_vec_dot_f16_unroll() so fast at matvec?
+            return NOT_PROFITABLE;
         if (Btype == GGML_TYPE_F32 && n <= 2) {
             tinyBLAS<0, 16, __m512, __m512, ggml_fp16_t, float, TC> tb{
                 k, (const ggml_fp16_t *)A, lda, (const float *)B, ldb, C, ldc, ith, nth};
-            tb.matmul(m, n);
-            return true;
+            return tb.matmul(m, n);
         }
         if (Btype == GGML_TYPE_F32)
             return WANT_QUANTIZATION;
@@ -132,15 +133,16 @@ bool llamafile_sgemm_impl(long m, long n, long k, const void *A, long lda, const
             return NOT_SUPPORTED;
         tinyBLAS<0, 16, __m512, __m512, ggml_fp16_t, ggml_fp16_t, TC> tb{
             k, (const ggml_fp16_t *)A, lda, (const ggml_fp16_t *)B, ldb, C, ldc, ith, nth};
-        tb.matmul(m, n);
-        return true;
+        return tb.matmul(m, n);
 #elif (defined(__AVX__) || defined(__AVX2__)) && defined(__F16C__)
         if (X86_CHECK(F16C)) {
+            if (n < 2 && !FLAG_precise)
+                // TODO(jart): Why is ggml_vec_dot_f16_unroll() so fast at matvec?
+                return NOT_PROFITABLE;
             if (Btype == GGML_TYPE_F32 && n <= 2) {
                 tinyBLAS<0, 8, __m256, __m256, ggml_fp16_t, float, TC> tb{
                     k, (const ggml_fp16_t *)A, lda, (const float *)B, ldb, C, ldc, ith, nth};
-                tb.matmul(m, n);
-                return true;
+                return tb.matmul(m, n);
             }
             if (Btype == GGML_TYPE_F32)
                 return WANT_QUANTIZATION;
@@ -148,8 +150,7 @@ bool llamafile_sgemm_impl(long m, long n, long k, const void *A, long lda, const
                 return NOT_SUPPORTED;
             tinyBLAS<0, 8, __m256, __m256, ggml_fp16_t, ggml_fp16_t, TC> tb{
                 k, (const ggml_fp16_t *)A, lda, (const ggml_fp16_t *)B, ldb, C, ldc, ith, nth};
-            tb.matmul(m, n);
-            return true;
+            return tb.matmul(m, n);
         } else {
             return NOT_SUPPORTED;
         }
@@ -163,8 +164,7 @@ bool llamafile_sgemm_impl(long m, long n, long k, const void *A, long lda, const
             return NOT_SUPPORTED;
         tinyBLAS<0, 8, float16x8_t, float16x8_t, ggml_fp16_t, ggml_fp16_t, TC> tb{
             k, (const ggml_fp16_t *)A, lda, (const ggml_fp16_t *)B, ldb, C, ldc, ith, nth};
-        tb.matmul(m, n);
-        return true;
+        return tb.matmul(m, n);
 #elif defined(__ARM_NEON) && !defined(_MSC_VER)
         if (n < 2 && !FLAG_precise)
             // TODO(jart): Why is ggml_vec_dot_f16_unroll() so fast at matvec?
@@ -173,8 +173,7 @@ bool llamafile_sgemm_impl(long m, long n, long k, const void *A, long lda, const
             return NOT_SUPPORTED;
         tinyBLAS<0, 4, float32x4_t, float32x4_t, ggml_fp16_t, float, TC> tb{
             k, (const ggml_fp16_t *)A, lda, (const float *)B, ldb, C, ldc, ith, nth};
-        tb.matmul(m, n);
-        return true;
+        return tb.matmul(m, n);
 #else
         return NOT_SUPPORTED;
 #endif
