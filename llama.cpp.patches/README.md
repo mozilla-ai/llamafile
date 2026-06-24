@@ -8,6 +8,7 @@ This directory contains patches that adapt llama.cpp for use with Llamafile and 
 llama.cpp.patches/
 ├── README.md              # This file
 ├── apply-patches.sh       # Script to apply all patches to llama.cpp submodule
+├── fetch-ui-assets.sh     # Downloads + validates the prebuilt web UI (see Server Integration)
 ├── renames.sh             # Script for file renames/moves (if any)
 ├── llamafile-files/       # Additional files to copy into llama.cpp
 │   ├── BUILD.mk           # Makefile for building llama.cpp with cosmocc
@@ -161,6 +162,18 @@ If the download fails (offline, version not yet on HF) the script leaves
 `dist/` empty — `embed.cpp` then emits a no-op `llama_ui_find_asset` and the
 `LLAMA_UI_HAS_ASSETS` guard keeps the UI routes unregistered, so the REST
 API still works.
+
+Note that `embed.cpp` only takes that graceful no-asset path when `dist/` is
+*empty*: once the directory is non-empty it enforces a required-asset set
+(its `required_check[]` table — `index.html`, `loading.html`,
+`manifest.webmanifest`, `sw.js`, `build.json`, `version.json`, and the hashed
+`bundle*.js`/`bundle*.css`/`workbox*.js`) and returns a hard error if any is
+missing. So `fetch-ui-assets.sh` validates the *same* set after extracting
+(`ui_missing_assets`); if a downloaded tarball is partial or has drifted, it
+clears `dist/` and falls back to a UI-less build rather than letting the embed
+step abort the whole build. Because `embed.cpp` is an upstream file, that list
+can change on a llama.cpp bump — when it does, the asset list in
+`ui_missing_assets` must be updated to match.
 
 ### Bug Fixes
 

@@ -74,6 +74,43 @@ build_gzip_mirror() {
         done )
 }
 
+# Echo (one per line) any asset embed.cpp requires that is absent from the tree.
+#
+# !!! KEEP IN SYNC WITH UPSTREAM tools/ui/embed.cpp !!!
+# The list below mirrors the required_check[] table in llama.cpp/tools/ui/embed.cpp.
+# Once dist/ is non-empty, embed.cpp hard-fails the build (return 1) if any of
+# those assets is missing. If we only checked index.html here, a partial/drifted
+# tarball would pass our check but then abort the *entire* build at the embed
+# step instead of falling back to a UI-less build. So we validate the same set
+# embed.cpp does and, when it's incomplete, clear dist/ to take the UI-less path.
+#
+# embed.cpp is an UPSTREAM file, so it can change on a llama.cpp bump. When it
+# does (a new required asset, a renamed one), this list must be updated to match
+# -- otherwise the two checks disagree again and the build-failure bug returns.
+ui_missing_assets() {
+    local root="$1" f b
+    local -a bases=()
+    while IFS= read -r f; do
+        bases+=("$(basename "$f")")
+    done < <(find "$root" -type f ! -path '*/_gzip/*' 2>/dev/null)
+
+    _have() {  # _have <case-glob> : true if any basename matches
+        for b in "${bases[@]}"; do
+            case "$b" in $1) return 0 ;; esac
+        done
+        return 1
+    }
+    _have 'index.html'           || echo 'index.html'
+    _have 'loading.html'         || echo 'loading.html'
+    _have 'manifest.webmanifest' || echo 'manifest.webmanifest'
+    _have 'sw.js'                || echo 'sw.js'
+    _have 'build.json'           || echo 'build.json'
+    _have 'version.json'         || echo 'version.json'
+    _have 'bundle*.js'           || echo 'bundle[hash].js'
+    _have 'bundle*.css'          || echo 'bundle[hash].css'
+    _have 'workbox*.js'          || echo 'workbox[hash].js'
+}
+
 echo ""
 echo "Fetching prebuilt web UI assets from Hugging Face..."
 
@@ -148,10 +185,14 @@ for v in "${UI_CANDIDATES[@]}"; do
     fi
     rm -rf "$tmp"
 
-    # Sanity check: index.html must exist (BUILD.mk gates the UI on it, and
-    # embed.cpp requires it among the embedded assets).
-    if [ ! -f "$UI_DIST/index.html" ]; then
-        echo "  extracted tree has no index.html; ignoring"
+    # Reject a partial/drifted tree: embed.cpp requires the full asset set once
+    # dist/ is non-empty and would otherwise abort the entire build. Clearing
+    # dist/ here lets the embed step generate the no-asset stub instead, so the
+    # server still builds (just without the web UI).
+    missing="$(ui_missing_assets "$UI_DIST")"
+    if [ -n "$missing" ]; then
+        echo "  extracted tree is missing required asset(s); ignoring:"
+        printf '    %s\n' $missing
         rm -rf "$UI_DIST"
         mkdir -p "$UI_DIST"
         continue
