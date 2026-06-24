@@ -2,9 +2,9 @@ name: CI
 on:
   workflow_dispatch:
   push:
-    branches: [ master, main, fix ]
+    branches: [master, main, fix]
   pull_request:
-    branches: [ master, main, fix ]
+    branches: [master, main, fix]
 
 jobs:
   ubuntu-focal-make:
@@ -14,7 +14,7 @@ jobs:
     steps:
       - name: Clone
         id: checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
       - name: Dependencies
         id: depends
@@ -28,7 +28,7 @@ jobs:
 
       - name: Cache cosmocc toolchain
         id: cache-cosmocc-toolchain
-        uses: actions/cache@v4
+        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
         env:
           cache-name: cache-cosmocc-toolchain
         with:
