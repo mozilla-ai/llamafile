@@ -25,6 +25,12 @@ The subshell keeps the working directory restored even if the tool fails, and
 Output lands in `llama.cpp.patches/patches/` (modified files) and
 `llama.cpp.patches/llamafile-files/` (new files, including `BUILD.mk`).
 
+The tool **only writes/overwrites — it never deletes**. If you dropped a patch
+during a bump (the file is no longer modified, e.g. upstream absorbed the
+change), its old `.patch` will still be sitting in `patches/` and will keep
+being applied by `setup`. `git rm` each dropped patch by hand, and confirm the
+final count (`ls llama.cpp.patches/patches | wc -l`) matches your intent.
+
 IMPORTANT: only run this **after** the in-place edits are proven to work
 (a clean build succeeds and llamafile runs as expected). Generating patches
 from unproven edits bakes in breakage. After generating, verify the patch set
