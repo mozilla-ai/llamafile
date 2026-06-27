@@ -33,6 +33,14 @@ This document is the canonical procedure for a llama.cpp bump. It is built by
 - **DO** use `git diff $OLD_ID..$COMMIT_ID` for **upstream-drift recon only**
   (seeing what changed upstream to drive BUILD.mk / integration work). That is
   the one legitimate ad-hoc `git diff` use.
+- **DO** use `git apply --reject <patch>` to *reconcile* a drifted patch (Step 3):
+  it applies every hunk that still fits and drops only the stragglers as `.rej`
+  files, so a 50-hunk mechanical patch (e.g. the `GGML_CALL` ones) collapses to
+  hand-editing the 1–2 hunks that actually moved. This is distinct from — and
+  doesn't violate — the DON'Ts above: `check_patches.sh` triages (file-level,
+  pre-edit), `generate-patches` produces, and `--reject` is just a precise way to
+  *apply* during reconciliation. Delete the `.rej` files once reconciled (they'd
+  otherwise be picked up as untracked files).
 
 ## The procedure
 
@@ -65,19 +73,50 @@ patch, whether it still applies to the bumped submodule. This is *triage only*:
 it tells you which patches are free and which need reconciliation. A patch may
 be accepted despite line shifts — that fuzz is fine and welcome.
 
+A patch that **fails** triage has three possible fates, not one — decide which
+before editing:
+- **Reconcile** — upstream moved the code; reproduce the patch's intent against
+  the new source (the common case).
+- **Drop as obsolete** — upstream **absorbed** the change, so the patch is now
+  redundant (this bump: upstream added the `<algorithm>` include `ngram-mod`
+  patched in, and replaced the async shader-compile the Vulkan patch was
+  rewriting). Applying it would duplicate/conflict. Don't reconcile it — delete
+  it (see Step 5 for the cleanup gotcha).
+- **Split** — part still applies, part is obsolete; keep the live hunks, drop the
+  rest (`git apply --reject` makes this visible).
+
 ### Step 3 — Reconcile (edit llama.cpp in place)
 
 Make the submodule build and work against the new upstream, editing files
 **in place** (never editing patch files):
 
 - Apply the patches that triage showed as clean; for the conflicting ones,
-  hand-edit the new llama.cpp code to reproduce each patch's intent.
-- **BUILD.mk:** add new upstream sources, drop deleted ones, fix renames. Drive
-  this from drift recon: `cd llama.cpp && git diff --stat --summary $OLD_ID..$COMMIT_ID -- src/ common/ ggml/ tools/`
-  and cross-check against `llama.cpp/CMakeLists.txt`. Mirror BUILD.mk source
-  changes into the **GPU runtime build scripts** (see "Recurring breakage").
-- **llamafile integration:** reconcile any API changes llamafile's code relies
-  on (entry points, chat/reasoning wiring, `include/` API).
+  hand-edit the new llama.cpp code to reproduce each patch's intent (use
+  `git apply --reject` to isolate just the drifted hunks — see DO/DON'T).
+- **BUILD.mk source lists:** add new upstream sources, drop deleted ones, fix
+  renames. Drive this from drift recon:
+  `cd llama.cpp && git diff --stat --summary $OLD_ID..$COMMIT_ID -- src/ common/ ggml/ tools/`
+  and cross-check against `llama.cpp/CMakeLists.txt` (the `src/models/` and
+  `tools/mtmd/models/` dirs are globbed there, so *every* new `.cpp` is a real
+  TU). A new source usually has to be listed in **more than one place** — see the
+  "keep-in-sync" list under "Recurring breakage". Missing one fails as a
+  link-time `undefined reference`, often only at `verify-clean`, not as a compile
+  error.
+- **llamafile integration:** reconcile any upstream API change that llamafile's
+  **own** code calls — these live outside the patch set (in `llamafile/`) and
+  surface as *compile errors at build*, not in triage. The usual suspects are the
+  `chatbot_*` files and the server bridge; this bump, `mtmd_helper_bitmap_init_*`
+  gained a `placeholder` arg and changed return type, breaking
+  `chatbot_eval.cpp`/`chatbot_cli.cpp`. When the build errors in a `llamafile/`
+  file, grep `llamafile/` for the changed symbol.
+- **Buildable dirty tree:** `make setup` does more than apply patches — it copies
+  `llamafile-files/` into the submodule (`BUILD.mk`, `common/license.cpp`),
+  removes the upstream `Makefile`, and fetches the UI. If you reconcile by hand
+  (applying patches directly rather than via `setup`, e.g. because some patches
+  don't yet apply), replicate those steps or the build fails on a missing
+  `BUILD.mk`/`license.cpp`. Also: a full `make` needs **all three** submodules
+  initialized (`reset-repo` deinits whisper/sd); to prove *just* llama.cpp,
+  `make o/$(MODE)/llama.cpp`.
 
 ### Step 4 — Prove the reconciliation works (on the dirty tree)
 
@@ -95,6 +134,13 @@ generated from unproven edits bake in breakage.
 Run `llamafile:generate-patches`. It rewrites the full patch set from your
 proven in-place edits (refreshing line numbers — this resilience is welcome).
 New/untracked files (including `BUILD.mk`) are routed to `llamafile-files/`.
+
+**Gotcha — it only writes, never deletes.** A patch you dropped as obsolete
+(Step 2) has no corresponding edit, so `generate-patches` simply doesn't
+regenerate it — but the **old `.patch` file lingers** and keeps getting applied
+by `setup`. Manually `git rm llama.cpp.patches/patches/<dropped>.patch` for each
+one. Sanity-check: `ls llama.cpp.patches/patches | wc -l` should equal what you
+expect (old count − dropped + added).
 
 Update `llama.cpp.patches/README.md` for any patch added/removed/materially
 reworked.
@@ -114,8 +160,16 @@ hardware/platforms and report them in the PR:
 
 - [ ] CUDA / ROCm smoke test on a Linux GPU box
 - [ ] Windows smoke test (incl. GPU DSO extraction — see "Permission denied" class)
-- [ ] macOS Metal runtime compile + run
-- [ ] Web UI serves: `/`, `/bundle.js`, `/bundle.css` return 200
+- [ ] macOS Metal runtime compile + run — first bump the llamafile version or
+      `rm -rf ~/.llamafile/v/<VERSION>`, else you test a **stale cached Metal
+      dylib** from before the bump (looks like a Metal regression; see
+      testing.md "stale per-version cache")
+- [ ] Web UI serves — **host-checkable, do it in-session**: `llama-server` starts
+      in *router mode with no model*, so launch it and `curl` the routes. `GET /`
+      → 200 `index.html`; the hashed bundles under `/_app/immutable/...` (read the
+      paths out of `index.html` — they're content-hashed, not `/bundle.js`) → 200.
+      With a gzip build (`llama_ui_use_gzip()`), send `Accept-Encoding: gzip` or
+      assets return **415**, and expect `Content-Encoding: gzip` on the response.
 - [ ] Long-run stability (the `cv.wait` / futex class only shows after hours)
 
 ## Recurring breakage (check these proactively)
@@ -124,14 +178,39 @@ Distilled from PRs #941, #951, #983 — these recur almost every bump and are th
 bulk of the manual follow-up. Check them in Step 3/4 instead of waiting for them
 to surface during your testing:
 
-- **GPU runtime build scripts** — the host build never exercises them (GPU DSOs
-  compile at runtime on the target). When BUILD.mk gains/renames a ggml source,
-  mirror it into `llamafile/build-functions.sh`, `cuda.sh`/`cuda.bat`,
-  `rocm.sh`/`rocm.bat`, `vulkan.sh`/`vulkan.bat`, and the Metal runtime-compile
-  bundle. This is the #1 recurring miss.
-- **Web UI shipping** changes upstream most cycles (e.g. the move to
-  `tools/ui/` + HF-bucket assets in #983). Check `tools/server/public/` and
-  `tools/ui/` early; expect to re-derive the asset pipeline.
+- **Keep-in-sync coupling points** — a new/renamed source often must be declared
+  in several places that don't validate each other. When you touch BUILD.mk
+  source lists, walk this whole registry:
+  - **`llamafile/BUILD.mk`** — the TUI binary (`o/$(MODE)/llamafile/llamafile`)
+    relinks an *explicit* server-object list (`LLAMAFILE_SERVER_SUPPORT_OBJS`)
+    that is **separate** from llama.cpp's `TOOL_SERVER_SRCS`. A new
+    `tools/server/*` (or mtmd) source must be added to **both**; missing the
+    second is a link-time `undefined reference` that only shows at the
+    `verify-clean` link step, not as a compile error (this bump:
+    `server-schema.cpp`).
+  - **GPU runtime build scripts** — the host build never exercises them (GPU DSOs
+    compile at runtime on the target). The cuda/rocm scripts collect sources by
+    glob (`collect_gpu_sources` over `ggml-cuda/*.cu`) and `vulkan.sh` globs
+    `*.comp`, so *top-level* sources are auto-picked — but verify the glob still
+    covers any new **subdir** / non-globbed path, and mirror anything explicit
+    into `build-functions.sh`, `cuda.sh`/`.bat`, `rocm.sh`/`.bat`,
+    `vulkan.sh`/`.bat`, and the Metal runtime-compile bundle.
+  - **`fetch-ui-assets.sh` ↔ `tools/ui/embed.cpp`** — fetch's required-asset
+    check must mirror embed.cpp's `required_check[]` (see Web UI below).
+- **Web UI shipping** changes upstream most cycles, but the *structure* is
+  durable: the embed + serve halves are **upstream** files — `tools/ui/embed.cpp`
+  and `tools/server/server-http.cpp` — which llamafile patches **neither** (they
+  usually already handle the new format). Only **two llamafile glue pieces** ever
+  need touching: `fetch-ui-assets.sh` (download/verify/extract the assets) and
+  the UI block in `llamafile-files/BUILD.mk` (invoke `embed`). Each bump, re-read
+  embed.cpp's CLI and its `required_check[]` and make fetch match — the interface
+  drifts: b9747 changed `embed` from `<name> <path>` pairs to
+  `<out_cpp> <out_h> [<asset_dir>]` (recursive over a dir), and moved the HF
+  bucket from 4 flat files to a SvelteKit `dist.tar.gz` of hashed
+  `_app/immutable/*`. fetch now extracts the tarball and builds a `dist/_gzip/`
+  mirror so embed emits gzip-encoded assets (binary growth ~5MB vs ~17MB raw).
+  Symptom of a missed bump: `fetch-ui-assets.sh` 404s and the server builds
+  UI-less (degrades gracefully — easy to not notice).
 - **TinyBLAS vs ggml quant block formats / cuBLAS API** (`QK*` block sizes,
   strided-batched gemm). Diff ggml quant headers and cuBLAS call sites.
 - **`GGML_CALL` annotations** on any new/renamed backend callback (the
