@@ -8,8 +8,8 @@ on:
 
 jobs:
   ubuntu-focal-make:
-    timeout-minutes: 60
-    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    runs-on: llamafile-runner
 
     steps:
       - name: Clone
