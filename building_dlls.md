@@ -74,3 +74,36 @@ At the end of this process, you should have the following libraries available in
 ```
 
 To run llamafile with these libraries, add them in your home directory or bundle them in your llamafile (see [Creating a llamafile](creating_llamafiles.md)).
+
+## Verifying numerical consistency (release gate)
+
+Before shipping a GPU library, verify that it computes the same results as
+the CPU reference. The `backend_ops_test` harness wires upstream ggml's
+`test-backend-ops` into llamafile's real runtime loading path (cosmo_dlopen
++ ms_abi thunks), so it validates the actual DSO artifact and ABI boundary.
+
+Build it once (it is not part of the default test suite):
+
+```
+make o//tests/backend_ops_test
+```
+
+Copy `o//tests/backend_ops_test` next to the DSO(s) on the target machine
+(rename to `backend_ops_test.exe` on Windows) and run the fast subset:
+
+```
+backend_ops_test test -o MUL_MAT
+backend_ops_test test -o MUL_MAT_ID
+backend_ops_test test -o FLASH_ATTN_EXT
+```
+
+A full `backend_ops_test test` run covers every op and takes much longer.
+Every backend DSO present is loaded and tested; the summary at the end must
+report all backends passing.
+
+If a mismatch appears, attribute it before blaming the GPU: the CPU
+reference itself goes through llamafile's tinyBLAS/iqk fast path. Rerun
+with `LLAMAFILE_DISABLE_SGEMM=1` to compare against vanilla ggml — if the
+failures disappear, the bug is in llamafile's CPU kernels, not the GPU
+library (this is how the iq4_xs, bf16, and permuted-stride CPU bugs were
+found).
