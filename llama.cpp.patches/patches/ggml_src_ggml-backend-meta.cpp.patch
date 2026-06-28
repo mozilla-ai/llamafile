@@ -141,7 +141,7 @@ diff --git a/ggml/src/ggml-backend-meta.cpp b/ggml/src/ggml-backend-meta.cpp
      GGML_ASSERT(ggml_backend_buffer_is_meta(buffer));
      ggml_backend_meta_buffer_context * buf_ctx = (ggml_backend_meta_buffer_context *) buffer->context;
      delete buf_ctx;
-@@ -1122,7 +1122,7 @@ static struct ggml_backend_meta_split_state ggml_backend_meta_get_split_state(co
+@@ -1116,7 +1116,7 @@ static struct ggml_backend_meta_split_state ggml_backend_meta_get_split_state(co
      return ggml_backend_meta_get_split_state(buf_ctx->get_simple_tensor_container(tensor), tensor, assume_sync);
  }
  
@@ -150,7 +150,7 @@ diff --git a/ggml/src/ggml-backend-meta.cpp b/ggml/src/ggml-backend-meta.cpp
      GGML_UNUSED(buffer);
      return (void *) 0x1000000000000000; // FIXME
  }
-@@ -1242,14 +1242,14 @@ static enum ggml_status ggml_backend_meta_buffer_init_tensor_impl(ggml_backend_m
+@@ -1236,14 +1236,14 @@ static enum ggml_status ggml_backend_meta_buffer_init_tensor_impl(ggml_backend_m
      return GGML_STATUS_SUCCESS;
  }
  
@@ -167,7 +167,7 @@ diff --git a/ggml/src/ggml-backend-meta.cpp b/ggml/src/ggml-backend-meta.cpp
      const size_t n_bufs = ggml_backend_meta_buffer_n_bufs(buffer);
      GGML_ASSERT(ggml_is_contiguous(tensor));
  
-@@ -1359,7 +1359,7 @@ static void ggml_backend_meta_buffer_set_tensor(ggml_backend_buffer_t buffer, gg
+@@ -1358,7 +1358,7 @@ static void ggml_backend_meta_buffer_set_tensor(ggml_backend_buffer_t buffer, gg
      }
  }
  
@@ -176,7 +176,7 @@ diff --git a/ggml/src/ggml-backend-meta.cpp b/ggml/src/ggml-backend-meta.cpp
      const size_t n_bufs = ggml_backend_meta_buffer_n_bufs(buffer);
      GGML_ASSERT(ggml_is_contiguous(tensor));
  
-@@ -1455,14 +1455,14 @@ static void ggml_backend_meta_buffer_get_tensor(ggml_backend_buffer_t buffer, co
+@@ -1459,14 +1459,14 @@ static void ggml_backend_meta_buffer_get_tensor(ggml_backend_buffer_t buffer, co
      }
  }
  
@@ -193,7 +193,7 @@ diff --git a/ggml/src/ggml-backend-meta.cpp b/ggml/src/ggml-backend-meta.cpp
      GGML_ASSERT(ggml_backend_buffer_is_meta(buffer));
      ggml_backend_meta_buffer_context * buf_ctx = (ggml_backend_meta_buffer_context *) buffer->context;
      for (size_t i = 0; i < buf_ctx->bufs.size(); i++) {
-@@ -1488,7 +1488,7 @@ bool ggml_backend_buffer_is_meta(ggml_backend_buffer_t buf) {
+@@ -1492,7 +1492,7 @@ bool ggml_backend_buffer_is_meta(ggml_backend_buffer_t buf) {
      return buf != nullptr && buf->iface.free_buffer == ggml_backend_meta_buffer_iface.free_buffer;
  }
  
@@ -202,7 +202,7 @@ diff --git a/ggml/src/ggml-backend-meta.cpp b/ggml/src/ggml-backend-meta.cpp
      const size_t n_simple_bufts = ggml_backend_meta_buft_n_bufts(buft);
  
      const ggml_init_params params = {
-@@ -1655,20 +1655,20 @@ struct ggml_backend_meta_context {
+@@ -1659,20 +1659,20 @@ struct ggml_backend_meta_context {
      }
  };
  
@@ -226,7 +226,7 @@ diff --git a/ggml/src/ggml-backend-meta.cpp b/ggml/src/ggml-backend-meta.cpp
      const size_t n_backends = ggml_backend_meta_n_backends(backend);
      GGML_ASSERT(offset == 0);
      GGML_ASSERT(ggml_is_contiguous(tensor));
-@@ -1712,7 +1712,7 @@ static void ggml_backend_meta_set_tensor_async(ggml_backend_t backend, ggml_tens
+@@ -1717,7 +1717,7 @@ static void ggml_backend_meta_set_tensor_async(ggml_backend_t backend, ggml_tens
      }
  }
  
@@ -235,7 +235,7 @@ diff --git a/ggml/src/ggml-backend-meta.cpp b/ggml/src/ggml-backend-meta.cpp
      const size_t n_backends = ggml_backend_meta_n_backends(backend);
      GGML_ASSERT(offset == 0);
      GGML_ASSERT(ggml_is_contiguous(tensor));
-@@ -1756,14 +1756,14 @@ static void ggml_backend_meta_get_tensor_async(ggml_backend_t backend, const ggm
+@@ -1762,14 +1762,14 @@ static void ggml_backend_meta_get_tensor_async(ggml_backend_t backend, const ggm
      }
  }
  
@@ -252,7 +252,7 @@ diff --git a/ggml/src/ggml-backend-meta.cpp b/ggml/src/ggml-backend-meta.cpp
      GGML_ASSERT(cgraph->grads == nullptr);
      const size_t n_backends = ggml_backend_meta_n_backends(backend);
      ggml_backend_meta_context * backend_ctx = (ggml_backend_meta_context *) backend->context;
-@@ -2232,7 +2232,7 @@ bool ggml_backend_is_meta(ggml_backend_t backend) {
+@@ -2239,7 +2239,7 @@ bool ggml_backend_is_meta(ggml_backend_t backend) {
      return backend != nullptr && backend->iface.get_name == ggml_backend_meta_i.get_name;
  }
  

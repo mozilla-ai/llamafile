@@ -8,6 +8,7 @@ This directory contains patches that adapt llama.cpp for use with Llamafile and 
 llama.cpp.patches/
 ├── README.md              # This file
 ├── apply-patches.sh       # Script to apply all patches to llama.cpp submodule
+├── fetch-ui-assets.sh     # Downloads + validates the prebuilt web UI (see Server Integration)
 ├── renames.sh             # Script for file renames/moves (if any)
 ├── llamafile-files/       # Additional files to copy into llama.cpp
 │   ├── BUILD.mk           # Makefile for building llama.cpp with cosmocc
@@ -75,7 +76,6 @@ These patches address compatibility issues when building with Cosmopolitan libc 
 | `common_arg.cpp.patch` | Adds `COSMOCC` platform detection for `PATH_MAX` (includes `linux/limits.h`) |
 | `common_common.cpp.patch` | Adds platform-aware cache directory detection for Cosmopolitan (checks `LOCALAPPDATA`, `XDG_CACHE_HOME`, falls back to `~/.cache/`); also adds mmproj model size estimation to GPU fit params so the fit algorithm reserves enough VRAM for multimodal projectors |
 | `common_download.cpp.patch` | Adds `COSMOCC` platform detection for `PATH_MAX` |
-| `common_ngram-mod.cpp.patch` | Adds missing `#include <algorithm>` (needed for `std::min`/`std::max`) |
 
 ### Threading and Signal Handling
 
@@ -84,7 +84,7 @@ Cosmopolitan libc has specific behaviors with condition variables and signals th
 | Patch | Description |
 |-------|-------------|
 | `common_log.cpp.patch` | Adds `#include <csignal>`; blocks `SIGINT`/`SIGTERM` on logger thread via `pthread_sigmask` to prevent `EINTR` exceptions; replaces `cv.wait()` with `wait_for(30s)` loop to work around XNU futex timeout bug (~72 minute expiry) |
-| `tools_server_server-models.cpp.patch` | Adds `#include <csignal>`; blocks `SIGINT`/`SIGTERM` on stopping thread; replaces `cv.wait()` with `wait_for(30s)` loops in `unload_lru`, `stopping_thread`, and `wait_until_loading_finished` |
+| `tools_server_server-models.cpp.patch` | Adds `#include <csignal>`; blocks signals on the stopping thread via `pthread_sigmask`; replaces untimed `cv.wait()` with `wait_for(30s)` loops on every model-lifecycle wait (`unload_lru`, the reload-drain wait, `stopping_thread`, the `is_reloading` guard in `load`, and the generic `wait()` predicate helper) to work around the XNU futex timeout bug |
 | `tools_server_server-queue.cpp.patch` | Adds missing includes (`<cerrno>`, `<system_error>`, `<csignal>`); blocks `SIGINT`/`SIGTERM` on queue thread; replaces `wait()` with `wait_for()` loops in three locations (`wait_until_no_sleep`, main loop, `recv`) |
 | `vendor_cpp-httplib_httplib.cpp.patch` | Fixes httplib thread pool with `wait_for()` instead of `wait()` for XNU futex compatibility |
 
@@ -137,19 +137,43 @@ These patches integrate llamafile's file handling APIs for loading models from b
 | `tools_server_server.cpp.patch` | Renames upstream's `llama_server()` to `server_main()` and adds `on_ready`/`on_shutdown_available` callbacks for combined TUI+server mode; adds Metal/GPU backend trigger before `common_init()`; adds Cosmopolitan-specific standalone `main()` with `cosmo_args`, verbose flag handling, and GPU pre-initialization; handles `LLAMAFILE_TUI` exit to avoid Metal cleanup crashes |
 
 The web UI moved upstream from prebuilt `tools/server/public/*` assets to
-a Svelte project under `tools/ui/`, embedded at CMake time via
-`tools/ui/embed.cpp`. cosmocc has no JS toolchain, so `apply-patches.sh`
-(run by `make setup`) downloads the prebuilt Svelte bundle from the
-`ggml-org/llama-ui` Hugging Face bucket into `llama.cpp/tools/ui/dist/`.
+a Svelte/PWA project under `tools/ui/`, embedded at CMake time via
+`tools/ui/embed.cpp`. cosmocc has no JS toolchain, so `fetch-ui-assets.sh`
+(run by `apply-patches.sh` / `make setup`) downloads the prebuilt site
+**tarball** `dist.tar.gz` (plus its `.sha256`) from the `ggml-org/llama-ui`
+Hugging Face bucket — picking the newest `bNNNN` tag `<=` our pinned build —
+verifies it, and extracts the whole static site into
+`llama.cpp/tools/ui/dist/`. The modern site is no longer four flat files
+(`bundle.css`/`bundle.js`/`index.html`/`loading.html`) but a hashed tree
+(`_app/immutable/bundle.HASH.js`, a service worker, manifest, icons, splash
+screens). To keep the embedded payload small, the script also builds a
+`dist/_gzip/` mirror with every file gzip-compressed under its original name.
+
 At build time, `llama.cpp/BUILD.mk` compiles `tools/ui/embed.cpp` with
-`cosmoc++` (its APE output runs on the host) and runs it against the
-downloaded assets to emit `o/$(MODE)/llama.cpp/tools/ui/ui.{cpp,h}`,
-which is then compiled like any other C++ source and linked into
-`llama-server` and `llamafile`. If the download fails (offline, version
-not yet on HF) `apply-patches.sh` warns and continues with `dist/`
-empty — `embed.cpp` then emits a no-op `llama_ui_find_asset`, and
-`server-http.cpp` skips UI route registration via its
-`LLAMA_UI_HAS_ASSETS` guard so the API still works.
+`cosmoc++` (its APE output runs on the host) and runs it against the `dist/`
+**directory** (the new `embed <out_cpp> <out_h> [<asset_dir>]` interface):
+`embed.cpp` recursively bakes every file — auto-detecting `dist/_gzip/` and
+emitting gzip-encoded assets keyed by relative path — into
+`o/$(MODE)/llama.cpp/tools/ui/ui.{cpp,h}`, which is compiled like any other
+C++ source and linked into `llama-server` and `llamafile`. Upstream's
+`server-http.cpp` (unpatched) registers a route per embedded asset
+(`index.html` at `/`) and serves gzip assets with `Content-Encoding: gzip`.
+If the download fails (offline, version not yet on HF) the script leaves
+`dist/` empty — `embed.cpp` then emits a no-op `llama_ui_find_asset` and the
+`LLAMA_UI_HAS_ASSETS` guard keeps the UI routes unregistered, so the REST
+API still works.
+
+Note that `embed.cpp` only takes that graceful no-asset path when `dist/` is
+*empty*: once the directory is non-empty it enforces a required-asset set
+(its `required_check[]` table — `index.html`, `loading.html`,
+`manifest.webmanifest`, `sw.js`, `build.json`, `version.json`, and the hashed
+`bundle*.js`/`bundle*.css`/`workbox*.js`) and returns a hard error if any is
+missing. So `fetch-ui-assets.sh` validates the *same* set after extracting
+(`ui_missing_assets`); if a downloaded tarball is partial or has drifted, it
+clears `dist/` and falls back to a UI-less build rather than letting the embed
+step abort the whole build. Because `embed.cpp` is an upstream file, that list
+can change on a llama.cpp bump — when it does, the asset list in
+`ui_missing_assets` must be updated to match.
 
 ### Bug Fixes
 
@@ -158,6 +182,7 @@ empty — `embed.cpp` then emits a no-op `llama_ui_find_asset`, and
 | `ggml_src_ggml-backend-reg.cpp.patch` | Suppresses debug log noise for non-existent backend search paths (irrelevant for llamafile's DSO loading approach) |
 | `ggml_src_ggml-vulkan_ggml-vulkan.cpp.patch` | Fixes unsigned integer underflow in `ggml_backend_vk_get_device_memory` where Vulkan's `heapUsage` can exceed `heapBudget` (clamps to zero instead of wrapping) |
 | `src_models_t5.cpp.patch` | Forward-declares the `graph<false>`/`graph<true>` explicit specializations before `build_arch_graph` so clang's `-std=gnu++23` doesn't reject them as specializations after implicit instantiation |
+| `src_models_eagle3.cpp.patch` | Moves `build_arch_graph` to the end of the file, after the `graph<true>`/`graph<false>` constructor specializations, so clang's `-std=gnu++23` doesn't reject them as explicit specializations appearing after the `make_unique<graph<...>>` implicit instantiation point |
 
 ## Creating New Patches
 

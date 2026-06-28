@@ -1,7 +1,7 @@
 diff --git a/common/arg.cpp b/common/arg.cpp
 --- a/llama.cpp/common/arg.cpp
 +++ b/llama.cpp/common/arg.cpp
-@@ -37,6 +37,8 @@
+@@ -38,6 +38,8 @@
  #ifndef __EMSCRIPTEN__
  #ifdef __linux__
  #include <linux/limits.h>

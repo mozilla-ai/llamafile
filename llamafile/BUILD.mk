@@ -234,6 +234,7 @@ LLAMAFILE_SERVER_SUPPORT_OBJS := \
 	o/$(MODE)/llama.cpp/tools/server/server-http.cpp.o \
 	o/$(MODE)/llama.cpp/tools/server/server-models.cpp.o \
 	o/$(MODE)/llama.cpp/tools/server/server-queue.cpp.o \
+	o/$(MODE)/llama.cpp/tools/server/server-schema.cpp.o \
 	o/$(MODE)/llama.cpp/tools/server/server-task.cpp.o \
 	o/$(MODE)/llama.cpp/tools/server/server-tools.cpp.o \
 	$(UI_GEN_OBJ)

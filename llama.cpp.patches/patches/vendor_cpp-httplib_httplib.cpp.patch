@@ -1,7 +1,7 @@
 diff --git a/vendor/cpp-httplib/httplib.cpp b/vendor/cpp-httplib/httplib.cpp
 --- a/llama.cpp/vendor/cpp-httplib/httplib.cpp
 +++ b/llama.cpp/vendor/cpp-httplib/httplib.cpp
-@@ -6291,6 +6291,22 @@ void ThreadPool::cleanup_finished_threads() {
+@@ -6333,6 +6333,22 @@ void ThreadPool::cleanup_finished_threads() {
  }
  
  void ThreadPool::worker(bool is_dynamic) {
@@ -24,7 +24,7 @@ diff --git a/vendor/cpp-httplib/httplib.cpp b/vendor/cpp-httplib/httplib.cpp
    for (;;) {
      std::function<void()> fn;
      {
-@@ -6308,7 +6324,13 @@ void ThreadPool::worker(bool is_dynamic) {
+@@ -6350,7 +6366,13 @@ void ThreadPool::worker(bool is_dynamic) {
            break;
          }
        } else {

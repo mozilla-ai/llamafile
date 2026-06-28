@@ -93,15 +93,19 @@ cp "$LLAMAFILE_DIR/tinyblas-compat.h" "$BUILD_DIR/"
 # gfx1101: RDNA3 (RX 7800 series)
 # gfx1102: RDNA3 (RX 7600 series)
 # gfx1103: RDNA3 (RX 7000 mobile)
-ARCH_FLAGS="\
+# gfx942: CDNA3 (AMD Instinct MI300X/MI300A)
+# ARCH_FLAGS can be overridden via the OFFLOAD_ARCH env var, e.g.
+#   OFFLOAD_ARCH="--offload-arch=gfx942" ./rocm.sh   (single-arch fast build)
+ARCH_FLAGS="${OFFLOAD_ARCH:-\
   --offload-arch=gfx906 \
+  --offload-arch=gfx942 \
   --offload-arch=gfx1030 \
   --offload-arch=gfx1031 \
   --offload-arch=gfx1032 \
   --offload-arch=gfx1100 \
   --offload-arch=gfx1101 \
   --offload-arch=gfx1102 \
-  --offload-arch=gfx1103"
+  --offload-arch=gfx1103}"
 
 # HIP compiler flags
 COMMON_FLAGS="\
@@ -117,9 +121,11 @@ COMMON_FLAGS="\
   -DGGML_SHARED=1 \
   -DGGML_MULTIPLATFORM \
   -DGGML_USE_HIP=1 \
+  -DGGML_HIP_NO_VMM=1 \
   -DGGML_USE_TINYBLAS=1 \
   -Wno-return-type \
-  -Wno-unused-result"
+  -Wno-unused-result \
+  --offload-compress"
 
 # Collect sources (TinyBLAS + GGML CUDA)
 collect_gpu_sources "$GGML_CUDA_DIR" "$BUILD_DIR/tinyblas.cu"
