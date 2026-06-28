@@ -4,8 +4,7 @@
 **Branch:** `vulkan-ggml-fix`
 **Status:** Four CPU-side bugs found and fixed; Vulkan (NVIDIA), Metal
 (Apple Silicon) verified clean against both the fixed and vanilla CPU.
-**Supersedes the hypothesis in:**
-`../address-issue-938/20260610_vulkan_cpu_consistency_check.md`
+**Supersedes:** earlier Vulkan investigation notes (not tracked in this repository).
 
 ## TL;DR — the attribution flipped
 
