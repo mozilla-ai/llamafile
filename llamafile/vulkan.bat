@@ -147,13 +147,16 @@ pushd "%LLAMA_CPP_DIR%\ggml" 2>nul && (
 :: Mirrors upstream CMake's test_shader_extension_support: these defines
 :: gate which shader variants vulkan-shaders-gen emits and which pipelines
 :: ggml-vulkan.cpp creates, so they must reflect the actual glslc on this
-:: machine. Omitting them silently drops coopmat/coopmat2/integer-dot/bf16
-:: support from the DLL.
+:: machine. Omitting them silently drops coopmat/coopmat2/decode-vector/
+:: integer-dot/bf16 support from the DLL. Keep this list in sync with
+:: upstream's test_shader_extension_support() calls in
+:: ggml-vulkan/CMakeLists.txt.
 set "FEATURE_TESTS_DIR=%SHADERS_DIR%\feature-tests"
 set "GLSLC_DEFINES="
 echo Probing glslc shader extension support...
 call :probe_glslc coopmat.comp GGML_VULKAN_COOPMAT_GLSLC_SUPPORT
 call :probe_glslc coopmat2.comp GGML_VULKAN_COOPMAT2_GLSLC_SUPPORT
+call :probe_glslc coopmat2_decode_vector.comp GGML_VULKAN_COOPMAT2_DECODE_VECTOR_GLSLC_SUPPORT
 call :probe_glslc integer_dot.comp GGML_VULKAN_INTEGER_DOT_GLSLC_SUPPORT
 call :probe_glslc bfloat16.comp GGML_VULKAN_BFLOAT16_GLSLC_SUPPORT
 echo.

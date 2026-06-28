@@ -147,7 +147,9 @@ START_TIME=$(date +%s)
 # test_shader_extension_support). These defines gate which shader variants
 # vulkan-shaders-gen emits and which pipelines ggml-vulkan.cpp creates, so
 # they must reflect the actual glslc on this machine. Omitting them
-# silently drops coopmat/coopmat2/integer-dot/bf16 support from the DLL.
+# silently drops coopmat/coopmat2/decode-vector/integer-dot/bf16 support
+# from the DLL. Keep this list in sync with upstream's
+# test_shader_extension_support() calls in ggml-vulkan/CMakeLists.txt.
 #
 GLSLC_DEFINES=""
 FEATURE_TESTS_DIR="$SHADERS_DIR/feature-tests"
@@ -162,10 +164,11 @@ probe_glslc_extension() {
     fi
 }
 echo "Probing glslc shader extension support..."
-probe_glslc_extension coopmat.comp     GGML_VULKAN_COOPMAT_GLSLC_SUPPORT
-probe_glslc_extension coopmat2.comp    GGML_VULKAN_COOPMAT2_GLSLC_SUPPORT
-probe_glslc_extension integer_dot.comp GGML_VULKAN_INTEGER_DOT_GLSLC_SUPPORT
-probe_glslc_extension bfloat16.comp    GGML_VULKAN_BFLOAT16_GLSLC_SUPPORT
+probe_glslc_extension coopmat.comp                GGML_VULKAN_COOPMAT_GLSLC_SUPPORT
+probe_glslc_extension coopmat2.comp               GGML_VULKAN_COOPMAT2_GLSLC_SUPPORT
+probe_glslc_extension coopmat2_decode_vector.comp GGML_VULKAN_COOPMAT2_DECODE_VECTOR_GLSLC_SUPPORT
+probe_glslc_extension integer_dot.comp            GGML_VULKAN_INTEGER_DOT_GLSLC_SUPPORT
+probe_glslc_extension bfloat16.comp               GGML_VULKAN_BFLOAT16_GLSLC_SUPPORT
 echo ""
 
 # The defines bake into vulkan-shaders-gen, the generated header, and every
