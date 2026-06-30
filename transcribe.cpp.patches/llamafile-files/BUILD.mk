@@ -23,7 +23,7 @@ PKGS += TRANSCRIBE_CPP
 # ==============================================================================
 
 TRANSCRIBE_VERSION := $(shell cd transcribe.cpp 2>/dev/null && git rev-parse --short HEAD 2>/dev/null || echo "unknown")
-TRANSCRIBE_GGML_VERSION := 0.9.8
+TRANSCRIBE_GGML_VERSION := 0.15.2
 TRANSCRIBE_GGML_COMMIT := $(shell cd transcribe.cpp/ggml 2>/dev/null && cat UPSTREAM 2>/dev/null | sed -n 's/^sha:[[:space:]]*//p' | cut -c1-7 || echo "unknown")
 
 # ==============================================================================
@@ -74,6 +74,7 @@ TRANSCRIBE_GGML_SRCS_C := \
 
 TRANSCRIBE_GGML_SRCS_CPP := \
 	transcribe.cpp/ggml/src/ggml-backend-dl.cpp \
+	transcribe.cpp/ggml/src/ggml-backend-meta.cpp \
 	transcribe.cpp/ggml/src/ggml-backend-reg.cpp \
 	transcribe.cpp/ggml/src/ggml-backend.cpp \
 	transcribe.cpp/ggml/src/ggml-opt.cpp \
@@ -107,14 +108,17 @@ TRANSCRIBE_LIB_SRCS_CPP := \
 	transcribe.cpp/src/transcribe-unicode.cpp \
 	transcribe.cpp/src/transcribe-unicode-data.cpp \
 	transcribe.cpp/src/transcribe-debug.cpp \
+	transcribe.cpp/src/transcribe-env.cpp \
 	transcribe.cpp/src/transcribe-flash-policy.cpp \
 	transcribe.cpp/src/transcribe-backend.cpp \
 	transcribe.cpp/src/transcribe-load-common.cpp \
 	transcribe.cpp/src/transcribe-weights-util.cpp \
 	transcribe.cpp/src/transcribe-bin-loader.cpp \
+	transcribe.cpp/src/transcribe-batch-util.cpp \
 	transcribe.cpp/src/conformer/conformer.cpp \
 	transcribe.cpp/src/sanm/sanm.cpp \
 	transcribe.cpp/src/qwen3_lm/qwen3_lm.cpp \
+	transcribe.cpp/src/causal_lm/causal_lm.cpp \
 	transcribe.cpp/src/granite_conformer/shaw_attn.cpp \
 	transcribe.cpp/src/arch/parakeet/model.cpp \
 	transcribe.cpp/src/arch/parakeet/capabilities.cpp \
@@ -147,6 +151,7 @@ TRANSCRIBE_LIB_SRCS_CPP := \
 	transcribe.cpp/src/arch/whisper/encoder.cpp \
 	transcribe.cpp/src/arch/whisper/decoder.cpp \
 	transcribe.cpp/src/arch/whisper/bin_load.cpp \
+	transcribe.cpp/src/arch/whisper/public.cpp \
 	transcribe.cpp/src/arch/moonshine/model.cpp \
 	transcribe.cpp/src/arch/moonshine/capabilities.cpp \
 	transcribe.cpp/src/arch/moonshine/weights.cpp \
@@ -184,7 +189,21 @@ TRANSCRIBE_LIB_SRCS_CPP := \
 	transcribe.cpp/src/arch/granite_nar/weights.cpp \
 	transcribe.cpp/src/arch/granite_nar/encoder.cpp \
 	transcribe.cpp/src/arch/granite_nar/projector.cpp \
-	transcribe.cpp/src/arch/granite_nar/decoder.cpp
+	transcribe.cpp/src/arch/granite_nar/decoder.cpp \
+	transcribe.cpp/src/arch/medasr/model.cpp \
+	transcribe.cpp/src/arch/medasr/capabilities.cpp \
+	transcribe.cpp/src/arch/medasr/weights.cpp \
+	transcribe.cpp/src/arch/medasr/encoder.cpp \
+	transcribe.cpp/src/arch/voxtral/model.cpp \
+	transcribe.cpp/src/arch/voxtral/capabilities.cpp \
+	transcribe.cpp/src/arch/voxtral/weights.cpp \
+	transcribe.cpp/src/arch/voxtral/encoder.cpp \
+	transcribe.cpp/src/arch/voxtral/decoder.cpp \
+	transcribe.cpp/src/arch/voxtral_realtime/model.cpp \
+	transcribe.cpp/src/arch/voxtral_realtime/capabilities.cpp \
+	transcribe.cpp/src/arch/voxtral_realtime/weights.cpp \
+	transcribe.cpp/src/arch/voxtral_realtime/encoder.cpp \
+	transcribe.cpp/src/arch/voxtral_realtime/decoder.cpp
 
 # ==============================================================================
 # Object Files
