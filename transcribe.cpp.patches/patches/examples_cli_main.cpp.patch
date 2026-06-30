@@ -1,10 +1,9 @@
-diff --git a/transcribe.cpp/examples/cli/main.cpp b/transcribe.cpp/examples/cli/main.cpp
-index c5cd2f9..0d1b9f6 100644
+diff --git a/examples/cli/main.cpp b/examples/cli/main.cpp
 --- a/transcribe.cpp/examples/cli/main.cpp
 +++ b/transcribe.cpp/examples/cli/main.cpp
-@@ -301,7 +301,11 @@ void log_cb(transcribe_log_level level, const char * msg, void * userdata) {
+@@ -595,7 +595,11 @@ void log_cb(transcribe_log_level level, const char * msg, void * userdata) {
  
- } // namespace
+ }  // namespace
  
 -int main(int argc, char ** argv) {
 +// Core CLI logic. When built with -DTRANSCRIBEFILE this is invoked from
@@ -15,7 +14,7 @@ index c5cd2f9..0d1b9f6 100644
      cli_args args;
      if (!parse_args(argc, argv, args)) {
          print_usage(argv[0]);
-@@ -672,3 +676,12 @@ int main(int argc, char ** argv) {
+@@ -1284,3 +1288,12 @@ int main(int argc, char ** argv) {
  
      return EXIT_SUCCESS;
  }
