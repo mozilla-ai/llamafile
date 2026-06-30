@@ -67,15 +67,19 @@ LLAMA_SRCS_CPP := \
 	llama.cpp/src/models/chatglm.cpp \
 	llama.cpp/src/models/codeshell.cpp \
 	llama.cpp/src/models/cogvlm.cpp \
-	llama.cpp/src/models/cohere2-iswa.cpp \
+	llama.cpp/src/models/cohere2.cpp \
+	llama.cpp/src/models/cohere2moe.cpp \
 	llama.cpp/src/models/command-r.cpp \
 	llama.cpp/src/models/dbrx.cpp \
 	llama.cpp/src/models/deci.cpp \
 	llama.cpp/src/models/deepseek.cpp \
 	llama.cpp/src/models/deepseek2.cpp \
+	llama.cpp/src/models/deepseek2ocr.cpp \
+	llama.cpp/src/models/deepseek32.cpp \
 	llama.cpp/src/models/delta-net-base.cpp \
 	llama.cpp/src/models/dots1.cpp \
 	llama.cpp/src/models/dream.cpp \
+	llama.cpp/src/models/eagle3.cpp \
 	llama.cpp/src/models/ernie4-5-moe.cpp \
 	llama.cpp/src/models/ernie4-5.cpp \
 	llama.cpp/src/models/eurobert.cpp \
@@ -86,52 +90,68 @@ LLAMA_SRCS_CPP := \
 	llama.cpp/src/models/falcon.cpp \
 	llama.cpp/src/models/gemma-embedding.cpp \
 	llama.cpp/src/models/gemma.cpp \
-	llama.cpp/src/models/gemma2-iswa.cpp \
+	llama.cpp/src/models/gemma2.cpp \
 	llama.cpp/src/models/gemma3.cpp \
-	llama.cpp/src/models/gemma3n-iswa.cpp \
-	llama.cpp/src/models/gemma4-iswa.cpp \
+	llama.cpp/src/models/gemma3n.cpp \
+	llama.cpp/src/models/gemma4-assistant.cpp \
+	llama.cpp/src/models/gemma4.cpp \
+	llama.cpp/src/models/glm-dsa.cpp \
 	llama.cpp/src/models/glm4-moe.cpp \
 	llama.cpp/src/models/glm4.cpp \
 	llama.cpp/src/models/gpt2.cpp \
 	llama.cpp/src/models/gptneox.cpp \
 	llama.cpp/src/models/granite-hybrid.cpp \
+	llama.cpp/src/models/granite-moe.cpp \
 	llama.cpp/src/models/granite.cpp \
 	llama.cpp/src/models/mamba-base.cpp \
 	llama.cpp/src/models/grok.cpp \
 	llama.cpp/src/models/grovemoe.cpp \
 	llama.cpp/src/models/hunyuan-dense.cpp \
 	llama.cpp/src/models/hunyuan-moe.cpp \
+	llama.cpp/src/models/hunyuan-vl.cpp \
 	llama.cpp/src/models/internlm2.cpp \
 	llama.cpp/src/models/jais.cpp \
 	llama.cpp/src/models/jais2.cpp \
 	llama.cpp/src/models/jamba.cpp \
+	llama.cpp/src/models/jina-bert-v2.cpp \
+	llama.cpp/src/models/jina-bert-v3.cpp \
 	llama.cpp/src/models/kimi-linear.cpp \
 	llama.cpp/src/models/lfm2.cpp \
+	llama.cpp/src/models/lfm2moe.cpp \
 	llama.cpp/src/models/llada-moe.cpp \
 	llama.cpp/src/models/llada.cpp \
+	llama.cpp/src/models/llama-embed.cpp \
 	llama.cpp/src/models/llama4.cpp \
 	llama.cpp/src/models/llama.cpp \
 	llama.cpp/src/models/maincoder.cpp \
 	llama.cpp/src/models/mamba.cpp \
-	llama.cpp/src/models/mimo2-iswa.cpp \
+	llama.cpp/src/models/mamba2.cpp \
+	llama.cpp/src/models/mellum.cpp \
+	llama.cpp/src/models/mimo2.cpp \
+	llama.cpp/src/models/minicpm.cpp \
 	llama.cpp/src/models/minicpm3.cpp \
 	llama.cpp/src/models/minimax-m2.cpp \
 	llama.cpp/src/models/mistral3.cpp \
+	llama.cpp/src/models/mistral4.cpp \
 	llama.cpp/src/models/modern-bert.cpp \
 	llama.cpp/src/models/mpt.cpp \
+	llama.cpp/src/models/nemotron-h-moe.cpp \
 	llama.cpp/src/models/nemotron-h.cpp \
 	llama.cpp/src/models/nemotron.cpp \
 	llama.cpp/src/models/neo-bert.cpp \
+	llama.cpp/src/models/nomic-bert-moe.cpp \
+	llama.cpp/src/models/nomic-bert.cpp \
 	llama.cpp/src/models/olmo.cpp \
 	llama.cpp/src/models/olmo2.cpp \
 	llama.cpp/src/models/olmoe.cpp \
-	llama.cpp/src/models/openai-moe-iswa.cpp \
+	llama.cpp/src/models/openai-moe.cpp \
 	llama.cpp/src/models/openelm.cpp \
 	llama.cpp/src/models/orion.cpp \
 	llama.cpp/src/models/paddleocr.cpp \
-	llama.cpp/src/models/pangu-embedded.cpp \
+	llama.cpp/src/models/pangu-embed.cpp \
 	llama.cpp/src/models/phi2.cpp \
 	llama.cpp/src/models/phi3.cpp \
+	llama.cpp/src/models/phimoe.cpp \
 	llama.cpp/src/models/plamo.cpp \
 	llama.cpp/src/models/plamo2.cpp \
 	llama.cpp/src/models/plamo3.cpp \
@@ -145,8 +165,8 @@ LLAMA_SRCS_CPP := \
 	llama.cpp/src/models/qwen3next.cpp \
 	llama.cpp/src/models/qwen35.cpp \
 	llama.cpp/src/models/qwen35moe.cpp \
-	llama.cpp/src/models/qwen3vl-moe.cpp \
 	llama.cpp/src/models/qwen3vl.cpp \
+	llama.cpp/src/models/qwen3vlmoe.cpp \
 	llama.cpp/src/models/refact.cpp \
 	llama.cpp/src/models/rnd1.cpp \
 	llama.cpp/src/models/rwkv6-base.cpp \
@@ -159,10 +179,11 @@ LLAMA_SRCS_CPP := \
 	llama.cpp/src/models/smollm3.cpp \
 	llama.cpp/src/models/stablelm.cpp \
 	llama.cpp/src/models/starcoder.cpp \
-	llama.cpp/src/models/step35-iswa.cpp \
 	llama.cpp/src/models/starcoder2.cpp \
+	llama.cpp/src/models/step35.cpp \
 	llama.cpp/src/models/t5.cpp \
 	llama.cpp/src/models/t5encoder.cpp \
+	llama.cpp/src/models/talkie.cpp \
 	llama.cpp/src/models/wavtokenizer-dec.cpp \
 	llama.cpp/src/models/xverse.cpp \
 	llama.cpp/src/llama-adapter.cpp \
@@ -176,6 +197,7 @@ LLAMA_SRCS_CPP := \
 	llama.cpp/src/llama-hparams.cpp \
 	llama.cpp/src/llama-impl.cpp \
 	llama.cpp/src/llama-io.cpp \
+	llama.cpp/src/llama-kv-cache-dsa.cpp \
 	llama.cpp/src/llama-kv-cache-iswa.cpp \
 	llama.cpp/src/llama-kv-cache.cpp \
 	llama.cpp/src/llama-memory-hybrid.cpp \
@@ -211,6 +233,7 @@ COMMON_SRCS_CPP := \
 	llama.cpp/common/download.cpp \
 	llama.cpp/common/fit.cpp \
 	llama.cpp/common/hf-cache.cpp \
+	llama.cpp/common/imatrix-loader.cpp \
 	llama.cpp/common/jinja/caps.cpp \
 	llama.cpp/common/jinja/lexer.cpp \
 	llama.cpp/common/jinja/parser.cpp \
@@ -286,17 +309,24 @@ MTMD_SRCS_CPP := \
 	llama.cpp/tools/mtmd/mtmd-image.cpp \
 	llama.cpp/tools/mtmd/models/cogvlm.cpp \
 	llama.cpp/tools/mtmd/models/deepseekocr.cpp \
+	llama.cpp/tools/mtmd/models/deepseekocr2.cpp \
 	llama.cpp/tools/mtmd/models/conformer.cpp \
 	llama.cpp/tools/mtmd/models/dotsocr.cpp \
+	llama.cpp/tools/mtmd/models/exaone4_5.cpp \
 	llama.cpp/tools/mtmd/models/gemma4a.cpp \
+	llama.cpp/tools/mtmd/models/gemma4ua.cpp \
+	llama.cpp/tools/mtmd/models/gemma4uv.cpp \
 	llama.cpp/tools/mtmd/models/gemma4v.cpp \
 	llama.cpp/tools/mtmd/models/glm4v.cpp \
-	llama.cpp/tools/mtmd/models/hunyuanocr.cpp \
+	llama.cpp/tools/mtmd/models/granite-speech.cpp \
+	llama.cpp/tools/mtmd/models/granite4-vision.cpp \
+	llama.cpp/tools/mtmd/models/hunyuanvl.cpp \
 	llama.cpp/tools/mtmd/models/internvl.cpp \
 	llama.cpp/tools/mtmd/models/kimik25.cpp \
 	llama.cpp/tools/mtmd/models/kimivl.cpp \
 	llama.cpp/tools/mtmd/models/llama4.cpp \
 	llama.cpp/tools/mtmd/models/llava.cpp \
+	llama.cpp/tools/mtmd/models/mimovl.cpp \
 	llama.cpp/tools/mtmd/models/minicpmv.cpp \
 	llama.cpp/tools/mtmd/models/mobilenetv5.cpp \
 	llama.cpp/tools/mtmd/models/nemotron-v2-vl.cpp \
@@ -321,24 +351,55 @@ HTTPLIB_SRCS := llama.cpp/vendor/cpp-httplib/httplib.cpp
 HTTPLIB_OBJS := $(HTTPLIB_SRCS:%.cpp=o/$(MODE)/%.cpp.o)
 
 # ==============================================================================
-# Server Assets (convert HTML to C++ headers)
+# Web UI assets
 # ==============================================================================
+#
+# Upstream switched from prebuilt bundles in tools/server/public/ to a
+# Svelte/PWA project under tools/ui/, embedded at CMake time by
+# tools/ui/embed.cpp into a generated ui.cpp + ui.h. cosmocc has no JS
+# toolchain, so apply-patches.sh (run by `make setup`) downloads the
+# prebuilt site tarball (dist.tar.gz) from the ggml-org/llama-ui Hugging
+# Face bucket and extracts the whole static site into
+# llama.cpp/tools/ui/dist/ (see fetch-ui-assets.sh). embed.cpp then
+# recursively embeds every file under that directory, keyed by its
+# relative path (e.g. "_app/immutable/bundle.HASH.js"). fetch-ui-assets.sh
+# also builds a dist/_gzip/ mirror of gzip-compressed files; embed.cpp
+# auto-detects it and emits gzip-encoded assets (keeping the embedded
+# payload small), which server-http.cpp serves with Content-Encoding: gzip.
+# With assets present, ui.h defines LLAMA_UI_HAS_ASSETS and server-http.cpp
+# registers a route per asset (index.html at /); without them, embed.cpp
+# emits a no-op llama_ui_find_asset and the UI routes stay unregistered.
 
-# Generate .hpp files from binary assets using xxd-like conversion
-o/$(MODE)/llama.cpp/tools/server/%.hpp: llama.cpp/tools/server/public/%
-	@mkdir -p $(dir $@)
-	$(eval VARNAME := $(shell echo "$(notdir $*)" | sed 's/[.-]/_/g'))
-	@echo 'unsigned char $(VARNAME)[] = {' > $@
-	@od -An -tx1 -v $< | awk '{for(i=1;i<=NF;i++){if(NR>1||i>1)printf", "; printf"0x%s",$$i}}' >> $@
-	@echo >> $@
-	@echo '};' >> $@
-	@echo 'unsigned int $(VARNAME)_len = sizeof($(VARNAME));' >> $@
+UI_DIST       := llama.cpp/tools/ui/dist
+UI_GEN_DIR    := o/$(MODE)/llama.cpp/tools/ui
+UI_EMBED_SRC  := llama.cpp/tools/ui/embed.cpp
+UI_EMBED_TOOL := $(UI_GEN_DIR)/llama-ui-embed
+UI_CPP_GEN    := $(UI_GEN_DIR)/ui.cpp
+UI_H_GEN      := $(UI_GEN_DIR)/ui.h
 
-SERVER_ASSETS := \
-	o/$(MODE)/llama.cpp/tools/server/index.html.hpp \
-	o/$(MODE)/llama.cpp/tools/server/bundle.js.hpp \
-	o/$(MODE)/llama.cpp/tools/server/bundle.css.hpp \
-	o/$(MODE)/llama.cpp/tools/server/loading.html.hpp
+# index.html exists iff fetch-ui-assets.sh successfully populated dist/. It
+# serves both as the "do we have a UI?" gate and as the rebuild trigger: it is
+# rewritten on every fetch and references the hashed bundle names, so it
+# changes whenever the embedded assets do. wildcard returns "" when absent,
+# letting the build proceed UI-less (offline / asset build not yet published).
+UI_ASSETS_INDEX_HTML := $(wildcard $(UI_DIST)/index.html)
+
+# Build embed.cpp standalone (no llamafile flags, no llama.cpp includes).
+# cosmoc++ produces an APE that runs on the build host, so we don't need
+# a separate system compiler. Compiled with stock C++17 (embed.cpp uses
+# <filesystem>) so the source isn't entangled with -DCOSMOCC or GGML defines.
+$(UI_EMBED_TOOL): $(UI_EMBED_SRC) $(COSMOCC)
+	@mkdir -p $(@D)
+	$(CXX) -O2 -std=gnu++17 -o $@ $<
+
+# Generate ui.cpp/ui.h. Re-run when the embed tool or the fetched UI changes.
+# When dist/ has assets, pass the directory: embed.cpp recurses it (auto-using
+# dist/_gzip when present). When dist/ is empty, pass no directory so embed
+# emits its no-asset stub.
+$(UI_CPP_GEN) $(UI_H_GEN) &: $(UI_EMBED_TOOL) $(UI_ASSETS_INDEX_HTML)
+	@mkdir -p $(UI_GEN_DIR)
+	$(UI_EMBED_TOOL) $(UI_CPP_GEN) $(UI_H_GEN) \
+		$(if $(UI_ASSETS_INDEX_HTML),$(UI_DIST))
 
 # ==============================================================================
 # Tools (in tools/ directory)
@@ -358,6 +419,7 @@ TOOL_SERVER_SRCS := \
 	llama.cpp/tools/server/server-http.cpp \
 	llama.cpp/tools/server/server-models.cpp \
 	llama.cpp/tools/server/server-queue.cpp \
+	llama.cpp/tools/server/server-schema.cpp \
 	llama.cpp/tools/server/server-task.cpp \
 	llama.cpp/tools/server/server-tools.cpp
 
@@ -367,16 +429,18 @@ TOOL_IMATRIX_OBJS := $(TOOL_IMATRIX_SRCS:%.cpp=o/$(MODE)/%.cpp.o)
 TOOL_PERPLEXITY_OBJS := $(TOOL_PERPLEXITY_SRCS:%.cpp=o/$(MODE)/%.cpp.o)
 TOOL_BENCH_OBJS := $(TOOL_BENCH_SRCS:%.cpp=o/$(MODE)/%.cpp.o)
 TOOL_SERVER_OBJS := $(TOOL_SERVER_SRCS:%.cpp=o/$(MODE)/%.cpp.o)
+# ui.cpp is generated by embed; placed under o/$(MODE)/ and built via the
+# generic %.cpp -> %.cpp.o rule.
+UI_GEN_OBJ := $(UI_CPP_GEN:%.cpp=%.cpp.o)
 # llamafile objects are used to add dynamic GPU support (Metal, CUDA, ROCm, Vulkan)
 TOOL_LLAMAFILE_OBJS := \
 	o/$(MODE)/llamafile/llamafile.o \
-	o/$(MODE)/llamafile/metal.o \
-	o/$(MODE)/llamafile/cuda.o \
-	o/$(MODE)/llamafile/vulkan.o \
+	o/$(MODE)/llamafile/gpu.a \
 	o/$(MODE)/llamafile/zip.o
 
-# Server objects depend on generated assets
-$(TOOL_SERVER_OBJS): $(SERVER_ASSETS) llamafile/llamafile.h
+# Server objects depend on the llamafile bridge header and on the
+# generated ui.h (server-http.cpp #includes it directly).
+$(TOOL_SERVER_OBJS): llamafile/llamafile.h $(UI_H_GEN)
 
 # ==============================================================================
 # Compiler flags
@@ -393,12 +457,18 @@ $(TOOL_PERPLEXITY_OBJS) $(TOOL_BENCH_OBJS) $(TOOL_SERVER_OBJS) $(MTMD_OBJS): \
 		-iquote llama.cpp/ggml/src/ggml-cpu \
 		-iquote llama.cpp/src \
 		-iquote llama.cpp/tools/mtmd \
-		-iquote o/$(MODE)/llama.cpp/tools/server \
+		-iquote $(UI_GEN_DIR) \
 		-isystem llama.cpp/vendor
 
-# Server needs llamafile headers for Metal support and web UI
+# Server needs llamafile headers for Metal support.
+# The generated ui.h sits in $(UI_GEN_DIR); the -iquote above lets every
+# server source resolve `#include "ui.h"`.
 $(TOOL_SERVER_OBJS): private CPPFLAGS += -iquote llamafile
-$(TOOL_SERVER_OBJS): private CCFLAGS += -DLLAMA_BUILD_WEBUI
+
+# Compile the generated ui.cpp with the same llama.cpp CPPFLAGS so
+# stddef.h and friends resolve via cosmocc's libc.
+$(UI_GEN_OBJ): private CPPFLAGS += -iquote $(UI_GEN_DIR)
+$(UI_GEN_OBJ): $(UI_H_GEN)
 
 # Version definitions
 $(GGML_OBJS): private CCFLAGS += \
@@ -501,14 +571,14 @@ o/$(MODE)/llama.cpp/llama-bench/llama-bench: \
 
 o/$(MODE)/llama.cpp/server/llama-server: \
 	$(TOOL_SERVER_OBJS) \
+	$(UI_GEN_OBJ) \
 	$(MTMD_OBJS) \
 	$(HTTPLIB_OBJS) \
 	$(TOOL_LLAMAFILE_OBJS) \
 	$$(TINYBLAS_CPU_OBJS) \
-	o/$(MODE)/llama.cpp/llama.cpp.a \
-	$(SERVER_ASSETS)
+	o/$(MODE)/llama.cpp/llama.cpp.a
 	@mkdir -p $(dir $@)
-	$(LINK.o) $(TOOL_SERVER_OBJS) $(MTMD_OBJS) $(HTTPLIB_OBJS) $(TOOL_LLAMAFILE_OBJS) $(TINYBLAS_CPU_OBJS) o/$(MODE)/llama.cpp/llama.cpp.a $(LOADLIBES) $(LDLIBS) -o $@
+	$(LINK.o) $(TOOL_SERVER_OBJS) $(UI_GEN_OBJ) $(MTMD_OBJS) $(HTTPLIB_OBJS) $(TOOL_LLAMAFILE_OBJS) $(TINYBLAS_CPU_OBJS) o/$(MODE)/llama.cpp/llama.cpp.a $(LOADLIBES) $(LDLIBS) -o $@
 
 # ==============================================================================
 # Dependencies

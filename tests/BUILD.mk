@@ -99,6 +99,64 @@ o/$(MODE)/tests/fa_helpers_test: \
 	$(CXX) $(LDFLAGS) -fopenmp -o $@ $^ $(LDLIBS)
 
 # ==============================================================================
+# Test: gpu_backend_test (issue #988 device-count gate / fallback)
+# ==============================================================================
+#
+# Exercises the shared GPU backend probe core. The test injects stub entry
+# points into a GpuBackend and provides its own doubles for gpu_backend.c's
+# externs, so it links against gpu_backend.o alone — no DSO, no GPU, no
+# llamafile.o/llama.cpp.a.
+
+GPU_BACKEND_TEST_DEPS := \
+	o/$(MODE)/llamafile/gpu_backend.o
+
+o/$(MODE)/tests/gpu_backend_test.o: tests/gpu_backend_test.cpp
+	@mkdir -p $(@D)
+	$(CXX) $(CXXFLAGS) $(TESTS_CPPFLAGS) -c -o $@ $<
+
+o/$(MODE)/tests/gpu_backend_test: \
+		o/$(MODE)/tests/gpu_backend_test.o \
+		$(GPU_BACKEND_TEST_DEPS)
+	@mkdir -p $(@D)
+	$(CXX) $(LDFLAGS) -o $@ $^ $(LDLIBS)
+
+# ==============================================================================
+# Test: backend_ops_test (upstream ggml test-backend-ops under llamafile)
+# ==============================================================================
+#
+# Compares every ggml op on each runtime-loaded GPU backend against the CPU
+# reference (NMSE thresholds). Used to verify numerical consistency of the
+# dlopen'd backend DSOs (e.g. CPU vs Vulkan matmuls, issue #938 follow-up).
+# Not part of the default check suite: it needs a GPU and the backend DSO at
+# runtime. Build with: make o/$(MODE)/tests/backend_ops_test
+
+# upstream test uses #include <ggml.h>, so the ggml include dirs must be on
+# the system search path (-iquote from LLAMAFILE_INCLUDES is not enough)
+BACKEND_OPS_INCLUDES := \
+	-isystem llama.cpp/ggml/include \
+	-isystem llama.cpp/include
+
+o/$(MODE)/tests/test_backend_ops_impl.o: llama.cpp/tests/test-backend-ops.cpp
+	@mkdir -p $(@D)
+	$(CXX) $(CXXFLAGS) $(TESTS_CPPFLAGS) $(BACKEND_OPS_INCLUDES) -Dmain=backend_ops_main -c -o $@ $<
+
+o/$(MODE)/tests/backend_ops_harness.o: tests/backend_ops_harness.cpp
+	@mkdir -p $(@D)
+	$(CXX) $(CXXFLAGS) $(TESTS_CPPFLAGS) -c -o $@ $<
+
+o/$(MODE)/tests/backend_ops_test: \
+		o/$(MODE)/tests/backend_ops_harness.o \
+		o/$(MODE)/tests/test_backend_ops_impl.o \
+		o/$(MODE)/llamafile/llamafile.o \
+		o/$(MODE)/llamafile/gpu.a \
+		o/$(MODE)/llamafile/zip.o \
+		o/$(MODE)/llamafile/check_cpu.o \
+		$(GGML_OBJS) \
+		$(TINYBLAS_CPU_OBJS)
+	@mkdir -p $(@D)
+	$(CXX) $(LDFLAGS) -o $@ $^ $(LDLIBS)
+
+# ==============================================================================
 # Smoke test: transcribefile APE
 # ==============================================================================
 #
@@ -124,4 +182,5 @@ o/$(MODE)/tests/transcribefile_smoke.runs: \
 o/$(MODE)/tests: \
 	o/$(MODE)/tests/extract_data_uris_test.runs \
 	o/$(MODE)/tests/fa_helpers_test.runs \
+	o/$(MODE)/tests/gpu_backend_test.runs \
 	o/$(MODE)/tests/transcribefile_smoke.runs

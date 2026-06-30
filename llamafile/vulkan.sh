@@ -143,6 +143,47 @@ echo ""
 START_TIME=$(date +%s)
 
 #
+# Probe glslc shader extension support (mirrors upstream CMake's
+# test_shader_extension_support). These defines gate which shader variants
+# vulkan-shaders-gen emits and which pipelines ggml-vulkan.cpp creates, so
+# they must reflect the actual glslc on this machine. Omitting them
+# silently drops coopmat/coopmat2/decode-vector/integer-dot/bf16 support
+# from the DLL. Keep this list in sync with upstream's
+# test_shader_extension_support() calls in ggml-vulkan/CMakeLists.txt.
+#
+GLSLC_DEFINES=""
+FEATURE_TESTS_DIR="$SHADERS_DIR/feature-tests"
+probe_glslc_extension() {
+    # $1 = feature test shader, $2 = define
+    if "$GLSLC" -o /dev/null -fshader-stage=compute --target-env=vulkan1.3 \
+            "$FEATURE_TESTS_DIR/$1" >/dev/null 2>&1; then
+        GLSLC_DEFINES="$GLSLC_DEFINES -D$2"
+        echo "  $1: supported"
+    else
+        echo "  $1: not supported by glslc"
+    fi
+}
+echo "Probing glslc shader extension support..."
+probe_glslc_extension coopmat.comp                GGML_VULKAN_COOPMAT_GLSLC_SUPPORT
+probe_glslc_extension coopmat2.comp               GGML_VULKAN_COOPMAT2_GLSLC_SUPPORT
+probe_glslc_extension coopmat2_decode_vector.comp GGML_VULKAN_COOPMAT2_DECODE_VECTOR_GLSLC_SUPPORT
+probe_glslc_extension integer_dot.comp            GGML_VULKAN_INTEGER_DOT_GLSLC_SUPPORT
+probe_glslc_extension bfloat16.comp               GGML_VULKAN_BFLOAT16_GLSLC_SUPPORT
+echo ""
+
+# The defines bake into vulkan-shaders-gen, the generated header, and every
+# cached artifact derived from them; invalidate the cache when they change.
+FEATURES_STAMP="$BUILD_DIR/glslc-features.txt"
+if [ ! -f "$FEATURES_STAMP" ] || [ "$(cat "$FEATURES_STAMP" 2>/dev/null)" != "$GLSLC_DEFINES" ]; then
+    echo "glslc feature set changed; clearing cached shader artifacts"
+    rm -f "$BUILD_DIR/vulkan-shaders-gen" "$BUILD_DIR/ggml-vulkan-shaders.hpp" "$BUILD_DIR/ggml-vulkan.o"
+    rm -rf "$SHADERS_BUILD_DIR" "$SPVDIR"
+    mkdir -p "$SHADERS_BUILD_DIR" "$SPVDIR"
+    rm -f "$BUILD_DIR"/shader-*.o
+    printf '%s' "$GLSLC_DEFINES" > "$FEATURES_STAMP"
+fi
+
+#
 # Phase 1: Build vulkan-shaders-gen tool
 #
 echo "Phase 1: Building vulkan-shaders-gen..."
@@ -152,7 +193,7 @@ SHADERS_GEN_BIN="$BUILD_DIR/vulkan-shaders-gen"
 
 if [ ! -f "$SHADERS_GEN_BIN" ] || [ "$SHADERS_GEN_SRC" -nt "$SHADERS_GEN_BIN" ]; then
     echo "  Compiling vulkan-shaders-gen.cpp..."
-    $CXX -std=c++17 -O2 -o "$SHADERS_GEN_BIN" "$SHADERS_GEN_SRC" -lpthread
+    $CXX -std=c++17 -O2 $GLSLC_DEFINES -o "$SHADERS_GEN_BIN" "$SHADERS_GEN_SRC" -lpthread
 else
     echo "  vulkan-shaders-gen is up to date"
 fi
@@ -236,7 +277,8 @@ CXX_FLAGS="-O2 -fPIC -std=c++17 \
     -DNDEBUG \
     -DGGML_BUILD=1 \
     -DGGML_SHARED=1 \
-    -DGGML_MULTIPLATFORM"
+    -DGGML_MULTIPLATFORM \
+    $GLSLC_DEFINES"
 
 count=0
 for src in $SHADER_CPP_FILES; do

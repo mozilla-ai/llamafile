@@ -471,6 +471,27 @@ tinyblasStatus_t tinyblasSgemm(tinyblasHandle_t handle, tinyblasOperation_t tran
                           TINYBLAS_GEMM_DEFAULT);
 }
 
+// Strided-batched SGEMM. There is no dedicated batched kernel: each batch is
+// an independent SGEMM at a fixed pointer stride, so launch batchCount of them
+// in sequence (serialized on the handle's stream). OUT_PROD is the only caller
+// (ggml-cuda/out-prod.cu) and is off the typical inference hot path, so the
+// per-matrix launch overhead is acceptable.
+tinyblasStatus_t tinyblasSgemmStridedBatched(tinyblasHandle_t handle, tinyblasOperation_t transa,
+                                             tinyblasOperation_t transb, int m, int n, int k,
+                                             const float *alpha, const float *A, int lda,
+                                             long long strideA, const float *B, int ldb,
+                                             long long strideB, const float *beta, float *C,
+                                             int ldc, long long strideC, int batchCount) {
+    for (int i = 0; i < batchCount; ++i) {
+        tinyblasStatus_t status =
+            tinyblasSgemm(handle, transa, transb, m, n, k, alpha, A + i * strideA, lda,
+                          B + i * strideB, ldb, beta, C + i * strideC, ldc);
+        if (status != TINYBLAS_STATUS_SUCCESS)
+            return status;
+    }
+    return TINYBLAS_STATUS_SUCCESS;
+}
+
 template <int CONFIG, int BM, int BN, int BK, int VE, int WM, int WN, int WNI, int TM, int TN,
           int TT, typename WORD, typename SRC, typename DST>
 static __global__ void __launch_bounds__(TT) tinyblasGE_entry(tinyblasOperation_t aT, //

@@ -67,7 +67,7 @@ class TestMultimodalCLI:
         )
 
         assert result.returncode != 0, "Should fail with marker/image mismatch"
-        assert "markers" in result.stderr.lower() or "match" in result.stderr.lower()
+        assert "image preprocessing failed" in result.stderr.lower()
 
 
 @pytest.mark.multimodal

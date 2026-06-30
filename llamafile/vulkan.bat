@@ -143,6 +143,39 @@ pushd "%LLAMA_CPP_DIR%\ggml" 2>nul && (
     popd
 )
 
+:: -------- probe glslc shader extension support --------
+:: Mirrors upstream CMake's test_shader_extension_support: these defines
+:: gate which shader variants vulkan-shaders-gen emits and which pipelines
+:: ggml-vulkan.cpp creates, so they must reflect the actual glslc on this
+:: machine. Omitting them silently drops coopmat/coopmat2/decode-vector/
+:: integer-dot/bf16 support from the DLL. Keep this list in sync with
+:: upstream's test_shader_extension_support() calls in
+:: ggml-vulkan/CMakeLists.txt.
+set "FEATURE_TESTS_DIR=%SHADERS_DIR%\feature-tests"
+set "GLSLC_DEFINES="
+echo Probing glslc shader extension support...
+call :probe_glslc coopmat.comp GGML_VULKAN_COOPMAT_GLSLC_SUPPORT
+call :probe_glslc coopmat2.comp GGML_VULKAN_COOPMAT2_GLSLC_SUPPORT
+call :probe_glslc coopmat2_decode_vector.comp GGML_VULKAN_COOPMAT2_DECODE_VECTOR_GLSLC_SUPPORT
+call :probe_glslc integer_dot.comp GGML_VULKAN_INTEGER_DOT_GLSLC_SUPPORT
+call :probe_glslc bfloat16.comp GGML_VULKAN_BFLOAT16_GLSLC_SUPPORT
+echo.
+
+:: The defines bake into vulkan-shaders-gen, the generated header, and every
+:: cached artifact derived from them; invalidate the cache when they change.
+set "FEATURES_STAMP=%BUILD_DIR%\glslc-features.txt"
+set "OLD_DEFINES="
+if exist "%FEATURES_STAMP%" set /p OLD_DEFINES=<"%FEATURES_STAMP%"
+if not "!OLD_DEFINES!"=="!GLSLC_DEFINES!" (
+    echo glslc feature set changed; clearing cached shader artifacts
+    del /q "%BUILD_DIR%\vulkan-shaders-gen.exe" "%BUILD_DIR%\ggml-vulkan-shaders.hpp" "%BUILD_DIR%\ggml-vulkan.obj" "%BUILD_DIR%\shader-*.obj" 2>nul
+    if exist "%SHADERS_BUILD_DIR%" rmdir /s /q "%SHADERS_BUILD_DIR%"
+    if exist "%SPVDIR%" rmdir /s /q "%SPVDIR%"
+    mkdir "%SHADERS_BUILD_DIR%" 2>nul
+    mkdir "%SPVDIR%" 2>nul
+    >"%FEATURES_STAMP%" echo(!GLSLC_DEFINES!
+)
+
 echo Building ggml-vulkan.dll...
 echo   Version:    !GGML_VERSION! (commit: !GGML_COMMIT!)
 echo   Source:     %GGML_VULKAN_DIR%
@@ -162,7 +195,7 @@ set "SHADERS_GEN_SRC=%SHADERS_DIR%\vulkan-shaders-gen.cpp"
 
 if not exist "%SHADERS_GEN%" (
     echo   Compiling vulkan-shaders-gen.cpp...
-    cl /nologo /EHsc /O2 /std:c++17 /Fe:"%SHADERS_GEN%" "%SHADERS_GEN_SRC%"
+    cl /nologo /EHsc /O2 /std:c++17 !GLSLC_DEFINES! /Fe:"%SHADERS_GEN%" "%SHADERS_GEN_SRC%"
     if errorlevel 1 (echo Error: failed to build vulkan-shaders-gen.exe & exit /b 1)
     :: Clean up .obj left by cl
     del /q vulkan-shaders-gen.obj 2>nul
@@ -223,7 +256,7 @@ echo Phase 4: Compiling shader C++ files...
 
 set "CXX_FLAGS=/c /nologo /EHsc /O2 /GR /MT /std:c++17 /Zc:preprocessor"
 set "CXX_FLAGS=%CXX_FLAGS% /I"%GGML_INC_DIR%" /I"%GGML_SRC_DIR%" /I"%BUILD_DIR%""
-set "CXX_FLAGS=%CXX_FLAGS% /DNDEBUG /DGGML_BUILD=1 /DGGML_SHARED=1 /DGGML_BACKEND_SHARED=1 /DGGML_BACKEND_BUILD=1 /DGGML_MULTIPLATFORM"
+set "CXX_FLAGS=%CXX_FLAGS% /DNDEBUG /DGGML_BUILD=1 /DGGML_SHARED=1 /DGGML_BACKEND_SHARED=1 /DGGML_BACKEND_BUILD=1 /DGGML_MULTIPLATFORM!GLSLC_DEFINES!"
 
 set "CPP_CMD_FILE=%BUILD_DIR%\cpp_cmds.txt"
 type nul > "%CPP_CMD_FILE%"
@@ -329,3 +362,16 @@ for %%f in ("%OUTPUT%") do echo   Size: %%~zf bytes
 echo.
 
 endlocal
+exit /b 0
+
+:: Probe one glslc shader extension: %1 = feature-test shader filename,
+:: %2 = define to append to GLSLC_DEFINES when supported.
+:probe_glslc
+"%GLSLC%" -o NUL -fshader-stage=compute --target-env=vulkan1.3 "%FEATURE_TESTS_DIR%\%~1" >nul 2>&1
+if errorlevel 1 (
+    echo   %~1: not supported by glslc
+) else (
+    set "GLSLC_DEFINES=!GLSLC_DEFINES! /D%~2"
+    echo   %~1: supported
+)
+exit /b 0
