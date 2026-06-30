@@ -22,7 +22,6 @@ PKGS += TRANSCRIBE_CPP
 # Version Information
 # ==============================================================================
 
-TRANSCRIBE_VERSION := $(shell cd transcribe.cpp 2>/dev/null && git rev-parse --short HEAD 2>/dev/null || echo "unknown")
 TRANSCRIBE_GGML_VERSION := 0.15.2
 TRANSCRIBE_GGML_COMMIT := $(shell cd transcribe.cpp/ggml 2>/dev/null && cat UPSTREAM 2>/dev/null | sed -n 's/^sha:[[:space:]]*//p' | cut -c1-7 || echo "unknown")
 
@@ -57,9 +56,19 @@ TRANSCRIBE_GGML_CPPFLAGS := \
 # TRANSCRIBE_HAS_BLAS is intentionally NOT defined: the decoder falls
 # back to a correct (if slower) scalar loop, avoiding a BLAS dependency
 # under cosmocc.
+#
+# MINIZ_NO_* defines mirror upstream src/CMakeLists.txt: they trim the
+# vendored miniz to the compress-only deflate path Whisper's
+# compression-ratio metric needs, and avoid colliding with any system
+# zlib downstream (NO_ZLIB_COMPATIBLE_NAMES — call sites use the
+# mz_-prefixed API).
 TRANSCRIBE_LIB_CPPFLAGS := \
 	-DTRANSCRIBE_BUILD \
-	-DGGML_SCHED_MAX_COPIES=4
+	-DGGML_SCHED_MAX_COPIES=4 \
+	-DMINIZ_NO_INFLATE_APIS \
+	-DMINIZ_NO_STDIO \
+	-DMINIZ_NO_TIME \
+	-DMINIZ_NO_ZLIB_COMPATIBLE_NAMES
 
 # ==============================================================================
 # GGML Sources (transcribe.cpp/ggml/src — vendored ggml 0.9.8)
@@ -117,7 +126,6 @@ TRANSCRIBE_LIB_SRCS_CPP := \
 	transcribe.cpp/src/transcribe-batch-util.cpp \
 	transcribe.cpp/src/conformer/conformer.cpp \
 	transcribe.cpp/src/sanm/sanm.cpp \
-	transcribe.cpp/src/qwen3_lm/qwen3_lm.cpp \
 	transcribe.cpp/src/causal_lm/causal_lm.cpp \
 	transcribe.cpp/src/granite_conformer/shaw_attn.cpp \
 	transcribe.cpp/src/arch/parakeet/model.cpp \
@@ -205,6 +213,12 @@ TRANSCRIBE_LIB_SRCS_CPP := \
 	transcribe.cpp/src/arch/voxtral_realtime/encoder.cpp \
 	transcribe.cpp/src/arch/voxtral_realtime/decoder.cpp
 
+# Vendored miniz (C) — only consumer is arch/whisper/model.cpp's
+# compression-ratio heuristic. Built into the transcribe lib so the
+# binary stays self-contained (no system zlib).
+TRANSCRIBE_LIB_SRCS_C := \
+	transcribe.cpp/src/third_party/miniz/miniz.c
+
 # ==============================================================================
 # Object Files
 # ==============================================================================
@@ -213,7 +227,9 @@ TRANSCRIBE_GGML_OBJS := \
 	$(TRANSCRIBE_GGML_SRCS_C:%.c=o/$(MODE)/%.c.o) \
 	$(TRANSCRIBE_GGML_SRCS_CPP:%.cpp=o/$(MODE)/%.cpp.o)
 
-TRANSCRIBE_LIB_OBJS := $(TRANSCRIBE_LIB_SRCS_CPP:%.cpp=o/$(MODE)/%.cpp.o)
+TRANSCRIBE_LIB_OBJS := \
+	$(TRANSCRIBE_LIB_SRCS_CPP:%.cpp=o/$(MODE)/%.cpp.o) \
+	$(TRANSCRIBE_LIB_SRCS_C:%.c=o/$(MODE)/%.c.o)
 
 # All static-library objects.
 TRANSCRIBE_CPP_OBJS := \
@@ -244,10 +260,17 @@ $(TRANSCRIBE_GGML_SRCS_CPP:%.cpp=o/$(MODE)/%.cpp.o): \
 # Compilation Rules — Transcribe Library
 # ==============================================================================
 
-$(TRANSCRIBE_LIB_OBJS): o/$(MODE)/%.cpp.o: %.cpp transcribe.cpp/BUILD.mk $(COSMOCC)
+$(TRANSCRIBE_LIB_SRCS_CPP:%.cpp=o/$(MODE)/%.cpp.o): \
+		o/$(MODE)/%.cpp.o: %.cpp transcribe.cpp/BUILD.mk $(COSMOCC)
 	@mkdir -p $(@D)
-	$(COMPILE.cc) $(TRANSCRIBE_LIB_INCS) $(TRANSCRIBE_LIB_CPPFLAGS) \
-		-DTRANSCRIBE_VERSION=\"$(TRANSCRIBE_VERSION)\" -o $@ $<
+	$(COMPILE.cc) $(TRANSCRIBE_LIB_INCS) $(TRANSCRIBE_LIB_CPPFLAGS) -o $@ $<
+
+# Vendored miniz.c uses third-party style that trips strict warnings;
+# silence them for this one file (upstream does the same via -w).
+$(TRANSCRIBE_LIB_SRCS_C:%.c=o/$(MODE)/%.c.o): \
+		o/$(MODE)/%.c.o: %.c transcribe.cpp/BUILD.mk $(COSMOCC)
+	@mkdir -p $(@D)
+	$(COMPILE.c) $(TRANSCRIBE_LIB_INCS) $(TRANSCRIBE_LIB_CPPFLAGS) -w -o $@ $<
 
 # ==============================================================================
 # Compiler Flag Overrides (mirror llama.cpp's cosmocc recipe)
