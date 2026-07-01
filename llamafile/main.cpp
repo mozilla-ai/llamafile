@@ -240,7 +240,8 @@ static int combined_main(const LlamafileArgs &args) {
         // stack is too small for the httplib + SSE + JSON parsing call chain)
         auto *ctx = new TuiThreadCtx{
             &shutdown_fn, &mu, &cv, &shutdown_ready,
-            listen_addr, args.system_prompt, args.model_path
+            listen_addr, args.system_prompt,
+            args.model_path.empty() ? args.remote_model : args.model_path
         };
 
         pthread_attr_t attr;
@@ -314,8 +315,10 @@ int main(int argc, char **argv) {
         }
     }
 
-    // All modes require a model file (but let --server --help pass through).
-    if (args.model_path.empty() &&
+    // All modes require a model: either a local file (-m) or a remote
+    // reference (-hf/--model-url) that llama.cpp downloads over HTTPS.
+    // --server --help still passes through.
+    if (args.model_path.empty() && args.remote_model.empty() &&
         !llamafile_has(argv, "--help") && !llamafile_has(argv, "-h")) {
         fprintf(stderr, "error: missing required -m MODEL.gguf\n\n");
         switch (args.mode) {

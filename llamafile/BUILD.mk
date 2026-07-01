@@ -285,17 +285,25 @@ LLAMAFILE_DEPS = \
 	$(LLAMAFILE_HIGHLIGHT_KEYWORDS) \
 	$(LLAMAFILE_METAL_SOURCES) \
 	$(TINYBLAS_CPU_OBJS) \
-	o/$(MODE)/third_party/stb/stb_image_resize2.o
+	o/$(MODE)/third_party/stb/stb_image_resize2.o \
+	o/$(MODE)/third_party/mbedtls/mbedtls.a
 
 # ==============================================================================
 # Server integration
 # ==============================================================================
 
-# Include paths needed for server compilation
+# Include paths needed for server compilation. server.cpp reaches
+# httplib.h via server-cors-proxy.h, so it must see the same
+# CPPHTTPLIB_MBEDTLS_SUPPORT macro as the objects built by
+# llama.cpp/BUILD.mk (the macro changes httplib class layouts).
 LLAMAFILE_SERVER_INCS := \
 	$(LLAMAFILE_INCLUDES) \
 	-iquote llama.cpp/tools/server \
-	-iquote o/$(MODE)/llama.cpp/tools/server
+	-iquote o/$(MODE)/llama.cpp/tools/server \
+	-DCPPHTTPLIB_MBEDTLS_SUPPORT \
+	-isystem third_party/mbedtls/include \
+	-iquote . \
+	-mcosmo
 
 # Compile server.cpp
 o/$(MODE)/llamafile/server.cpp.o: llama.cpp/tools/server/server.cpp
@@ -317,7 +325,7 @@ o/$(MODE)/llamafile/llamafile: \
 		$(LLAMAFILE_OBJS) \
 		$(LLAMAFILE_DEPS)
 	@mkdir -p $(@D)
-	$(CXX) $(LDFLAGS) -o $@ $(filter %.o,$^) $(LDLIBS)
+	$(CXX) $(LDFLAGS) -o $@ $(filter %.o %.a,$^) $(LDLIBS)
 
 # ==============================================================================
 # Pattern rules for llamafile sources

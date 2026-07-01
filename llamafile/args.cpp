@@ -57,6 +57,11 @@ LlamafileArgs parse_llamafile_args(int argc, char** argv) {
         if ((strcmp(argv[i], "-m") == 0 || strcmp(argv[i], "--model") == 0) && i + 1 < argc) {
             args.model_path = argv[i + 1];
         }
+        if ((strcmp(argv[i], "-hf") == 0 || strcmp(argv[i], "-hfr") == 0 ||
+             strcmp(argv[i], "--hf-repo") == 0 || strcmp(argv[i], "-mu") == 0 ||
+             strcmp(argv[i], "--model-url") == 0) && i + 1 < argc) {
+            args.remote_model = argv[i + 1];
+        }
     }
 
     // Determine execution mode from flags

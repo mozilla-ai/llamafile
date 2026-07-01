@@ -86,7 +86,29 @@ Cosmopolitan libc has specific behaviors with condition variables and signals th
 | `common_log.cpp.patch` | Adds `#include <csignal>`; blocks `SIGINT`/`SIGTERM` on logger thread via `pthread_sigmask` to prevent `EINTR` exceptions; replaces `cv.wait()` with `wait_for(30s)` loop to work around XNU futex timeout bug (~72 minute expiry) |
 | `tools_server_server-models.cpp.patch` | Adds `#include <csignal>`; blocks signals on the stopping thread via `pthread_sigmask`; replaces untimed `cv.wait()` with `wait_for(30s)` loops on every model-lifecycle wait (`unload_lru`, the reload-drain wait, `stopping_thread`, the `is_reloading` guard in `load`, and the generic `wait()` predicate helper) to work around the XNU futex timeout bug |
 | `tools_server_server-queue.cpp.patch` | Adds missing includes (`<cerrno>`, `<system_error>`, `<csignal>`); blocks `SIGINT`/`SIGTERM` on queue thread; replaces `wait()` with `wait_for()` loops in three locations (`wait_until_no_sleep`, main loop, `recv`) |
-| `vendor_cpp-httplib_httplib.cpp.patch` | Fixes httplib thread pool with `wait_for()` instead of `wait()` for XNU futex compatibility |
+| `vendor_cpp-httplib_httplib.cpp.patch` | Fixes httplib thread pool with `wait_for()` instead of `wait()` for XNU futex compatibility; also see HTTPS / TLS Support below |
+
+### HTTPS / TLS Support
+
+Upstream llama.cpp gets TLS from cpp-httplib's OpenSSL backend
+(`CPPHTTPLIB_OPENSSL_SUPPORT`, satisfied by system OpenSSL or vendored
+BoringSSL/LibreSSL at cmake time). None of those is available in the
+cosmocc make build, so llamafile instead enables cpp-httplib's **Mbed TLS
+backend** (`CPPHTTPLIB_MBEDTLS_SUPPORT`) against the mbedtls fork already
+vendored in `third_party/mbedtls` — the same TLS stack llamafile <= 0.9.3
+used. `third_party/mbedtls/include/` maps the canonical `<mbedtls/*.h>`
+include paths onto the fork's headers, and `BUILD.mk` sets the macro on
+every object that can reach `httplib.h` (the macro changes httplib class
+layouts, so all TUs must agree) and links `mbedtls.a` into `llama-server`.
+This enables HTTPS model downloads (`-hf`, `--model-url`), https clients
+in server-models, and TLS serving via `--ssl-cert-file`/`--ssl-key-file`.
+
+| Patch | Description |
+|-------|-------------|
+| `common_http.h.patch` | `#ifndef CPPHTTPLIB_OPENSSL_SUPPORT` -> `#ifndef CPPHTTPLIB_SSL_ENABLED` for the "HTTPS is not supported" guard, so any cpp-httplib TLS backend counts (candidate for upstreaming) |
+| `tools_server_server-http.cpp.patch` | Same macro fix for the `httplib::SSLServer` (`--ssl-cert-file`/`--ssl-key-file`) guard (candidate for upstreaming) |
+| `tools_server_server-models.cpp.patch` | Same macro fix for the direct `httplib::SSLClient` construction in `server_http_proxy` (candidate for upstreaming) |
+| `vendor_cpp-httplib_httplib.cpp.patch` | Under `__COSMOPOLITAN__`: appends `/zip/third_party/mbedtls/sslroot` to `system_ca_dirs()` as the trust-store fallback (essential on Windows hosts, where the `_WIN32` cert-store branches are not compiled into an APE), and `__static_yoink("ssl_root_support")` so the Mozilla root PEMs bundled by `third_party/mbedtls/BUILD.mk` are pulled into the executable's zip |
 
 ### TinyBLAS Integration
 

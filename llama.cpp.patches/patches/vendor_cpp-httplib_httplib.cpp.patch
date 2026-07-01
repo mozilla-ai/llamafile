@@ -39,3 +39,28 @@ diff --git a/vendor/cpp-httplib/httplib.cpp b/vendor/cpp-httplib/httplib.cpp
        }
  
        idle_thread_count_--;
+@@ -12625,6 +12647,13 @@ bool enumerate_macos_keychain_certs(Callback cb) {
+ 
+ #if !defined(_WIN32) && !(defined(__APPLE__) &&                                \
+                           defined(CPPHTTPLIB_USE_CERTS_FROM_MACOSX_KEYCHAIN))
++#ifdef __COSMOPOLITAN__
++// Reference the Mozilla CA roots zipped into the APE (see llamafile's
++// third_party/mbedtls/sslroot) so the linker keeps them; they serve as
++// the trust-store fallback below on hosts without a system CA store
++// (notably Windows, where the _WIN32 branches above are not compiled).
++__static_yoink("ssl_root_support");
++#endif
+ // Common CA certificate file paths on Linux/Unix
+ const char **system_ca_paths() {
+   static const char *paths[] = {
+@@ -12642,6 +12671,10 @@ const char **system_ca_dirs() {
+   static const char *dirs[] = {"/etc/ssl/certs",             // Debian/Ubuntu
+                                "/etc/pki/tls/certs",         // RHEL/CentOS
+                                "/usr/share/ca-certificates", // Other
++#ifdef __COSMOPOLITAN__
++                               // CA bundle zipped into the APE (llamafile)
++                               "/zip/third_party/mbedtls/sslroot",
++#endif
+                                nullptr};
+   return dirs;
+ }

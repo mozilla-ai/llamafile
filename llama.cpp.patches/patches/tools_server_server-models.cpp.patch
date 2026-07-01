@@ -120,3 +120,16 @@ diff --git a/tools/server/server-models.cpp b/tools/server/server-models.cpp
  }
  
  bool server_models::ensure_model_ready(const std::string & name) {
+@@ -1894,10 +1928,10 @@ server_http_proxy::server_http_proxy(
+     auto pipe = std::make_shared<pipe_t<msg_t>>();
+ 
+     if (scheme == "https") {
+-#ifdef CPPHTTPLIB_OPENSSL_SUPPORT
++#ifdef CPPHTTPLIB_SSL_ENABLED
+         cli.reset(new httplib::SSLClient(host, port));
+ #else
+-        throw std::runtime_error("HTTPS requested but CPPHTTPLIB_OPENSSL_SUPPORT is not defined");
++        throw std::runtime_error("HTTPS requested but the server is built without SSL support");
+ #endif
+     }
+ 

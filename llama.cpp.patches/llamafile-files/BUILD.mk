@@ -460,6 +460,19 @@ $(TOOL_PERPLEXITY_OBJS) $(TOOL_BENCH_OBJS) $(TOOL_SERVER_OBJS) $(MTMD_OBJS): \
 		-iquote $(UI_GEN_DIR) \
 		-isystem llama.cpp/vendor
 
+# HTTPS support: build cpp-httplib with its Mbed TLS backend against the
+# mbedtls vendored in third_party/mbedtls (the same TLS stack llamafile
+# <= 0.9.3 used); third_party/mbedtls/include maps the canonical
+# <mbedtls/*.h> include paths onto it. The macro changes httplib class
+# layouts, so every object that includes httplib.h (directly or via
+# common/http.h, server-http.h, server-cors-proxy.h) must see it.
+$(LLAMA_CPP_OBJS) $(TOOL_QUANTIZE_OBJS) $(TOOL_IMATRIX_OBJS) \
+$(TOOL_PERPLEXITY_OBJS) $(TOOL_BENCH_OBJS) $(TOOL_SERVER_OBJS) $(MTMD_OBJS) \
+$(HTTPLIB_OBJS): \
+	private CPPFLAGS += \
+		-DCPPHTTPLIB_MBEDTLS_SUPPORT \
+		-isystem third_party/mbedtls/include
+
 # Server needs llamafile headers for Metal support.
 # The generated ui.h sits in $(UI_GEN_DIR); the -iquote above lets every
 # server source resolve `#include "ui.h"`.
@@ -576,9 +589,10 @@ o/$(MODE)/llama.cpp/server/llama-server: \
 	$(HTTPLIB_OBJS) \
 	$(TOOL_LLAMAFILE_OBJS) \
 	$$(TINYBLAS_CPU_OBJS) \
-	o/$(MODE)/llama.cpp/llama.cpp.a
+	o/$(MODE)/llama.cpp/llama.cpp.a \
+	o/$(MODE)/third_party/mbedtls/mbedtls.a
 	@mkdir -p $(dir $@)
-	$(LINK.o) $(TOOL_SERVER_OBJS) $(UI_GEN_OBJ) $(MTMD_OBJS) $(HTTPLIB_OBJS) $(TOOL_LLAMAFILE_OBJS) $(TINYBLAS_CPU_OBJS) o/$(MODE)/llama.cpp/llama.cpp.a $(LOADLIBES) $(LDLIBS) -o $@
+	$(LINK.o) $(TOOL_SERVER_OBJS) $(UI_GEN_OBJ) $(MTMD_OBJS) $(HTTPLIB_OBJS) $(TOOL_LLAMAFILE_OBJS) $(TINYBLAS_CPU_OBJS) o/$(MODE)/llama.cpp/llama.cpp.a o/$(MODE)/third_party/mbedtls/mbedtls.a $(LOADLIBES) $(LDLIBS) -o $@
 
 # ==============================================================================
 # Dependencies
