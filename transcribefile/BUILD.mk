@@ -63,16 +63,33 @@ $(TRANSCRIBEFILE_C_OBJS): o/$(MODE)/%.c.o: %.c transcribefile/BUILD.mk $(COSMOCC
 	$(COMPILE.c) -o $@ $<
 
 # ==============================================================================
+# Dependencies - llamafile objects for GPU support
+# ==============================================================================
+# Same pattern as whisperfile/BUILD.mk: llamafile.o carries the FLAG_*
+# globals and DSO/app-dir helpers, gpu.a the runtime GPU loaders. The
+# GPU backends register into transcribe.cpp's vendored ggml registry
+# (ggml_backend_register resolves from transcribe.cpp.a; the ggml trees
+# are ABI-aligned at 0.15.2). $(LLAMAFILE_METAL_SOURCES) embeds the
+# patched llama.cpp ggml/metal sources in the zip store, which metal.c
+# extracts and compiles into ggml-metal.dylib at runtime on macOS.
+
+TRANSCRIBEFILE_LLAMAFILE_OBJS := \
+	o/$(MODE)/llamafile/llamafile.o \
+	o/$(MODE)/llamafile/gpu.a \
+	o/$(MODE)/llamafile/zip.o \
+	o/$(MODE)/llamafile/check_cpu.o
+
+# ==============================================================================
 # Executable
 # ==============================================================================
 
 o/$(MODE)/transcribefile/transcribefile: \
 		$(TRANSCRIBEFILE_OBJS) \
-		o/$(MODE)/transcribe.cpp/transcribe.cpp.a
-	@mkdir -p $(@D)
-	$(LINK.o) $(TRANSCRIBEFILE_OBJS) \
 		o/$(MODE)/transcribe.cpp/transcribe.cpp.a \
-		$(LOADLIBES) $(LDLIBS) -o $@
+		$(TRANSCRIBEFILE_LLAMAFILE_OBJS) \
+		$(LLAMAFILE_METAL_SOURCES)
+	@mkdir -p $(@D)
+	$(LINK.o) $^ $(LOADLIBES) $(LDLIBS) -o $@
 
 # ==============================================================================
 # Main Target

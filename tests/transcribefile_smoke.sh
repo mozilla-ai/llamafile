@@ -74,3 +74,35 @@ echo "$out" | grep -q 'realtime:' || fail "parakeet output missing 'realtime:' l
 echo "$out" | grep -qi 'country' || fail "parakeet transcription missing 'country'"
 realtime=$(echo "$out" | grep -oE 'realtime:[[:space:]]+[0-9]+x' | head -1 || true)
 pass "parakeet transcribes jfk.wav (${realtime:-realtime: ?})"
+
+echo "[smoke] layer 3 — metal backend"
+
+# Metal is macOS/Apple-Silicon only. Elsewhere (and on macs where the
+# runtime dylib build isn't possible, e.g. no Xcode CLT) the contract is
+# graceful degradation to CPU, so absence of a metal device is a SKIP,
+# not a failure.
+if [ "$(uname -s)" != "Darwin" ] || [ "$(uname -m)" != "arm64" ]; then
+    echo "  SKIP metal: requires macOS on Apple Silicon" >&2
+    exit 0
+fi
+if ! "$APE" --list-devices 2>/dev/null | grep -q 'kind=metal'; then
+    echo "  SKIP metal: no metal device registered" \
+         "(Xcode command-line tools missing?)" >&2
+    exit 0
+fi
+
+# Explicit --backend metal must actually select an MTL device and produce
+# the same transcript as the CPU backend (drop the backend/realtime lines
+# before comparing; they legitimately differ).
+mtl=$("$APE" --backend metal -q -m "$MODEL" "$SAMPLE" 2>/dev/null) \
+    || fail "metal run exited non-zero"
+echo "$mtl" | grep -qE 'backend:[[:space:]]+MTL' || fail "metal run did not select an MTL device"
+echo "$mtl" | grep -qi 'country' || fail "metal transcription missing 'country'"
+pass "parakeet transcribes jfk.wav on metal"
+
+cpu=$("$APE" --backend cpu -q -m "$MODEL" "$SAMPLE" 2>/dev/null) \
+    || fail "cpu run exited non-zero"
+mtl_text=$(echo "$mtl" | grep -vE 'backend:|realtime:')
+cpu_text=$(echo "$cpu" | grep -vE 'backend:|realtime:')
+[ "$mtl_text" = "$cpu_text" ] || fail "metal and cpu transcripts differ"
+pass "metal and cpu transcripts match"

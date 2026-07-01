@@ -18,6 +18,8 @@
 #include <stdio.h>
 #include <string.h>
 
+#include "llamafile/llamafile.h"
+
 // Defined in transcribe.cpp/examples/cli/main.cpp, compiled with
 // -DTRANSCRIBEFILE (which renames its main() to transcribe_cli_main() and
 // drops the standalone main()). C++ linkage — both sides are C++.
@@ -36,6 +38,34 @@ static bool has_flag(char ** argv, const char * flag) {
     return false;
 }
 
+// Register GPU backends with ggml before the CLI enumerates devices.
+// Only Metal is wired up for now (Vulkan/CUDA are follow-up work), via
+// llamafile's runtime loader: on Apple Silicon it compiles the bundled
+// ggml Metal sources into ggml-metal.dylib (cached under ~/.llamafile),
+// loads it with cosmo_dlopen, and registers it with transcribe.cpp's
+// ggml. The CLI owns --backend semantics; this only controls which
+// backends get a chance to register:
+//   - cpu / cpu_accel: don't touch the GPU machinery at all
+//   - auto / metal:    try Metal; on failure or non-mac hardware nothing
+//                      registers and selection proceeds CPU-only
+// FLAG_gpu stays AUTO (not APPLE) even for --backend metal so a failed
+// load degrades silently here; transcribe.cpp reports the missing
+// backend itself, with wording that matches its own CLI.
+static void load_gpu_backends(char ** argv) {
+    const char * backend = "auto";
+    for (char ** p = argv + 1; p && *p; ++p) {
+        if (!strcmp(*p, "--backend") && p[1]) {
+            backend = p[1];
+        }
+    }
+    if (strcmp(backend, "auto") != 0 && strcmp(backend, "metal") != 0) {
+        FLAG_gpu = LLAMAFILE_GPU_DISABLE;
+        return;
+    }
+    FLAG_gpu = LLAMAFILE_GPU_AUTO;
+    llamafile_has_metal();
+}
+
 int main(int argc, char ** argv) {
     // Symbolized backtraces on crash (cosmopolitan).
     ShowCrashReports();
@@ -49,6 +79,8 @@ int main(int argc, char ** argv) {
     // Merge default arguments embedded at /zip/.args (if present) with the
     // user's argv. No-op for a bare executable with no bundled .args.
     argc = cosmo_args("/zip/.args", &argv);
+
+    load_gpu_backends(argv);
 
     return transcribe_cli_main(argc, argv);
 }
