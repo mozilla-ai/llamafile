@@ -6,9 +6,9 @@ same Cosmopolitan packaging as llamafile and whisperfile. One Actually
 Portable Executable runs on macOS, Linux, Windows and BSD, on x86-64 and
 ARM64, with no installation.
 
-transcribe.cpp supports modern GGUF speech models (Parakeet, Whisper,
-Canary, Voxtral, Moonshine, and more — see `transcribe.cpp/docs/models/`),
-while whisperfile covers the classic whisper.cpp models.
+transcribe.cpp supports modern GGUF speech models from more than 16
+different families, including Parakeet, Whisper, Canary, Voxtral, Moonshine,
+and more (see `transcribe.cpp/docs/models/`).
 
 ## Quick start
 
@@ -16,11 +16,13 @@ while whisperfile covers the classic whisper.cpp models.
 make setup                                   # once: submodules + patches
 .cosmocc/4.0.2/bin/make -j8 o//transcribefile
 
-o//transcribefile/transcribefile -m model.gguf audio.wav
+wget https://huggingface.co/handy-computer/parakeet-tdt-0.6b-v3-gguf/resolve/main/parakeet-tdt-0.6b-v3-Q4_K_M.gguf
+o//transcribefile/transcribefile -m parakeet-tdt-0.6b-v3-Q4_K_M.gguf samples/jfk.wav
 ```
 
-Input audio is 16 kHz mono WAV (`transcribe.cpp/samples/` has examples).
+Input audio is 16 kHz mono WAV (`transcribe.cpp/samples/` has many examples).
 Run with `--help` for the full option list.
+
 
 ## GPU support
 
@@ -36,11 +38,13 @@ Backend selection is upstream transcribe.cpp's `--backend` flag
 Metal uses llamafile's runtime loader (`llamafile/metal.c`): on first use
 the bundled ggml Metal sources are extracted from the executable's zip
 store, compiled into `ggml-metal.dylib` with the system compiler (needs
-the Xcode command-line tools), cached under `~/.llamafile`, and loaded
-with `cosmo_dlopen`. The cache is shared with llamafile itself. With
-`--backend auto` (the default), Metal is used when available and the run
-falls back to CPU otherwise; only an explicit `--backend metal` makes a
-missing Metal device an error, reported by transcribe.cpp.
+the Xcode command-line tools), cached under `~/.transcribefile/v/<ver>/`,
+and loaded with `cosmo_dlopen`. The cache is deliberately separate from
+llamafile's `~/.llamafile` so the two products' ggml trees can diverge
+without overwriting each other's artifacts. With `--backend auto` (the
+default), Metal is used when available and the run falls back to CPU
+otherwise; only an explicit `--backend metal` makes a missing Metal
+device an error, reported by transcribe.cpp.
 
 ## Self-contained model bundles
 

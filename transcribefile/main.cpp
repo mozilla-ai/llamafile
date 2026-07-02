@@ -50,8 +50,8 @@ static void print_wrapper_help(void) {
             "transcribefile notes:\n"
             "  GPU backends wired up in this build: metal (macOS on Apple\n"
             "  Silicon; used by --backend auto/metal, first run compiles\n"
-            "  ggml-metal.dylib and caches it under ~/.llamafile). vulkan and\n"
-            "  cuda are not available yet.\n"
+            "  ggml-metal.dylib and caches it under ~/.transcribefile).\n"
+            "  vulkan and cuda are not available yet.\n"
             "  Default arguments are read from .args in the executable's zip\n"
             "  store (one per line), so models can be bundled with zipalign.\n");
 }
@@ -88,9 +88,17 @@ int main(int argc, char ** argv) {
     // Symbolized backtraces on crash (cosmopolitan).
     ShowCrashReports();
 
-    // Answer --version before touching args or the zip store.
+    // Cached artifacts (the runtime-compiled Metal dylib and the ggml
+    // sources it is built from) go under ~/.transcribefile, not
+    // ~/.llamafile: the two products' ggml trees are aligned today but
+    // may diverge, and neither should ever overwrite the other's cache.
+    llamafile_set_app_name("transcribefile");
+
+    // Answer --version before touching args or the zip store. The
+    // version string is transcribe.cpp's `git describe` output, which
+    // already carries its own "v" prefix (e.g. v0.0.11-7-gdf1a4ad).
     if (has_flag(argv, "--version")) {
-        puts("transcribefile v" TRANSCRIBEFILE_VERSION_STRING);
+        puts("transcribefile " TRANSCRIBEFILE_VERSION_STRING);
         return 0;
     }
 

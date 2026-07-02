@@ -458,14 +458,28 @@ static const char *llamafile_get_home_dir(void) {
     return homedir;
 }
 
+// Basename of the per-app dot directory under $HOME. Defaults to
+// "llamafile"; other products (e.g. transcribefile) override it via
+// llamafile_set_app_name() so their cached artifacts — compiled GPU
+// dylibs, extracted ggml sources — live in their own tree and can
+// diverge from llamafile's without overwriting anything.
+static const char *g_app_name = "llamafile";
+
+void llamafile_set_app_name(const char *name) {
+    if (name && *name)
+        g_app_name = name;
+}
+
 /**
  * Returns path of directory for app-specific files.
- * Path includes version number: ~/.llamafile/v/<major>.<minor>.<patch>/
+ * Path includes version number: ~/.<app>/v/<major>.<minor>.<patch>/
+ * where <app> defaults to "llamafile" (see llamafile_set_app_name).
  * This ensures different versions don't overwrite each other's compiled dylibs.
  */
 void llamafile_get_app_dir(char *path, size_t size) {
-    snprintf(path, size, "%s/.llamafile/v/%d.%d.%d/",
+    snprintf(path, size, "%s/.%s/v/%d.%d.%d/",
              llamafile_get_home_dir(),
+             g_app_name,
              LLAMAFILE_MAJOR,
              LLAMAFILE_MINOR,
              LLAMAFILE_PATCH);

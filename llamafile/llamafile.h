@@ -77,6 +77,7 @@ char *llamafile_get_prompt(void);                         // NOT DEFINED
 // USED: Defined in llamafile.c
 bool llamafile_has(char **, const char *);
 void llamafile_get_app_dir(char *, size_t);
+void llamafile_set_app_name(const char *); // app dir basename, default "llamafile"
 bool llamafile_extract(const char *, const char *);
 int llamafile_is_file_newer_than(const char *, const char *);
 
