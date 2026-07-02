@@ -19,11 +19,7 @@
 #include <stdio.h>
 
 #include "llamafile/llamafile.h"
-
-// LLAMAFILE_VERSION_STRING is defined by BUILD.mk
-#ifndef LLAMAFILE_VERSION_STRING
-#define LLAMAFILE_VERSION_STRING "0.0.0-dev"
-#endif
+#include "llamafile/version.h"
 
 // Forward declaration - defined in stable-diffusion.cpp/examples/cli/main.cpp
 // When compiled with -DDIFFUSIONFILE, main.cpp renames main() to diffusion_cli_main()

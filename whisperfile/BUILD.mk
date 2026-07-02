@@ -90,8 +90,7 @@ WHISPERFILE_INCLUDES := \
 # ==============================================================================
 
 WHISPERFILE_CPPFLAGS := \
-	$(WHISPERFILE_INCLUDES) \
-	-DLLAMAFILE_VERSION_STRING=\"$(LLAMAFILE_VERSION_STRING)\"
+	$(WHISPERFILE_INCLUDES)
 
 # ==============================================================================
 # Dependencies - llamafile objects for GPU support

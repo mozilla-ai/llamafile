@@ -66,8 +66,7 @@ DIFFUSIONFILE_INCLUDES := \
 # ==============================================================================
 
 DIFFUSIONFILE_CPPFLAGS := \
-	$(DIFFUSIONFILE_INCLUDES) \
-	-DLLAMAFILE_VERSION_STRING=\"$(LLAMAFILE_VERSION_STRING)\"
+	$(DIFFUSIONFILE_INCLUDES)
 
 # ==============================================================================
 # Dependencies - llamafile objects for GPU support
