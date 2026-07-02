@@ -102,7 +102,7 @@ pass "parakeet transcribes jfk.wav on metal"
 
 cpu=$("$APE" --backend cpu -q -m "$MODEL" "$SAMPLE" 2>/dev/null) \
     || fail "cpu run exited non-zero"
-mtl_text=$(echo "$mtl" | grep -vE 'backend:|realtime:')
-cpu_text=$(echo "$cpu" | grep -vE 'backend:|realtime:')
+mtl_text=$(echo "$mtl" | grep -vE '^[[:space:]]*(backend|realtime):')
+cpu_text=$(echo "$cpu" | grep -vE '^[[:space:]]*(backend|realtime):')
 [ "$mtl_text" = "$cpu_text" ] || fail "metal and cpu transcripts differ"
 pass "metal and cpu transcripts match"
