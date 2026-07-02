@@ -31,12 +31,13 @@ Use `-m` to select test categories:
 | `cli` | CLI mode tests |
 | `tui` | TUI/chat mode tests |
 | `server` | Server mode tests |
-| `server` | Combined (TUI/chat + server) mode tests |
+| `combined` | Combined (TUI/chat + server) mode tests |
 | `multimodal` | Vision/image tests (requires multimodal model) |
 | `tool_calling` | Tool use tests (requires tool-capable model) |
 | `thinking` | Thinking model tests (QwQ, DeepSeek-R1, etc.) |
 | `gpu` | GPU acceleration tests |
 | `cpu` | CPU-only tests |
+| `ssl` | HTTPS/TLS tests: serving with `--ssl-cert-file`, model download over HTTPS, untrusted-cert rejection. Needs `openssl` in PATH to generate a test certificate; the download test needs network access (huggingface.co) |
 
 Examples:
 
@@ -49,6 +50,9 @@ Examples:
 
 # Skip multimodal and tool_calling tests
 ./run_tests.sh --executable ~/model.llamafile -m "not multimodal and not tool_calling"
+
+# Run only the HTTPS/TLS tests (or skip them with -m "not ssl")
+./run_tests.sh --executable ./o/llamafile/llamafile --model model.gguf -m ssl
 ```
 
 ## Options
