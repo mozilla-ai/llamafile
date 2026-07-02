@@ -421,6 +421,8 @@ int main(int argc, char **argv) {
         fprintf(stderr, "error: missing required -m MODEL.gguf\n\n");
         switch (args.mode) {
             case lf::ProgramMode::SERVER:
+                print_server_help(true);
+                break;
             case lf::ProgramMode::AUTO:
                 print_general_help(true);
                 break;
