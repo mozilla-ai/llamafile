@@ -30,6 +30,7 @@
 //
 
 #include "args.h"
+#include "arg.h"  // common_params_parse, llama_example (for --help delegation)
 #include "chatbot.h"
 #include "llamafile.h"
 #include "version.h"
@@ -101,7 +102,62 @@ extern int server_main(int argc, char **argv,
                        std::function<void(const std::string &)> on_ready,
                        std::function<void(std::function<void()>)> on_shutdown_available);
 
-static void print_general_help() {
+// ---------------------------------------------------------------------------
+// --help implementation
+//
+// llamafile's --help is built in two layers:
+//
+//   1. A short, hand-written intro (the print_*_help functions below) that
+//      describes llamafile's own execution modes and the llamafile-specific
+//      flags (--gpu, --chat, --cli, --server, --nologo, --ascii, --nothink)
+//      that llama.cpp does not know about.
+//
+//   2. The full, categorized catalogue of llama.cpp options (-m, -c, --temp,
+//      --top-k, --top-p, --repeat-penalty, -ngl, --port, ...) which is printed
+//      by llama.cpp's own argument parser via print_llama_cpp_usage().
+//
+// Delegating layer (2) to common_params_parse() — the exact same code path
+// that --server --help already uses — is what guarantees --help lists every
+// flag llamafile actually accepts. A hand-maintained copy would drift, which
+// is the regression this design avoids.
+//
+// common_params_parse() prints the usage and calls exit(0) when --help/-h is
+// present in argv. On a parse error (e.g. a malformed env var) it returns
+// false without exiting; in that case we exit(0) too, since the user only
+// asked for help.
+// ---------------------------------------------------------------------------
+
+static void print_llama_cpp_usage(lf::ProgramMode mode,
+                                  const lf::LlamafileArgs & args) {
+    common_params params;
+    llama_example ex;
+    switch (mode) {
+        case lf::ProgramMode::CHAT:
+        case lf::ProgramMode::CLI:
+            // --chat and --cli feed args to the chatbot, which parses them
+            // with LLAMA_EXAMPLE_CLI.
+            ex = LLAMA_EXAMPLE_CLI;
+            break;
+        case lf::ProgramMode::SERVER:
+        case lf::ProgramMode::AUTO:
+        default:
+            // --server and the default (combined) mode feed args to the HTTP
+            // server, which parses them with LLAMA_EXAMPLE_SERVER.
+            ex = LLAMA_EXAMPLE_SERVER;
+            break;
+    }
+    // Prints usage and exits(0) on --help; returns false only on parse error.
+    if (!common_params_parse(args.llama_argc, args.llama_argv, params, ex, nullptr)) {
+        exit(0);
+    }
+    // Unreachable on the happy path: common_params_parse() exits above.
+}
+
+// show_full_list_hint is true when called from the "missing -m" error path,
+// where we point the user at `llamafile --help` for the full option list. It
+// is false when called from the --help path, where the full llama.cpp option
+// list is appended immediately afterwards by print_llama_cpp_usage().
+static void print_general_help(bool show_full_list_hint) {
     printf("llamafile v" LLAMAFILE_VERSION_STRING " - run LLMs locally\n"
            "\n"
            "usage: llamafile -m MODEL.gguf [options]\n"
@@ -112,28 +168,56 @@ static void print_general_help() {
            "  --chat      TUI chat only (no server)\n"
            "  --cli       single prompt/response (requires -p)\n"
            "\n"
-           "common options:\n"
-           "  -m FILE          path to GGUF model file (required)\n"
-           "  -p TEXT          system prompt (in --cli mode: user prompt)\n"
+           "llamafile options:\n"
            "  --gpu MODE       GPU backend (auto, nvidia, amd, apple, disable)\n"
-           "  -ngl N           number of layers to offload to GPU (default: auto)\n"
+           "  --nologo         suppress the startup logo\n"
+           "  --ascii          use ASCII art instead of Unicode for logo\n"
            "  --verbose        enable verbose logging\n"
            "  --version        show version information\n"
            "  --help           show this help\n"
-           "\n"
-           "for mode-specific help and options:\n"
-           "  llamafile --server --help\n"
-           "  llamafile --chat --help\n"
-           "  llamafile --cli --help\n"
-           "\n"
-           "examples:\n"
+           "\n");
+    if (show_full_list_hint) {
+        printf("llamafile also accepts all llama.cpp options (e.g. -m, -p, -c, -t,\n"
+               "--temp, --top-k, --top-p, --repeat-penalty, -ngl, --port, ...).\n"
+               "Run `llamafile --help` for the full categorized list, or add --help\n"
+               "to a mode for mode-specific options:\n"
+               "  llamafile --server --help\n"
+               "  llamafile --chat --help\n"
+               "  llamafile --cli --help\n"
+               "\n");
+    }
+    printf("examples:\n"
            "  llamafile -m model.gguf\n"
            "  llamafile -m model.gguf --server --port 8080\n"
            "  llamafile -m model.gguf --chat\n"
            "  llamafile -m model.gguf --cli -p \"explain quantum computing\"\n");
 }
 
-static void print_chat_help() {
+static void print_server_help(bool show_full_list_hint) {
+    printf("llamafile --server - HTTP server mode\n"
+           "\n"
+           "usage: llamafile -m MODEL.gguf --server [options]\n"
+           "\n"
+           "Start an OpenAI-compatible HTTP server (no TUI). Serves a browser\n"
+           "web UI and a REST API for chat completions, embeddings, and more.\n"
+           "\n"
+           "server-specific options:\n"
+           "  --host ADDR      ip address to listen on (default 127.0.0.1)\n"
+           "  --port N         tcp port to listen on (default 8080)\n"
+           "  --api-key KEY    require this API key for authentication\n"
+           "\n");
+    if (show_full_list_hint) {
+        printf("all other llama.cpp options are also accepted.\n"
+               "run `llamafile --server --help` to see the full list.\n"
+               "\n");
+    }
+    printf("examples:\n"
+           "  llamafile -m model.gguf --server\n"
+           "  llamafile -m model.gguf --server --port 8080\n"
+           "  llamafile -m model.gguf --server --host 0.0.0.0 --port 8080\n");
+}
+
+static void print_chat_help(bool show_full_list_hint) {
     printf("llamafile --chat - TUI chat mode\n"
            "\n"
            "usage: llamafile -m MODEL.gguf --chat [options]\n"
@@ -162,17 +246,19 @@ static void print_chat_help() {
            "  /undo            erase last exchange\n"
            "  /forget          erase oldest message\n"
            "  /exit            quit\n"
-           "\n"
-           "all other llama.cpp options are also accepted.\n"
-           "run llamafile --server --help to see the full list.\n"
-           "\n"
-           "examples:\n"
+           "\n");
+    if (show_full_list_hint) {
+        printf("all other llama.cpp options are also accepted.\n"
+               "run `llamafile --chat --help` to see the full list.\n"
+               "\n");
+    }
+    printf("examples:\n"
            "  llamafile -m model.gguf --chat\n"
            "  llamafile -m model.gguf --chat -p \"You are a helpful assistant\"\n"
            "  llamafile -m model.gguf --chat --mmproj mmproj.gguf\n");
 }
 
-static void print_cli_help() {
+static void print_cli_help(bool show_full_list_hint) {
     printf("llamafile --cli - single prompt/response mode\n"
            "\n"
            "usage: llamafile -m MODEL.gguf --cli -p \"prompt\" [options]\n"
@@ -187,11 +273,13 @@ static void print_cli_help() {
            "multimodal options:\n"
            "  --mmproj FILE    path to vision model (mmproj GGUF)\n"
            "  --image FILE     image file(s) to include with prompt\n"
-           "\n"
-           "all other llama.cpp options are also accepted.\n"
-           "run llamafile --server --help to see the full list.\n"
-           "\n"
-           "examples:\n"
+           "\n");
+    if (show_full_list_hint) {
+        printf("all other llama.cpp options are also accepted.\n"
+               "run `llamafile --cli --help` to see the full list.\n"
+               "\n");
+    }
+    printf("examples:\n"
            "  llamafile -m model.gguf --cli -p \"explain quantum computing\"\n"
            "  llamafile -m model.gguf --cli --nothink -p \"write a haiku\"\n"
            "  llamafile -m model.gguf --cli --mmproj mm.gguf --image photo.jpg -p \"describe this\"\n");
@@ -298,20 +386,30 @@ int main(int argc, char **argv) {
     lf::LlamafileArgs args = lf::parse_llamafile_args(argc, argv);
 
     // Handle --help for llamafile modes.
-    // --server --help falls through to llama.cpp's help system.
+    // --server --help falls through to llama.cpp's help system (server_main).
+    // All other modes print llamafile's intro (modes + llamafile-specific
+    // flags) and then delegate to llama.cpp's argument parser to print the
+    // full, categorized list of accepted options (common/sampling/spec/
+    // example-specific). This keeps --help in sync with what llamafile
+    // actually accepts instead of maintaining a hand-written copy.
     if (llamafile_has(argv, "--help") || llamafile_has(argv, "-h")) {
         switch (args.mode) {
             case lf::ProgramMode::SERVER:
-                break; // fall through to llama.cpp's help
+                break; // fall through to llama.cpp's server help
             case lf::ProgramMode::AUTO:
-                print_general_help();
-                return 0;
+                // Combined mode: args go to the HTTP server, so show the
+                // llamafile intro followed by llama.cpp's server option list.
+                print_general_help(false);
+                print_llama_cpp_usage(args.mode, args);
+                return 0; // unreachable; print_llama_cpp_usage() exits
             case lf::ProgramMode::CHAT:
-                print_chat_help();
-                return 0;
+                print_chat_help(false);
+                print_llama_cpp_usage(args.mode, args);
+                return 0; // unreachable; print_llama_cpp_usage() exits
             case lf::ProgramMode::CLI:
-                print_cli_help();
-                return 0;
+                print_cli_help(false);
+                print_llama_cpp_usage(args.mode, args);
+                return 0; // unreachable; print_llama_cpp_usage() exits
         }
     }
 
@@ -323,16 +421,16 @@ int main(int argc, char **argv) {
         fprintf(stderr, "error: missing required -m MODEL.gguf\n\n");
         switch (args.mode) {
             case lf::ProgramMode::SERVER:
-                print_general_help();
+                print_server_help(true);
                 break;
             case lf::ProgramMode::AUTO:
-                print_general_help();
+                print_general_help(true);
                 break;
             case lf::ProgramMode::CHAT:
-                print_chat_help();
+                print_chat_help(true);
                 break;
             case lf::ProgramMode::CLI:
-                print_cli_help();
+                print_cli_help(true);
                 break;
         }
         return 1;
