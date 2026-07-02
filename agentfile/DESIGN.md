@@ -204,9 +204,12 @@ o//llamafile/zipalign -j0 my-agent model.gguf system.md
    session by importing it into pi.
 3. **HTTPS**: done — #1011 on main + agentfile BUILD.mk flags/mbedtls.a;
    smoke-tested (real fetch works, bad certs rejected).
-4. **web_search**: searxng tool per §5 (done; test against a real https
-   instance when one is available).
+4. **web_search**: done — validated against a mock and against a real
+   SearXNG instance (`http://raspi:8888`, 2026-07-02: query → 8 capped
+   results from 10, model cited them correctly).
 5. **`--interactive`** continuation mode.
+5b. **Full llama.cpp parameter surface** + two-tier help + `-hf`/HF cache
+   (see follow-up section below).
 6. **Packaging**: document + smoke-test the zipalign recipe end-to-end on
    a second machine; `--name/--description`; pack-time prewarmed KV cache
    (`--warm-cache`/`--load-cache`).
@@ -218,6 +221,39 @@ o//llamafile/zipalign -j0 my-agent model.gguf system.md
 
 Dropped for now: upstream PRs to agent.cpp (patches maintained locally;
 pin already at upstream HEAD).
+
+## Follow-up: full llama.cpp parameter surface + two-tier help
+
+Decision (2026-07-02): don't cherry-pick `-hf` — adopt **all** of
+llama.cpp's parameters, mirroring llamafile's design (see
+`llamafile/main.cpp:106-155`):
+
+- **Arg split**: parse agentfile-specific flags first (`-p`, `-s`,
+  `--system-file`, `--tools`, `--yes/--confirm`, `--session`, `--trace`,
+  `--searxng-url`, `--max-iterations`, `-i`, verbosity) and strip them;
+  feed the remainder to `common_params_parse(..., LLAMA_EXAMPLE_CLI)`
+  into a `common_params`. (llamafile does this split in
+  `llamafile/args.cpp` — reuse the approach.)
+- **Two-tier help**: run with no/insufficient args → short hand-written
+  agentfile help only. Explicit `--help`/`-h` → short help, then delegate
+  to `common_params_parse()` which prints the full categorized llama.cpp
+  catalogue and exits. Delegation (not a copy) is what prevents drift.
+- **Model resolution**: `-hf REPO[:TAG]` / `-m` / URLs come free via
+  `params.model`; call `common_download_model(params.model, opts)`
+  (common/download.h — HF cache for repos, ETag cache for URLs, split
+  GGUFs, `--offline` support; `common_list_cached_models()` for a
+  future `--list-models`). Feed `result.model_path` to
+  `ModelWeights::create`. HTTPS (#1011) is what makes downloads work.
+- **Main integration question**: agent.cpp's `ModelConfig` is a narrow
+  subset of `common_params` (temp/top_k/top_p/min_p/seed/n_ctx/n_batch/
+  cache types). Map what exists; for the rest (`-ngl`, flash-attn, etc.)
+  either extend agent.cpp's Model to accept `common_params`
+  (upstream-worthy) or document unsupported flags. Decide at
+  implementation time.
+- **Caveats**: make sure download progress reaches stderr despite the
+  silenced llama log callback; packaging variant — a shared agent's
+  `.args` can carry `-hf repo:tag` instead of an embedded model (small
+  file, fetched/cached on first run).
 
 ## Open items (defaults chosen, veto anytime)
 
