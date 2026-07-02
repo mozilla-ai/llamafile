@@ -47,9 +47,9 @@ otherwise; only an explicit `--backend metal` makes a missing Metal
 device an error, reported by transcribe.cpp.
 
 GPU-side logging (device init banners, per-run Metal pipeline-state
-creation) is routed to a null sink by default, like llamafile without
-`--verbose`; set `TRANSCRIBEFILE_GPU_VERBOSE=1` to see it, along with
-the loader's own diagnostics, when debugging GPU problems.
+creation) is suppressed by default; pass `--verbose` — same flag as
+llamafile — to see it, along with the loader's own diagnostics, when
+debugging GPU problems.
 
 ## Self-contained model bundles
 

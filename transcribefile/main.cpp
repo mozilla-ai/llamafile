@@ -40,6 +40,21 @@ static bool has_flag(char ** argv, const char * flag) {
     return false;
 }
 
+// Remove `flag` from argv (first occurrence) and report whether it was
+// there. For flags the wrapper owns, like --verbose: upstream's CLI
+// errors out on options it doesn't know, so these must not be forwarded.
+static bool consume_flag(char ** argv, const char * flag) {
+    for (char ** p = argv + 1; p && *p; ++p) {
+        if (!strcmp(*p, flag)) {
+            do {
+                p[0] = p[1];
+            } while (*p++);
+            return true;
+        }
+    }
+    return false;
+}
+
 // Appended to upstream's usage text (same stream: stderr) so the flags
 // and behaviors added by this wrapper are discoverable from --help.
 static void print_wrapper_help(void) {
@@ -47,12 +62,13 @@ static void print_wrapper_help(void) {
             "\n"
             "transcribefile options:\n"
             "  --version             print transcribefile version and exit\n"
+            "  --verbose             show GPU loader and backend logging\n"
+            "                        (suppressed by default)\n"
             "transcribefile notes:\n"
             "  GPU backends wired up in this build: metal (macOS on Apple\n"
             "  Silicon; used by --backend auto/metal, first run compiles\n"
             "  ggml-metal.dylib and caches it under ~/.transcribefile).\n"
-            "  vulkan and cuda are not available yet. GPU logging is\n"
-            "  suppressed; set TRANSCRIBEFILE_GPU_VERBOSE=1 to see it.\n"
+            "  vulkan and cuda are not available yet.\n"
             "  Default arguments are read from .args in the executable's zip\n"
             "  store (one per line), so models can be bundled with zipalign.\n");
 }
@@ -85,14 +101,10 @@ static void load_gpu_backends(char ** argv) {
     // init banners plus one "compiling pipeline" DEBUG line per kernel on
     // EVERY run (pipeline-state objects live in an in-memory cache only,
     // so each process recreates them; the on-disk dylib cache is a
-    // different layer). Route the dylib's logging to the null sink, as
-    // llamafile does when not run with --verbose. Since transcribefile
-    // has no verbose flag of its own, TRANSCRIBEFILE_GPU_VERBOSE=1
-    // restores the chatter (and the loader's llamafile_info diagnostics)
-    // for debugging GPU problems.
-    if (getenv("TRANSCRIBEFILE_GPU_VERBOSE")) {
-        FLAG_verbose = 1;
-    } else {
+    // different layer). Route the dylib's logging to the null sink unless
+    // --verbose was given, exactly like llamafile: FLAG_verbose also
+    // unlocks the loader's own llamafile_info diagnostics.
+    if (!FLAG_verbose) {
         llamafile_metal_log_set(llamafile_log_callback_null, nullptr);
     }
     FLAG_gpu = LLAMAFILE_GPU_AUTO;
@@ -120,6 +132,14 @@ int main(int argc, char ** argv) {
     // Merge default arguments embedded at /zip/.args (if present) with the
     // user's argv. No-op for a bare executable with no bundled .args.
     argc = cosmo_args("/zip/.args", &argv);
+
+    // Wrapper-owned flag, same meaning as llamafile's --verbose: GPU
+    // loader diagnostics and dylib logging. Consumed here because the
+    // upstream CLI rejects options it doesn't know.
+    if (consume_flag(argv, "--verbose")) {
+        FLAG_verbose = 1;
+        --argc;
+    }
 
     // --help never needs a compute device: printing usage should not pay
     // the Metal dylib build/load latency or emit device-init logs, so the
