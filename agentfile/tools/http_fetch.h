@@ -9,13 +9,12 @@
 // in the spirit of "if we added an HTTP client tool we'd already go a
 // long way" (project brief).
 //
+// HTTPS is supported since llamafile compiles cpp-httplib with its
+// Mbed TLS backend (CPPHTTPLIB_MBEDTLS_SUPPORT, PR #1011); agentfile's
+// BUILD.mk defines the same macro so the class layouts match.
+//
 // v0.5 limitations:
 //   - GET only. POST/PUT/etc. deferred.
-//   - HTTP only. HTTPS requires cpp-httplib to be built with mbedtls /
-//     OpenSSL support. llamafile ships mbedtls but cpp-httplib is not
-//     compiled with CPPHTTPLIB_MBEDTLS_SUPPORT today — wiring that up
-//     is a separate build-system task. https:// URLs return a clear
-//     error pointing at this limitation.
 //   - Response body capped at 16 KB; rest is truncated and marked.
 //   - Single global timeout (30s).
 //
@@ -47,7 +46,7 @@ class HttpFetchTool : public agent_cpp::Tool {
             {"type", "object"},
             {"properties", {
                 {"url",     {{"type", "string"},
-                             {"description", "HTTP URL to fetch (http:// only in v0.5)"}}},
+                             {"description", "HTTP or HTTPS URL to fetch"}}},
                 {"headers", {{"type", "object"},
                              {"description", "Optional request headers as name->value map"}}},
             }},
@@ -55,7 +54,7 @@ class HttpFetchTool : public agent_cpp::Tool {
         };
         return {"http_fetch",
                 "Fetch a URL with HTTP GET and return status + headers + body. "
-                "HTTPS is not yet supported. Response body is capped at 16 KB. "
+                "Response body is capped at 16 KB. "
                 "Use sparingly — this tool grants the model network access.",
                 schema.dump()};
     }

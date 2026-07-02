@@ -20,6 +20,7 @@
 #include "grep_search.h"
 #include "http_fetch.h"
 #include "read_file.h"
+#include "web_search.h"
 #include "write_file.h"
 
 #include <memory>
@@ -41,14 +42,19 @@ build_readonly_tools() {
 
 // Build the full default v0 tool set: read-only + destructive.
 // Pair with DestructiveOpsConfirmationCallback for safety prompts.
+// web_search is only registered when a SearXNG base URL is configured
+// (--searxng-url / SEARXNG_URL) — the model never picks the instance.
 inline std::vector<std::unique_ptr<agent_cpp::Tool>>
-build_default_tools() {
+build_default_tools(const std::string &searxng_url = "") {
     auto tools = build_readonly_tools();
     tools.emplace_back(std::make_unique<WriteFileTool>());
     tools.emplace_back(std::make_unique<EditFileTool>());
     tools.emplace_back(std::make_unique<ApplyDiffTool>());
     tools.emplace_back(std::make_unique<ExecShellCommandTool>());
     tools.emplace_back(std::make_unique<HttpFetchTool>());
+    if (!searxng_url.empty()) {
+        tools.emplace_back(std::make_unique<WebSearchTool>(searxng_url));
+    }
     return tools;
 }
 

@@ -33,6 +33,7 @@
 #include <memory>
 #include <set>
 #include <string>
+#include <unistd.h>
 #include <vector>
 
 #ifdef COSMOCC
@@ -51,7 +52,9 @@
 #include "llamafile.h"
 
 #include "confirmation_callback.h"
+#include "session_recorder.h"
 #include "stdout_callback.h"
+#include "trace_callback.h"
 #include "tools/tools.h"
 
 #include <sstream>
@@ -66,21 +69,49 @@ void print_usage(const char *prog) {
             "\n"
             "Usage:\n"
             "  %s -m MODEL.gguf -p \"prompt\" [options]\n"
+            "  echo \"prompt\" | %s -m MODEL.gguf [options]\n"
             "\n"
             "Options:\n"
             "  -m PATH              Path to a GGUF model file (required)\n"
-            "  -p TEXT              User prompt (required)\n"
+            "  -p TEXT              User prompt (read from stdin if omitted\n"
+            "                       and stdin is not a terminal)\n"
             "  -s TEXT              System instructions (default: helpful assistant)\n"
+            "  --system-file PATH   Read system instructions from a file\n"
+            "                       (works with /zip/ paths in packaged agents)\n"
             "  --tools LIST         Comma-separated tool list, or \"all\" (default),\n"
             "                       or \"read_only\". Available tools:\n"
             "                       read_file, file_glob_search, grep_search,\n"
             "                       get_datetime, write_file, edit_file,\n"
-            "                       apply_diff, exec_shell_command, http_fetch\n"
+            "                       apply_diff, exec_shell_command, http_fetch,\n"
+            "                       web_search (needs --searxng-url)\n"
+            "  --searxng-url URL    SearXNG instance for web_search; also read\n"
+            "                       from the SEARXNG_URL environment variable\n"
+            "  --session FILE       Record the conversation as a pi session\n"
+            "                       (https://pi.dev, session-format v3 JSONL;\n"
+            "                       overwrites FILE)\n"
+            "  --trace FILE         Record spans as OTLP/JSON lines (OpenTelemetry\n"
+            "                       collector `otlpjsonfile` receiver format;\n"
+            "                       overwrites FILE)\n"
             "  --yes                Skip confirmation prompts for destructive tools\n"
+            "  --confirm            Re-enable confirmation prompts (inverse of\n"
+            "                       --yes; later flag wins)\n"
             "  --max-iterations N   Cap agent loop at N LLM calls (default: unlimited)\n"
             "  --quiet              Don't print tool-execution progress to stderr\n"
-            "  -h                   Show this help\n",
-            prog);
+            "  -v, --verbose        Also print truncated tool results to stderr\n"
+            "  -h                   Show this help\n"
+            "\n"
+            "Exit codes: 0 ok, 1 usage error, 2 agent error, 3 other error,\n"
+            "            4 --max-iterations cap reached\n",
+            prog, prog);
+}
+
+// Read a whole FILE* into a string.
+bool slurp(FILE *f, std::string &out) {
+    char buf[4096];
+    size_t n;
+    while ((n = fread(buf, 1, sizeof(buf), f)) > 0)
+        out.append(buf, n);
+    return !ferror(f);
 }
 
 // Filter a tool vector by name list. Tools whose name is NOT in `keep` are
@@ -126,30 +157,86 @@ int main(int argc, char **argv) {
     std::string instructions =
         "You are a helpful assistant. Answer concisely.";
     bool always_yes = false;
-    bool quiet = false;
+    int verbosity = 1;       // 0 = --quiet, 1 = default, 2 = --verbose
     int max_iterations = 0;  // 0 = no cap
     std::string tools_spec = "all";
+    std::string session_path;
+    std::string trace_path;
+    std::string searxng_url;
+    if (const char *env = std::getenv("SEARXNG_URL")) searxng_url = env;
 
+    // Parsing is strictly last-wins and every mode flag has an inverse, so
+    // defaults baked into a packaged agent's /zip/.args (which cosmo_args
+    // prepends before the real command line) can always be overridden.
+    auto need_value = [&](int &i) -> const char * {
+        if (i + 1 >= argc) {
+            fprintf(stderr, "agentfile: %s requires a value\n", argv[i]);
+            exit(1);
+        }
+        return argv[++i];
+    };
     for (int i = 1; i < argc; ++i) {
-        if (std::strcmp(argv[i], "-m") == 0 && i + 1 < argc) {
-            model_path = argv[++i];
-        } else if (std::strcmp(argv[i], "-p") == 0 && i + 1 < argc) {
-            prompt = argv[++i];
-        } else if (std::strcmp(argv[i], "-s") == 0 && i + 1 < argc) {
-            instructions = argv[++i];
-        } else if (std::strcmp(argv[i], "--tools") == 0 && i + 1 < argc) {
-            tools_spec = argv[++i];
+        if (std::strcmp(argv[i], "-m") == 0) {
+            model_path = need_value(i);
+        } else if (std::strcmp(argv[i], "-p") == 0) {
+            prompt = need_value(i);
+        } else if (std::strcmp(argv[i], "-s") == 0) {
+            instructions = need_value(i);
+        } else if (std::strcmp(argv[i], "--system-file") == 0) {
+            const char *path = need_value(i);
+            FILE *f = fopen(path, "r");
+            if (!f) {
+                fprintf(stderr, "agentfile: --system-file: cannot open %s\n",
+                        path);
+                return 1;
+            }
+            instructions.clear();
+            bool ok = slurp(f, instructions);
+            fclose(f);
+            if (!ok) {
+                fprintf(stderr, "agentfile: --system-file: error reading %s\n",
+                        path);
+                return 1;
+            }
+        } else if (std::strcmp(argv[i], "--tools") == 0) {
+            tools_spec = need_value(i);
+        } else if (std::strcmp(argv[i], "--searxng-url") == 0) {
+            searxng_url = need_value(i);
+        } else if (std::strcmp(argv[i], "--session") == 0) {
+            session_path = need_value(i);
+        } else if (std::strcmp(argv[i], "--trace") == 0) {
+            trace_path = need_value(i);
         } else if (std::strcmp(argv[i], "--yes") == 0) {
             always_yes = true;
+        } else if (std::strcmp(argv[i], "--confirm") == 0) {
+            always_yes = false;
         } else if (std::strcmp(argv[i], "--quiet") == 0) {
-            quiet = true;
-        } else if (std::strcmp(argv[i], "--max-iterations") == 0 && i + 1 < argc) {
-            max_iterations = std::atoi(argv[++i]);
+            verbosity = 0;
+        } else if (std::strcmp(argv[i], "-v") == 0 ||
+                   std::strcmp(argv[i], "--verbose") == 0) {
+            verbosity = 2;
+        } else if (std::strcmp(argv[i], "--max-iterations") == 0) {
+            max_iterations = std::atoi(need_value(i));
         } else if (std::strcmp(argv[i], "-h") == 0 ||
                    std::strcmp(argv[i], "--help") == 0) {
             print_usage(argv[0]);
             return 0;
+        } else {
+            fprintf(stderr, "agentfile: unknown argument: %s\n\n", argv[i]);
+            print_usage(argv[0]);
+            return 1;
         }
+    }
+
+    // No -p and stdin is piped: the pipe is the prompt.
+    if (prompt.empty() && !isatty(STDIN_FILENO)) {
+        if (!slurp(stdin, prompt)) {
+            fprintf(stderr, "agentfile: error reading prompt from stdin\n");
+            return 1;
+        }
+        while (!prompt.empty() &&
+               (prompt.back() == '\n' || prompt.back() == '\r'))
+            prompt.pop_back();
     }
 
     if (model_path.empty() || prompt.empty()) {
@@ -172,16 +259,37 @@ int main(int argc, char **argv) {
         cfg.n_batch = 256;  // agent.cpp's default of -1 doesn't play with llama_context
         auto model = agent_cpp::Model::create_with_weights(weights, cfg);
 
-        auto tools = agentfile::tools::build_default_tools();
+        auto tools = agentfile::tools::build_default_tools(searxng_url);
         filter_tools(tools, parse_tools_flag(tools_spec));
 
+        // Model name for session/trace records: the GGUF basename.
+        std::string model_name = model_path;
+        if (auto slash = model_name.find_last_of('/');
+            slash != std::string::npos)
+            model_name.erase(0, slash + 1);
+
         std::vector<std::unique_ptr<agent_cpp::Callback>> callbacks;
+        // The session recorder goes first: it assigns ids to tool calls
+        // whose chat template omitted them, and later callbacks (and the
+        // conversation itself) should see those ids.
+        if (!session_path.empty()) {
+            callbacks.emplace_back(
+                std::make_unique<agentfile::SessionRecorderCallback>(
+                    session_path, model_name));
+        }
         callbacks.emplace_back(
             std::make_unique<agentfile::DestructiveOpsConfirmationCallback>(
                 always_yes));
-        if (!quiet) {
+        if (verbosity > 0) {
             callbacks.emplace_back(
-                std::make_unique<agentfile::ProgressCallback>());
+                std::make_unique<agentfile::ProgressCallback>(verbosity > 1));
+        }
+        // The trace callback goes after the confirmation prompt so tool
+        // spans measure execution, not the time the user spent deciding.
+        if (!trace_path.empty()) {
+            callbacks.emplace_back(
+                std::make_unique<agentfile::OtlpTraceCallback>(trace_path,
+                                                               model_name));
         }
         if (max_iterations > 0) {
             callbacks.emplace_back(
@@ -200,6 +308,9 @@ int main(int argc, char **argv) {
         std::string reply = agent.run_loop(messages);
         fputs(reply.c_str(), stdout);
         fputc('\n', stdout);
+    } catch (const agentfile::MaxIterationsExceeded &e) {
+        fprintf(stderr, "%s\n", e.what());
+        return 4;
     } catch (const agent_cpp::Error &e) {
         fprintf(stderr, "agentfile error: %s\n", e.what());
         return 2;

@@ -28,6 +28,8 @@ PKGS += AGENTFILE
 AGENTFILE_SRCS_CPP := \
 	agentfile/agentfile.cpp
 
+AGENTFILE_HDRS := $(wildcard agentfile/*.h) $(wildcard agentfile/tools/*.h)
+
 AGENTFILE_OBJS := $(AGENTFILE_SRCS_CPP:%.cpp=o/$(MODE)/%.o)
 
 # ==============================================================================
@@ -51,7 +53,15 @@ AGENTFILE_INCLUDES := \
 AGENTFILE_CPPFLAGS := $(AGENTFILE_INCLUDES) \
 	-DLLAMAFILE_VERSION_STRING=\"$(LLAMAFILE_VERSION_STRING)\"
 
-o/$(MODE)/agentfile/%.o: agentfile/%.cpp agentfile/BUILD.mk
+# cpp-httplib is built with its Mbed TLS backend (see the HTTPS section in
+# llama.cpp.patches/llamafile-files/BUILD.mk). The macro changes httplib
+# class layouts, so agentfile objects that include httplib.h (http_fetch,
+# web_search) must define it too, and the executable must link mbedtls.a.
+AGENTFILE_CPPFLAGS += \
+	-DCPPHTTPLIB_MBEDTLS_SUPPORT \
+	-isystem third_party/mbedtls/include
+
+o/$(MODE)/agentfile/%.o: agentfile/%.cpp agentfile/BUILD.mk $(AGENTFILE_HDRS)
 	@mkdir -p $(@D)
 	$(COMPILE.cc) $(AGENTFILE_CPPFLAGS) -frtti -fexceptions -o $@ $<
 
@@ -71,12 +81,13 @@ o/$(MODE)/agentfile/agentfile: \
 		$(AGENTFILE_OBJS) \
 		o/$(MODE)/agent.cpp/agent.cpp.a \
 		o/$(MODE)/llama.cpp/llama.cpp.a \
+		o/$(MODE)/third_party/mbedtls/mbedtls.a \
 		$(TOOL_LLAMAFILE_OBJS) \
 		$(LLAMAFILE_METAL_SOURCES) \
 		$(TINYBLAS_CPU_OBJS) \
 		$(HTTPLIB_OBJS)
 	@mkdir -p $(@D)
-	$(LINK.o) $(AGENTFILE_OBJS) o/$(MODE)/agent.cpp/agent.cpp.a $(TOOL_LLAMAFILE_OBJS) $(LLAMAFILE_METAL_SOURCES) $(TINYBLAS_CPU_OBJS) $(HTTPLIB_OBJS) o/$(MODE)/llama.cpp/llama.cpp.a $(LOADLIBES) $(LDLIBS) -fopenmp -lpthread -o $@
+	$(LINK.o) $(AGENTFILE_OBJS) o/$(MODE)/agent.cpp/agent.cpp.a $(TOOL_LLAMAFILE_OBJS) $(LLAMAFILE_METAL_SOURCES) $(TINYBLAS_CPU_OBJS) $(HTTPLIB_OBJS) o/$(MODE)/llama.cpp/llama.cpp.a o/$(MODE)/third_party/mbedtls/mbedtls.a $(LOADLIBES) $(LDLIBS) -fopenmp -lpthread -o $@
 
 # ==============================================================================
 # Dependencies

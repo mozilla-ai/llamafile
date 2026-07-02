@@ -20,6 +20,7 @@
 #include <iostream>
 #include <set>
 #include <string>
+#include <unistd.h>
 
 namespace agentfile {
 
@@ -32,10 +33,11 @@ class DestructiveOpsConfirmationCallback : public agent_cpp::Callback {
             "edit_file",
             "apply_diff",
             "exec_shell_command",
-            // http_fetch grants the model network access (DNS leaks, can hit
-            // internal endpoints, may leak tokens in URLs). Confirmation by
-            // default; --yes bypasses.
+            // Network tools grant the model network access (DNS leaks, can
+            // hit internal endpoints, may leak data in URLs). Confirmation
+            // by default; --yes bypasses.
             "http_fetch",
+            "web_search",
         };
         return s;
     }
@@ -57,10 +59,25 @@ class DestructiveOpsConfirmationCallback : public agent_cpp::Callback {
         std::fprintf(stderr, "Allow? [y/N]: ");
         std::fflush(stderr);
 
+        // When the prompt was piped in, stdin is consumed/EOF — ask on the
+        // controlling terminal instead. No terminal at all (CI, cron) means
+        // the answer is a decline; use --yes for unattended runs.
         std::string line;
-        if (!std::getline(std::cin, line)) {
+        bool got = false;
+        if (isatty(STDIN_FILENO)) {
+            got = (bool)std::getline(std::cin, line);
+        } else if (FILE *tty = std::fopen("/dev/tty", "r")) {
+            char buf[256];
+            if (std::fgets(buf, sizeof(buf), tty)) {
+                line = buf;
+                got = true;
+            }
+            std::fclose(tty);
+        }
+        if (!got) {
             throw agent_cpp::ToolExecutionSkipped(
-                "user cancelled (stdin closed)");
+                "user cancelled (no terminal to confirm on; use --yes for "
+                "unattended runs)");
         }
         char c = line.empty() ? 'n' : (char)std::tolower((unsigned char)line[0]);
         if (c != 'y') {
