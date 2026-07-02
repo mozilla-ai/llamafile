@@ -51,7 +51,8 @@ static void print_wrapper_help(void) {
             "  GPU backends wired up in this build: metal (macOS on Apple\n"
             "  Silicon; used by --backend auto/metal, first run compiles\n"
             "  ggml-metal.dylib and caches it under ~/.transcribefile).\n"
-            "  vulkan and cuda are not available yet.\n"
+            "  vulkan and cuda are not available yet. GPU logging is\n"
+            "  suppressed; set TRANSCRIBEFILE_GPU_VERBOSE=1 to see it.\n"
             "  Default arguments are read from .args in the executable's zip\n"
             "  store (one per line), so models can be bundled with zipalign.\n");
 }
@@ -79,6 +80,20 @@ static void load_gpu_backends(char ** argv) {
     if (strcmp(backend, "auto") != 0 && strcmp(backend, "metal") != 0) {
         FLAG_gpu = LLAMAFILE_GPU_DISABLE;
         return;
+    }
+    // The Metal dylib logs through ggml's default stderr callback: device
+    // init banners plus one "compiling pipeline" DEBUG line per kernel on
+    // EVERY run (pipeline-state objects live in an in-memory cache only,
+    // so each process recreates them; the on-disk dylib cache is a
+    // different layer). Route the dylib's logging to the null sink, as
+    // llamafile does when not run with --verbose. Since transcribefile
+    // has no verbose flag of its own, TRANSCRIBEFILE_GPU_VERBOSE=1
+    // restores the chatter (and the loader's llamafile_info diagnostics)
+    // for debugging GPU problems.
+    if (getenv("TRANSCRIBEFILE_GPU_VERBOSE")) {
+        FLAG_verbose = 1;
+    } else {
+        llamafile_metal_log_set(llamafile_log_callback_null, nullptr);
     }
     FLAG_gpu = LLAMAFILE_GPU_AUTO;
     llamafile_has_metal();

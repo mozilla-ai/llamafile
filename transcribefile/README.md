@@ -17,7 +17,7 @@ make setup                                   # once: submodules + patches
 .cosmocc/4.0.2/bin/make -j8 o//transcribefile
 
 wget https://huggingface.co/handy-computer/parakeet-tdt-0.6b-v3-gguf/resolve/main/parakeet-tdt-0.6b-v3-Q4_K_M.gguf
-o//transcribefile/transcribefile -m parakeet-tdt-0.6b-v3-Q4_K_M.gguf samples/jfk.wav
+o//transcribefile/transcribefile -m parakeet-tdt-0.6b-v3-Q4_K_M.gguf transcribe.cpp/samples/jfk.wav
 ```
 
 Input audio is 16 kHz mono WAV (`transcribe.cpp/samples/` has many examples).
@@ -26,7 +26,7 @@ Run with `--help` for the full option list.
 
 ## GPU support
 
-Backend selection is upstream transcribe.cpp's `--backend` flag
+Backend selection is done via transcribe.cpp's `--backend` flag
 (`auto|cpu|cpu_accel|metal|vulkan|cuda`, plus `--device` and
 `--list-devices`). What this build actually wires up:
 
@@ -46,17 +46,22 @@ default), Metal is used when available and the run falls back to CPU
 otherwise; only an explicit `--backend metal` makes a missing Metal
 device an error, reported by transcribe.cpp.
 
+GPU-side logging (device init banners, per-run Metal pipeline-state
+creation) is routed to a null sink by default, like llamafile without
+`--verbose`; set `TRANSCRIBEFILE_GPU_VERBOSE=1` to see it, along with
+the loader's own diagnostics, when debugging GPU problems.
+
 ## Self-contained model bundles
 
 Models can be embedded in the executable, llamafile-style, using a
 `.args` file for default arguments:
 
 ```sh
-printf -- '-m\n/zip/model.gguf\n' > .args
-cp o//transcribefile/transcribefile my.transcribefile
-o//third_party/zipalign/zipalign -j0 my.transcribefile model.gguf .args
+printf -- '-m\n/zip/parakeet-tdt-0.6b-v3-Q4_K_M.gguf\n...\n' > .args
+cp o//transcribefile/transcribefile parakeet-tdt-0.6b-v3-Q4_K_M.transcribefile
+o//third_party/zipalign/zipalign -j0 parakeet-tdt-0.6b-v3-Q4_K_M.transcribefile parakeet-tdt-0.6b-v3-Q4_K_M.gguf .args
 
-./my.transcribefile audio.wav      # no -m needed
+./parakeet-tdt-0.6b-v3-Q4_K_M.transcribefile audio.wav      # no -m needed
 ```
 
 Command-line arguments still override the embedded defaults.
