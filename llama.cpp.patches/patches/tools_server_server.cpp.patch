@@ -52,7 +52,7 @@ diff --git a/tools/server/server.cpp b/tools/server/server.cpp
      common_init();
  
      if (!common_params_parse(argc, argv, params, LLAMA_EXAMPLE_SERVER)) {
-@@ -309,6 +326,13 @@ int llama_server(int argc, char ** argv) {
+@@ -332,6 +349,13 @@ int llama_server(int argc, char ** argv) {
              // this will unblock start_loop()
              ctx_server.terminate();
          };
@@ -66,7 +66,7 @@ diff --git a/tools/server/server.cpp b/tools/server/server.cpp
      }
  
      // TODO: refactor in common/console
-@@ -339,6 +363,11 @@ int llama_server(int argc, char ** argv) {
+@@ -368,6 +392,11 @@ int llama_server(int argc, char ** argv) {
      } else {
          SRV_INF("server is listening on %s\n", ctx_http.listening_address.c_str());
  
@@ -77,8 +77,8 @@ diff --git a/tools/server/server.cpp b/tools/server/server.cpp
 +
          // optionally, notify router server that this instance is ready
          std::thread monitor_thread;
-         if (server_models::is_child_server()) {
-@@ -363,5 +392,48 @@ int llama_server(int argc, char ** argv) {
+         if (child.is_child()) {
+@@ -392,5 +421,48 @@ int llama_server(int argc, char ** argv) {
          }
      }
  

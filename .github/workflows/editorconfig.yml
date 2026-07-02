@@ -4,7 +4,7 @@ on:
   workflow_dispatch: # allows manual triggering
     inputs:
       create_release:
-        description: 'Create new release'
+        description: "Create new release"
         required: true
         type: boolean
   push:
@@ -22,6 +22,6 @@ jobs:
   editorconfig:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: editorconfig-checker/action-editorconfig-checker@main
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: editorconfig-checker/action-editorconfig-checker@840e866d93b8e032123c23bac69dece044d4d84c # v2.2.0
       - run: editorconfig-checker

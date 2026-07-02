@@ -1,7 +1,7 @@
 diff --git a/common/log.cpp b/common/log.cpp
 --- a/llama.cpp/common/log.cpp
 +++ b/llama.cpp/common/log.cpp
-@@ -19,6 +19,7 @@
+@@ -24,6 +24,7 @@
  #    define fileno _fileno
  #else
  #    include <unistd.h>
@@ -9,12 +9,12 @@ diff --git a/common/log.cpp b/common/log.cpp
  #endif // defined(_WIN32)
  
  int common_log_verbosity_thold = LOG_DEFAULT_LLAMA;
-@@ -260,10 +261,33 @@ public:
+@@ -265,9 +266,32 @@ public:
          running = true;
  
          thrd = std::thread([this]() {
 +#if !defined(_WIN32)
-+            // Block every signal on this thread so pthread_cond_timedwait()
++            // Block every signal on this thread so the condition-variable wait
 +            // can't be interrupted with EINTR (libcxx rethrows EINTR as
 +            // std::system_error which would std::terminate the process).
 +            // Keep synchronous fault signals deliverable so real crashes
@@ -31,16 +31,15 @@ diff --git a/common/log.cpp b/common/log.cpp
 +            pthread_sigmask(SIG_BLOCK, &block_mask, nullptr);
 +#endif
              while (true) {
-                 {
-                     std::unique_lock<std::mutex> lock(mtx);
--                    cv.wait(lock, [this]() { return head != tail; });
-+                    // Use wait_for() instead of wait() to work around a
-+                    // Cosmopolitan libc bug where untimed futex waits on
-+                    // XNU (macOS) expire after ~72 minutes, causing
-+                    // condition_variable::wait() to throw ETIMEDOUT.
-+                    while (head == tail) {
-+                        cv.wait_for(lock, std::chrono::seconds(30));
-+                    }
-                     cur = entries[head];
+                 std::unique_lock<std::mutex> lock(mtx);
+-                cv_new.wait(lock, [this]() { return !is_empty(); });
++                // Use wait_for() instead of an untimed wait to work around a
++                // Cosmopolitan libc bug where untimed futex waits on XNU
++                // (macOS) expire after ~72 minutes, causing
++                // condition_variable::wait() to throw ETIMEDOUT.
++                while (is_empty()) {
++                    cv_new.wait_for(lock, std::chrono::seconds(30));
++                }
  
-                     head = (head + 1) % entries.size();
+                 size_t cached_head = head;
+                 size_t cached_tail = tail;

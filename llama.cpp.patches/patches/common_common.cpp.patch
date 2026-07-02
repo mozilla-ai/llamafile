@@ -69,7 +69,7 @@ diff --git a/common/common.cpp b/common/common.cpp
  #elif defined(__EMSCRIPTEN__)
          GGML_ABORT("not implemented on this platform");
  #else
-@@ -1189,10 +1234,31 @@ common_init_result::common_init_result(common_params & params, bool model_only)
+@@ -1201,10 +1246,31 @@ common_init_result::common_init_result(common_params & params, bool model_only)
      if (params.fit_params) {
          LOG_INF("%s: fitting params to device memory ...\n", __func__);
          LOG_INF("%s: (for bugs during this step try to reproduce them with -fit off, or provide --verbose logs if the bug only occurs with -fit on)\n", __func__);

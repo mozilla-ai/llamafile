@@ -29,22 +29,52 @@ Run a newly compiled llamafile executable this way:
 ./o/llamafile/llamafile --model gguf_model.gguf --server
 ```
 
+#### CLI mode (single prompt, non-interactive)
+
+For a scriptable one-shot generation (e.g. smoke tests), use `--cli`:
+
+```sh
+./o/llamafile/llamafile --cli -m gguf_model.gguf -p "What is the capital of France?"
+```
+
+The wrapper's flags differ from raw llama.cpp — modes are `--cli`, `--server`,
+`--chat`, and the default combined TUI+server. `--cli` requires `-p`; `--gpu`
+takes `auto|apple|amd|nvidia|disable`. When unsure, run `--help` (and
+`--cli --help` etc.) rather than guessing flags.
+
 #### Verbose mode
 
 When debugging, the `--verbose` argument is particularly useful as it adds
 more verbose logging.
 
 
+#### GPU/Metal: stale per-version runtime cache
+
+llamafile compiles GPU backends at runtime and caches them **keyed by the
+version string** under `~/.llamafile/v/<VERSION>/` (on macOS this holds the
+extracted `ggml-metal.*` sources and the compiled `ggml-metal.dylib`). The key
+is the version alone — not the binary's contents or mtime.
+
+Consequence: if you rebuild after changing GPU/Metal code (e.g. a llama.cpp
+bump) **without bumping the llamafile version**, the new binary finds the
+existing `v/<VERSION>/` dir and reuses the **stale** dylib instead of
+recompiling. That ABI/code mismatch looks exactly like a regression — the
+server never reaches `/health`, GPU CLI runs fail — while a `--gpu disable`
+(CPU) run works fine, masking the cause.
+
+Before validating GPU/Metal on a dev machine, force a fresh compile:
+
+- bump the llamafile version (preferred — a release does this anyway), or
+- `rm -rf ~/.llamafile/v/<VERSION>` to drop the stale cache.
+
+Corollary: a CPU-only smoke test (`--gpu disable`) does **not** exercise this
+path. Always run at least one default/GPU invocation when verifying a build on
+GPU-capable hardware.
+
 #### Where can I find GGUF model weights files?
 
-Look for available gguf files in `~/llamafiles/`. Depending on the kind of
-test, prefer:
-
-- `gpt-oss-20b-MXFP4.gguf` for agentic tests
-- `Ministral-3-3B-Instruct-2512-Q4_K_M.gguf` for multimodal tests
-(also look for corresponding `mmproj` projector weights or ask for them)
-- `Qwen3-0.6B-Q8_0.gguf` for any other tests
-
+Look for available gguf files in `~/ggufs/`. If you don't find any or the
+directory is not present, ask the user where you can find them.
 
 
 ### Run All Unit Tests
@@ -54,12 +84,26 @@ Run `llamafile:check` to run all unit tests from the test suite.
 ### Run Integration Tests
 
 ```sh
+# pre-bundled llamafile
 ./tests/integration/run_tests.sh --executable model_name.llamafile
+
+# direct build: executable + model (+ mmproj for multimodal)
+./tests/integration/run_tests.sh \
+    --executable ./o/llamafile/llamafile \
+    --model ~/path/to/model.gguf \
+    --mmproj ~/path/to/mmproj.gguf
 ```
 
 - executable can be a pre-bundled llamafile or just the server executable
 - if running the server executable, `--model` (and `--mmproj` for multimodal models) can be specified too
 - different tests are run to verify the model/server capabilities
+- select categories with `-m` (markers: `cli`, `tui`, `server`, `combined`,
+  `multimodal`, `tool_calling`, `thinking`, `gpu`, `cpu`)
+- **reasoning models** (e.g. Qwen3.x) need `-m "not thinking"` — otherwise the
+  thinking-block assertions derail unrelated tests. Such a model run this way
+  is expected to pass the whole suite.
+- the suite drives the **default GPU path** by default, so it also exercises
+  the Metal/GPU cache caveat above — see "stale per-version cache"
 - more information and a user manual are available in `tests/integration/README.md`
 
 ### Run Specific Test

@@ -1,0 +1,29 @@
+diff --git a/examples/cli/main.cpp b/examples/cli/main.cpp
+--- a/transcribe.cpp/examples/cli/main.cpp
++++ b/transcribe.cpp/examples/cli/main.cpp
+@@ -595,7 +595,11 @@ void log_cb(transcribe_log_level level, const char * msg, void * userdata) {
+ 
+ }  // namespace
+ 
+-int main(int argc, char ** argv) {
++// Core CLI logic. When built with -DTRANSCRIBEFILE this is invoked from
++// transcribefile's own main() (which first loads bundled /zip/.args); the
++// standalone main() below is then dropped so transcribefile owns the entry
++// point. Without -DTRANSCRIBEFILE this builds as a vanilla CLI.
++int transcribe_cli_main(int argc, char ** argv) {
+     cli_args args;
+     if (!parse_args(argc, argv, args)) {
+         print_usage(argv[0]);
+@@ -1284,3 +1288,12 @@ int main(int argc, char ** argv) {
+ 
+     return EXIT_SUCCESS;
+ }
++
++// Standalone entry point. Not compiled into transcribefile (which provides its
++// own main() that also loads bundled /zip/.args), so the vanilla CLI keeps
++// working when built outside the llamafile tree.
++#ifndef TRANSCRIBEFILE
++int main(int argc, char ** argv) {
++    return transcribe_cli_main(argc, argv);
++}
++#endif

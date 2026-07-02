@@ -100,8 +100,17 @@ static void ImportVulkan(void) {
         int count = gpu_call_device_count(g_vulkan.get_device_count);
         llamafile_info("vulkan", "found %d GPU device(s)", count);
     } else if (FLAG_gpu == LLAMAFILE_GPU_VULKAN) {
-        fprintf(stderr, "fatal error: support for --gpu vulkan was explicitly requested, "
-                "but it wasn't available\n");
+        // Vulkan was explicitly requested but the probe found no usable device
+        // (or the driver faulted during probe and was skipped to keep the
+        // process alive -- see gpu_backend.c). Fail loudly rather than
+        // silently downgrade, but tell the user how to proceed.
+        fprintf(stderr,
+                "fatal error: --gpu vulkan was explicitly requested but Vulkan is not "
+                "usable on this system\n"
+                "  - no Vulkan-capable device was detected, or the driver "
+                "failed/crashed during probe and was skipped for safety\n"
+                "  - retry with --gpu auto to use the best available backend "
+                "(falls back to CPU), or --gpu disabled to force CPU\n");
         exit(1);
     }
 }

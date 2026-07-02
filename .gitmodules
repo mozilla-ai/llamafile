@@ -10,3 +10,6 @@
 [submodule "third_party/zipalign"]
 	path = third_party/zipalign
 	url = https://github.com/jart/zipalign.git
+[submodule "transcribe.cpp"]
+	path = transcribe.cpp
+	url = https://github.com/handy-computer/transcribe.cpp.git
