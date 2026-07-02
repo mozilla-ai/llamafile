@@ -5,7 +5,8 @@ serving over HTTPS (--ssl-cert-file/--ssl-key-file), downloading models
 over HTTPS (-hf/--model-url), and rejection of untrusted certificates.
 
 Toggle with the ``ssl`` marker: ``-m ssl`` / ``-m "not ssl"``.
-``test_download_model_over_https`` needs network access (huggingface.co);
+``test_download_model_over_https`` needs network access (huggingface.co)
+and is additionally marked ``online`` (skip with ``-m "not online"``);
 the other tests run fully offline.
 """
 
@@ -148,6 +149,7 @@ class TestHttpsServing:
 class TestHttpsDownload:
     """Model downloads over HTTPS (the client side of TLS support)."""
 
+    @pytest.mark.online
     def test_download_model_over_https(
         self, executable, server_port, timeouts, tmp_path
     ):

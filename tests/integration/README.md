@@ -37,7 +37,8 @@ Use `-m` to select test categories:
 | `thinking` | Thinking model tests (QwQ, DeepSeek-R1, etc.) |
 | `gpu` | GPU acceleration tests |
 | `cpu` | CPU-only tests |
-| `ssl` | HTTPS/TLS tests: serving with `--ssl-cert-file`, model download over HTTPS, untrusted-cert rejection. Needs `openssl` in PATH to generate a test certificate; the download test needs network access (huggingface.co) |
+| `ssl` | HTTPS/TLS tests: serving with `--ssl-cert-file`, model download over HTTPS, untrusted-cert rejection. Needs `openssl` in PATH to generate a test certificate |
+| `online` | Tests that need network access (currently the HTTPS model download). Skip with `-m "not online"` |
 
 Examples:
 
@@ -53,6 +54,9 @@ Examples:
 
 # Run only the HTTPS/TLS tests (or skip them with -m "not ssl")
 ./run_tests.sh --executable ./o/llamafile/llamafile --model model.gguf -m ssl
+
+# Run the HTTPS/TLS tests without the network-dependent ones
+./run_tests.sh --executable ./o/llamafile/llamafile --model model.gguf -m "ssl and not online"
 ```
 
 ## Options
