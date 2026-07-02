@@ -96,8 +96,12 @@ if ! "$APE" --list-devices 2>/dev/null | grep -q 'kind=metal'; then
 fi
 
 # Explicit --backend metal must actually select an MTL device and produce
-# the same transcript as the CPU backend (drop the backend/realtime lines
-# before comparing; they legitimately differ).
+# the same transcript TEXT as the CPU backend. Only the text: fields are
+# compared: word timestamps and token probabilities may legitimately
+# differ across backends — different kernels and accumulation orders give
+# slightly different logits, so near-tie decisions (a timestamp on a
+# frame boundary, a probability rounding) can flip, and quantized models
+# amplify this. The decoded text is expected to be stable.
 mtl=$("$APE" --backend metal -q -m "$MODEL" "$SAMPLE" 2>/dev/null) \
     || fail "metal run exited non-zero"
 echo "$mtl" | grep -qE 'backend:[[:space:]]+MTL' || fail "metal run did not select an MTL device"
@@ -106,7 +110,11 @@ pass "parakeet transcribes jfk.wav on metal"
 
 cpu=$("$APE" --backend cpu -q -m "$MODEL" "$SAMPLE" 2>/dev/null) \
     || fail "cpu run exited non-zero"
-mtl_text=$(echo "$mtl" | grep -vE '^[[:space:]]*(backend|realtime):')
-cpu_text=$(echo "$cpu" | grep -vE '^[[:space:]]*(backend|realtime):')
-[ "$mtl_text" = "$cpu_text" ] || fail "metal and cpu transcripts differ"
+mtl_text=$(echo "$mtl" | grep '^text:')
+cpu_text=$(echo "$cpu" | grep '^text:')
+[ -n "$mtl_text" ] || fail "metal output has no text: line"
+if [ "$mtl_text" != "$cpu_text" ]; then
+    printf 'metal:\n%s\ncpu:\n%s\n' "$mtl_text" "$cpu_text" >&2
+    fail "metal and cpu transcript text differs"
+fi
 pass "metal and cpu transcripts match"
