@@ -251,14 +251,16 @@ class MixMul {
 #endif
 
         case GGML_TYPE_Q1_0:
-            // Upstream Q1_0 uses 128-element blocks (QK1_0=128)
+            // Upstream Q1_0 uses 128-element blocks (QK1_0=128), so the
+            // BS template arg must be 128: mixmat passes cols/BS as the
+            // kernel's per-row block count.
             if (thought->type != GGML_TYPE_F32 && thought->type != GGML_TYPE_Q8_0)
                 return false;
 #if defined(__AVX2__) || defined(__AVX512F__)
-            return mixmat<32, 32, tinyBLAS_Q0_g128_AVX2<NCB | NCC, TC>,
+            return mixmat<128, 128, tinyBLAS_Q0_g128_AVX2<NCB | NCC, TC>,
                           block_q1_0, block_q8_0, TC>();
 #elif defined(__ARM_FEATURE_DOTPROD)
-            return mixmat<32, 32, tinyBLAS_Q0_g128_ARM<NCB | NCC, TC>,
+            return mixmat<128, 128, tinyBLAS_Q0_g128_ARM<NCB | NCC, TC>,
                           block_q1_0, block_q8_0, TC>();
 #else
             return false;

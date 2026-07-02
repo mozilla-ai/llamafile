@@ -3,3 +3,6 @@ root: ./docs
 structure:
   readme: index.md
   summary: SUMMARY.md
+
+redirects:
+  getting-started/example_llamafiles: getting-started/pre-built-llamafiles

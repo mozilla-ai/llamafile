@@ -62,6 +62,20 @@ LLAMAFILE_CPPFLAGS := \
 	-DLLAMAFILE_TUI \
 	-DCOSMOCC=1
 
+# Flags for every TU that includes httplib.h: cpp-httplib is built with its
+# Mbed TLS backend (see llama.cpp/BUILD.mk), and CPPHTTPLIB_MBEDTLS_SUPPORT
+# changes httplib class layouts (e.g. httplib::Result, httplib::Client), so
+# an includer compiled without it corrupts memory when it exchanges those
+# types with httplib.cpp. If you add an httplib include to a llamafile
+# source, add its object below next to the chatbot ones.
+# -iquote . and -mcosmo are for the vendored mbedtls headers themselves
+# (repo-rooted internal includes, cosmo-extension macros).
+LLAMAFILE_HTTPLIB_TLS_FLAGS := \
+	-DCPPHTTPLIB_MBEDTLS_SUPPORT \
+	-isystem third_party/mbedtls/include \
+	-iquote . \
+	-mcosmo
+
 # ==============================================================================
 # Source files - Highlight library
 # ==============================================================================
@@ -121,6 +135,7 @@ LLAMAFILE_HIGHLIGHT_SRCS := \
 LLAMAFILE_SRCS_C := \
 	llamafile/bestline.c \
 	llamafile/cuda.c \
+	llamafile/gpu_backend.c \
 	llamafile/llamafile.c \
 	llamafile/metal.c \
 	llamafile/vulkan.c \
@@ -184,11 +199,17 @@ TINYBLAS_CPU_IQK_SRCS := \
 	llamafile/iqk_mul_mat_amd_zen4.cpp \
 	llamafile/iqk_mul_mat_arm82.cpp
 
+TINYBLAS_CPU_FA_HELPERS_SRCS := \
+	llamafile/fa_helpers_amd_avx512f.cpp \
+	llamafile/fa_helpers_unsupported.cpp \
+	llamafile/fa_simd_gemm_amd_avx512f.cpp
+
 TINYBLAS_CPU_SRCS := \
 	llamafile/sgemm.cpp \
 	$(TINYBLAS_CPU_SGEMM_SRCS) \
 	$(TINYBLAS_CPU_MIXMUL_SRCS) \
-	$(TINYBLAS_CPU_IQK_SRCS)
+	$(TINYBLAS_CPU_IQK_SRCS) \
+	$(TINYBLAS_CPU_FA_HELPERS_SRCS)
 
 TINYBLAS_CPU_OBJS := $(TINYBLAS_CPU_SRCS:%.cpp=o/$(MODE)/%.o)
 
@@ -217,7 +238,9 @@ LLAMAFILE_OBJS := \
 LLAMAFILE_HIGHLIGHT_GPERF_FILES := $(wildcard llamafile/highlight/*.gperf)
 LLAMAFILE_HIGHLIGHT_KEYWORDS := $(LLAMAFILE_HIGHLIGHT_GPERF_FILES:%.gperf=o/$(MODE)/%.o)
 
-# Server objects for llamafile
+# Server objects for llamafile. server-http.cpp references
+# llama_ui_find_asset, which lives in the generated ui.cpp produced by
+# llama.cpp/BUILD.mk's web UI block (see UI_GEN_OBJ).
 LLAMAFILE_SERVER_SUPPORT_OBJS := \
 	o/$(MODE)/llama.cpp/tools/server/server-chat.cpp.o \
 	o/$(MODE)/llama.cpp/tools/server/server-common.cpp.o \
@@ -225,8 +248,10 @@ LLAMAFILE_SERVER_SUPPORT_OBJS := \
 	o/$(MODE)/llama.cpp/tools/server/server-http.cpp.o \
 	o/$(MODE)/llama.cpp/tools/server/server-models.cpp.o \
 	o/$(MODE)/llama.cpp/tools/server/server-queue.cpp.o \
+	o/$(MODE)/llama.cpp/tools/server/server-schema.cpp.o \
 	o/$(MODE)/llama.cpp/tools/server/server-task.cpp.o \
-	o/$(MODE)/llama.cpp/tools/server/server-tools.cpp.o
+	o/$(MODE)/llama.cpp/tools/server/server-tools.cpp.o \
+	$(UI_GEN_OBJ)
 
 # Metal source files to embed in the executable (for runtime compilation on macOS)
 # These are extracted at runtime and compiled into ggml-metal.dylib
@@ -274,20 +299,24 @@ LLAMAFILE_DEPS = \
 	$(LLAMAFILE_HIGHLIGHT_KEYWORDS) \
 	$(LLAMAFILE_METAL_SOURCES) \
 	$(TINYBLAS_CPU_OBJS) \
-	o/$(MODE)/third_party/stb/stb_image_resize2.o
+	o/$(MODE)/third_party/stb/stb_image_resize2.o \
+	o/$(MODE)/third_party/mbedtls/mbedtls.a
 
 # ==============================================================================
 # Server integration
 # ==============================================================================
 
-# Include paths needed for server compilation
+# Include paths needed for server compilation. server.cpp reaches
+# httplib.h via server-cors-proxy.h, so it needs the httplib TLS flags
+# (see LLAMAFILE_HTTPLIB_TLS_FLAGS above).
 LLAMAFILE_SERVER_INCS := \
 	$(LLAMAFILE_INCLUDES) \
 	-iquote llama.cpp/tools/server \
-	-iquote o/$(MODE)/llama.cpp/tools/server
+	-iquote o/$(MODE)/llama.cpp/tools/server \
+	$(LLAMAFILE_HTTPLIB_TLS_FLAGS)
 
 # Compile server.cpp
-o/$(MODE)/llamafile/server.cpp.o: llama.cpp/tools/server/server.cpp $(SERVER_ASSETS)
+o/$(MODE)/llamafile/server.cpp.o: llama.cpp/tools/server/server.cpp
 	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) $(LLAMAFILE_CPPFLAGS) $(LLAMAFILE_SERVER_INCS) -DLLAMA_BUILD_WEBUI -c -o $@ $<
 
@@ -304,10 +333,9 @@ o/$(MODE)/llamafile/llamafile: \
 		o/$(MODE)/llamafile/main.o \
 		o/$(MODE)/llamafile/server.cpp.o \
 		$(LLAMAFILE_OBJS) \
-		$(LLAMAFILE_DEPS) \
-		$(SERVER_ASSETS)
+		$(LLAMAFILE_DEPS)
 	@mkdir -p $(@D)
-	$(CXX) $(LDFLAGS) -o $@ $(filter %.o,$^) $(LDLIBS)
+	$(CXX) $(LDFLAGS) -o $@ $(filter %.o %.a,$^) $(LDLIBS)
 
 # ==============================================================================
 # Pattern rules for llamafile sources
@@ -325,6 +353,31 @@ o/$(MODE)/llamafile/metal.o: llamafile/metal.c
 o/$(MODE)/llamafile/%.o: llamafile/%.c
 	@mkdir -p $(@D)
 	$(CC) $(CFLAGS) $(LLAMAFILE_CPPFLAGS) -c -o $@ $<
+
+# ==============================================================================
+# GPU backend archive
+# ==============================================================================
+# Single linkable unit grouping the runtime GPU loaders (CUDA/ROCm, Vulkan,
+# Metal) and their shared probe core. The non-llamafile executables
+# (whisperfile, diffusionfile, the llama.cpp tools) pull these in via
+# llamafile_has_gpu(); linking the archive instead of listing each object means
+# adding a GPU backend source does not require editing every consumer's
+# BUILD.mk. Tidiness only: every consumer references llamafile_has_gpu(), so all
+# members are pulled and the build output is unchanged.
+LLAMAFILE_GPU_OBJS := \
+	o/$(MODE)/llamafile/cuda.o \
+	o/$(MODE)/llamafile/gpu_backend.o \
+	o/$(MODE)/llamafile/metal.o \
+	o/$(MODE)/llamafile/vulkan.o
+
+o/$(MODE)/llamafile/gpu.a: $(LLAMAFILE_GPU_OBJS)
+
+# The TUI chatbot talks to the server through httplib as an HTTP client,
+# so its objects must agree with httplib.cpp on the httplib class layouts
+# (see LLAMAFILE_HTTPLIB_TLS_FLAGS).
+o/$(MODE)/llamafile/chatbot_api.o \
+o/$(MODE)/llamafile/chatbot_main.o: private \
+	LLAMAFILE_CPPFLAGS += $(LLAMAFILE_HTTPLIB_TLS_FLAGS)
 
 o/$(MODE)/llamafile/%.o: llamafile/%.cpp
 	@mkdir -p $(@D)
@@ -397,6 +450,11 @@ o/$(MODE)/llamafile/iqk_mul_mat_amd_avx2.o: \
 # Zen4 variant (AMD Zen 4+ with AVX-512)
 o/$(MODE)/llamafile/iqk_mul_mat_amd_zen4.o: \
 	private TARGET_ARCH += -Xx86_64-mtune=skylake -Xx86_64-mavx -Xx86_64-mavx2 -Xx86_64-mfma -Xx86_64-mf16c -Xx86_64-mavx512f -Xx86_64-mavx512vl -Xx86_64-mavx512vnni -Xx86_64-mavx512bw -Xx86_64-mavx512dq
+
+# Flash-attention helpers (issue #975) - AVX-512F variant
+o/$(MODE)/llamafile/fa_helpers_amd_avx512f.o \
+o/$(MODE)/llamafile/fa_simd_gemm_amd_avx512f.o: \
+	private TARGET_ARCH += -Xx86_64-mtune=cannonlake -Xx86_64-mavx -Xx86_64-mf16c -Xx86_64-mfma -Xx86_64-mavx2 -Xx86_64-mavx512f
 
 # ARM82 variant (Apple M1+, Raspberry Pi 5)
 o/$(MODE)/llamafile/iqk_mul_mat_arm82.o: \

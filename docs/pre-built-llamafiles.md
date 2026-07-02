@@ -1,5 +1,6 @@
-We provide example llamafiles for a variety of models, so you can easily try out llamafile 
-with different kinds of LLMs. The following table lists llamafiles bundled with the latest
+# Pre-built llamafiles
+
+We provide pre-built llamafiles for a variety of models, so you can easily run them immediately without setup. The following table lists llamafiles bundled with the latest
 available version of the server (v0.10.*). The smaller the file is, the more easily it will
 run on your computer, even if no GPU is present (as a reference, Qwen3.5 0.8B Q8 generates
 text on a Raspberry Pi5 at ~8 tokens/sec).
@@ -65,6 +66,6 @@ in the [Getting Started](quickstart.md) section.
 
 ## A note about models
 
-The example llamafiles provided above should not be interpreted as
+The pre-built llamafiles provided above should not be interpreted as
 endorsements or recommendations of specific models, licenses, or data
 sets on the part of Mozilla.

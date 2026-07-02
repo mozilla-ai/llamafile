@@ -174,17 +174,20 @@ void repl(ChatBackend &backend) {
     HighlightMarkdown markdown;
     ColorBleeder bleeder(is_base_model() ? (Highlight *)&txt : (Highlight *)&markdown);
 
-    // Save old signal handler and install ours
-    // NOTE: In combined mode, this overrides the server's SIGINT handler.
-    // Only install if we're NOT in API mode (no local model = API mode).
+    // Save old signal handler and install ours. on_sigint only sets the
+    // g_got_sigint flag, so a single Ctrl+C interrupts the current generation
+    // and returns to the prompt; a second Ctrl+C (or Ctrl+D) at the prompt
+    // exits via the !line path below.
+    //
+    // In combined mode (API backend) this deliberately overrides the server's
+    // SIGINT handler, which would otherwise terminate the whole server on the
+    // first Ctrl+C. The server is shut down instead when the REPL exits, via
+    // the shutdown callback in api_main(). The old handler is restored below.
     struct sigaction sa, old_sa;
-    if (g_model) {
-        // Direct mode: install our own handler
-        sa.sa_handler = on_sigint;
-        sa.sa_flags = 0;
-        sigemptyset(&sa.sa_mask);
-        sigaction(SIGINT, &sa, &old_sa);
-    }
+    sa.sa_handler = on_sigint;
+    sa.sa_flags = 0;
+    sigemptyset(&sa.sa_mask);
+    sigaction(SIGINT, &sa, &old_sa);
 
     // run chatbot
     for (;;) {
@@ -322,9 +325,7 @@ void repl(ChatBackend &backend) {
     }
 
     // Restore original signal handler before cleanup
-    if (g_model) {
-        sigaction(SIGINT, &old_sa, nullptr);
-    }
+    sigaction(SIGINT, &old_sa, nullptr);
 }
 
 } // namespace chatbot

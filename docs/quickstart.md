@@ -10,7 +10,7 @@ locally: no data ever leaves your computer.
 > **NOTE**: we chose this model because that's the smallest one we have
 built a llamafile for, so most likely to work out-of-the-box for you.
 Please let us know if you are still having issues with that! If, on the
-other hand, you have powerful hardware and/or GPUs, [feel free to choose](example_llamafiles.md)
+other hand, you have powerful hardware and/or GPUs, [feel free to choose](pre-built-llamafiles.md)
 larger and more expressive models which should provide more accurate
 responses.
 
@@ -165,7 +165,7 @@ ChatCompletionMessage(content="A script that crashes like a ghost,\nWhen it trie
 
 ## Using llamafile with external weights
 
-Even though our example llamafiles have the weights built-in, you don't
+Even though our pre-built llamafiles have the weights built-in, you don't
 *have* to use llamafile that way. Instead, you can download *just* the
 llamafile software (without any weights included) from our releases page.
 You can then use it alongside any external weights you may have on hand.

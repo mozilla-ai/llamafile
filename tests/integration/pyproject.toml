@@ -26,4 +26,6 @@ markers = [
     "tui: tests TUI mode",
     "cli: tests CLI mode",
     "combined: tests combined (TUI+server) mode",
+    "ssl: tests HTTPS/TLS support (serving and model download)",
+    "online: tests that need network access (deselect with '-m \"not online\"')",
 ]

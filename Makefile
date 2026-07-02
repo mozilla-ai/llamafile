@@ -16,9 +16,13 @@ include build/rules.mk
 include third_party/BUILD.mk
 include llama.cpp/BUILD.mk
 include whisper.cpp/BUILD.mk
+include transcribe.cpp/BUILD.mk
+include stable-diffusion.cpp/BUILD.mk
 include agent.cpp/BUILD.mk
 include llamafile/BUILD.mk
 include whisperfile/BUILD.mk
+include transcribefile/BUILD.mk
+include diffusionfile/BUILD.mk
 include agentfile/BUILD.mk
 include tests/BUILD.mk
 endif
@@ -29,17 +33,29 @@ endif
 o/$(MODE)/:	o/$(MODE)/llamafile	\
 		o/$(MODE)/llama.cpp \
 		o/$(MODE)/whisper.cpp \
+		o/$(MODE)/stable-diffusion.cpp \
 		o/$(MODE)/whisperfile \
+		o/$(MODE)/transcribe.cpp \
+		o/$(MODE)/transcribefile \
+		o/$(MODE)/diffusionfile \
 		o/$(MODE)/agentfile \
 		o/$(MODE)/third_party/zipalign
 
 .PHONY: install
-install: o/$(MODE)/llamafile/llamafile
+install:	o/$(MODE)/llamafile/llamafile \
+		whisperfile/whisperfile.1 \
+		whisperfile/whisper-server.1 \
+		third_party/zipalign/zipalign.1
 	mkdir -p $(PREFIX)/bin
 	$(INSTALL) o/$(MODE)/llamafile/llamafile $(PREFIX)/bin/llamafile
 	$(INSTALL) o/$(MODE)/whisperfile/whisperfile $(PREFIX)/bin/whisperfile
+	$(INSTALL) o/$(MODE)/diffusionfile/diffusionfile $(PREFIX)/bin/diffusionfile
 	$(INSTALL) o/$(MODE)/agentfile/agentfile $(PREFIX)/bin/agentfile
 	$(INSTALL) o/$(MODE)/third_party/zipalign/zipalign $(PREFIX)/bin/zipalign
+	mkdir -p $(PREFIX)/share/man/man1
+	$(INSTALL) -m 0644 whisperfile/whisperfile.1 $(PREFIX)/share/man/man1/whisperfile.1
+	$(INSTALL) -m 0644 whisperfile/whisper-server.1 $(PREFIX)/share/man/man1/whisper-server.1
+	$(INSTALL) -m 0644 third_party/zipalign/zipalign.1 $(PREFIX)/share/man/man1/zipalign.1
 
 .PHONY: check
 check: o/$(MODE)/tests
@@ -100,6 +116,13 @@ setup: # Initialize and configure all dependencies (submodules, patches, etc.)
 	@echo "Applying llama.cpp patches..."
 	@export TMPDIR=$$(pwd)/o/tmp && ./llama.cpp.patches/apply-patches.sh
 
+	@if [ ! -f transcribe.cpp/.git ]; then \
+		echo "Initializing transcribe.cpp submodule..."; \
+		git submodule update --init transcribe.cpp; \
+	fi
+	@echo "Applying transcribe.cpp patches..."
+	@export TMPDIR=$$(pwd)/o/tmp && ./transcribe.cpp.patches/apply-patches.sh
+
 	@if [ ! -f third_party/zipalign/.git ]; then \
 		echo "Initializing zipalign submodule..."; \
 		git submodule update --init third_party/zipalign; \
@@ -118,7 +141,7 @@ setup: # Initialize and configure all dependencies (submodules, patches, etc.)
 .PHONY: reset-repo
 reset-repo: # Reset all submodules to their original state (removes patches or any other change)
 	@echo "Resetting submodules to original state..."
-	@for dir in llama.cpp whisper.cpp stable-diffusion.cpp third_party/zipalign agent.cpp; do \
+	@for dir in llama.cpp whisper.cpp stable-diffusion.cpp transcribe.cpp third_party/zipalign agent.cpp; do \
 		if [ -e "$$dir" ]; then \
 			echo "Removing $$dir..."; \
 			rm -rf "$$dir"; \

@@ -16,6 +16,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#define _COSMO_SOURCE  // exposes cosmo extensions like makedirs()
+
 #include "llamafile.h"
 #include "version.h"
 #include "zip.h"
@@ -456,14 +458,28 @@ static const char *llamafile_get_home_dir(void) {
     return homedir;
 }
 
+// Basename of the per-app dot directory under $HOME. Defaults to
+// "llamafile"; other products (e.g. transcribefile) override it via
+// llamafile_set_app_name() so their cached artifacts — compiled GPU
+// dylibs, extracted ggml sources — live in their own tree and can
+// diverge from llamafile's without overwriting anything.
+static const char *g_app_name = "llamafile";
+
+void llamafile_set_app_name(const char *name) {
+    if (name && *name)
+        g_app_name = name;
+}
+
 /**
  * Returns path of directory for app-specific files.
- * Path includes version number: ~/.llamafile/v/<major>.<minor>.<patch>/
+ * Path includes version number: ~/.<app>/v/<major>.<minor>.<patch>/
+ * where <app> defaults to "llamafile" (see llamafile_set_app_name).
  * This ensures different versions don't overwrite each other's compiled dylibs.
  */
 void llamafile_get_app_dir(char *path, size_t size) {
-    snprintf(path, size, "%s/.llamafile/v/%d.%d.%d/",
+    snprintf(path, size, "%s/.%s/v/%d.%d.%d/",
              llamafile_get_home_dir(),
+             g_app_name,
              LLAMAFILE_MAJOR,
              LLAMAFILE_MINOR,
              LLAMAFILE_PATCH);
@@ -648,46 +664,6 @@ bool llamafile_file_exists(const char *path) {
     return !stat(path, &st);
 }
 
-/**
- * Creates directories recursively, like `mkdir -p`.
- * Returns 0 on success, -1 on error.
- */
-int llamafile_makedirs(const char *path, int mode) {
-    char tmp[PATH_MAX];
-    char *p = NULL;
-    size_t len;
-
-    snprintf(tmp, sizeof(tmp), "%s", path);
-    len = strlen(tmp);
-
-    if (tmp[len - 1] == '/')
-        tmp[len - 1] = '\0';
-
-    if (mkdir(tmp, mode) == 0)
-        return 0;
-
-    if (errno == EEXIST) {
-        struct stat st;
-        if (stat(tmp, &st) == 0 && S_ISDIR(st.st_mode))
-            return 0;
-        return -1;
-    }
-
-    if (errno != ENOENT)
-        return -1;
-
-    for (p = tmp + 1; *p; p++) {
-        if (*p == '/') {
-            *p = '\0';
-            if (mkdir(tmp, mode) != 0 && errno != EEXIST)
-                return -1;
-            *p = '/';
-        }
-    }
-
-    return mkdir(tmp, mode);
-}
-
 // Probe `path`, and if it exists, hand it to link_fn. Logs both the probe
 // and the success at INFO level. Returns true only if link_fn loaded it.
 static bool try_link_dso_from(const char *path, const char *backend_name,
@@ -739,7 +715,12 @@ bool llamafile_try_load_prebuilt_dso(const char *name, const char *backend_name,
     snprintf(dso, PATH_MAX, "/zip/%s", name);
     if (llamafile_file_exists(dso)) {
         llamafile_get_app_dir(app_dir, PATH_MAX);
-        if (llamafile_makedirs(app_dir, 0755) != 0) {
+        // Use cosmo's makedirs(), which recurses back-to-front via dirname()
+        // and stops at the first existing ancestor. That matters on Windows: a
+        // front-to-back mkdir -p of e.g. "/C/Users/Shadow/..." would try to
+        // mkdir("/C") (the drive root C:\), which fails with EACCES and looks
+        // like a spurious "Permission denied" when extracting bundled GPU DSOs.
+        if (makedirs(app_dir, 0755) != 0) {
             perror(app_dir);
             return false;
         }

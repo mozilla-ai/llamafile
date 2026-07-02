@@ -19,6 +19,7 @@
 #include <stdio.h>
 
 #include "llamafile/llamafile.h"
+#include "llamafile/version.h"
 
 // Defined in patched server.cpp
 int whisper_server_main(int argc, char ** argv);

@@ -17,7 +17,7 @@ you'd like to see the most in its future versions.
 
 Older builds (and llamafiles built on them) will still be available, check out our
 [releases](https://github.com/mozilla-ai/llamafile/releases) and our 
-[Example Llamafiles](/docs/example_llamafiles.md) page.
+[Pre-built llamafiles](/docs/pre-built-llamafiles.md) page.
 
 # Updates
 

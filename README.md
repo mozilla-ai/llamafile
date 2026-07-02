@@ -58,7 +58,7 @@ chmod +x Qwen3.5-0.8B-Q8_0.llamafile
 
 We chose this model because that's the smallest one we have
 built a llamafile for, so most likely to work out-of-the-box for you.
-If you have powerful hardware and/or GPUs, [feel free to choose](https://docs.mozilla.ai/llamafile/getting-started/example_llamafiles)
+If you have powerful hardware and/or GPUs, [feel free to choose](https://docs.mozilla.ai/llamafile/getting-started/pre-built-llamafiles)
 larger and more expressive models which should provide more accurate
 responses.
 
@@ -71,7 +71,7 @@ responses.
 Check the full documentation at [docs.mozilla.ai/llamafile](https://docs.mozilla.ai/llamafile), or directly jump into one of the following subsections:
 
 - [Quickstart](https://docs.mozilla.ai/llamafile/getting-started/quickstart)
-- [Example llamafiles](https://docs.mozilla.ai/llamafile/getting-started/example_llamafiles)
+- [Pre-built llamafiles](https://docs.mozilla.ai/llamafile/getting-started/pre-built-llamafiles)
 - [Running a llamafile](https://docs.mozilla.ai/llamafile/using-llamafile/running_llamafile)
 - [Creating llamafiles](https://docs.mozilla.ai/llamafile/using-llamafile/creating_llamafiles)
 - [Source installation](https://docs.mozilla.ai/llamafile/using-llamafile/source_installation)

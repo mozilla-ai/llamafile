@@ -36,11 +36,19 @@ llamafile supports the following CPUs:
 
 ## GPU support
 
-llamafile supports the following kinds of GPUs:
+llamafile ships GPU acceleration for Apple Metal, NVIDIA, and AMD. There is
+no Vulkan or Intel oneAPI/SYCL backend, so on hardware outside the table
+below llamafile runs on the CPU.
 
-- Apple Metal
-- NVIDIA
-- AMD
+| Vendor | Backend | Platforms | Status | Notes |
+|--------|---------|-----------|--------|-------|
+| Apple | Metal (built-in) | macOS ARM64 | Supported | Offload is enabled by default; disable with `-ngl 0` or `--gpu disable` |
+| NVIDIA | CUDA / cuBLAS | Linux, Windows, WSL | Supported | Pass `-ngl 999` to offload; Windows release binaries ship prebuilt DLLs |
+| AMD | HIP / rocBLAS | Linux, Windows | Supported | Pass `-ngl 999` to offload; multi-GPU may be broken on Radeon (see below) |
+| Intel / other | — | — | Not supported | No Vulkan or SYCL backend; runs on CPU. For these, build llama.cpp directly |
+
+The 0.10.* series has not been tested on every GPU and platform yet, so
+treat the AMD and Windows paths in particular as best-effort.
 
 GPU on MacOS ARM64 is supported by compiling a small module using the
 Xcode Command Line Tools, which need to be installed. This is a one time
@@ -87,6 +95,20 @@ you may need to qualify which one you want used, by passing either
 In the event that GPU support couldn't be compiled and dynamically
 linked on the fly for any reason, llamafile will fall back to CPU
 inference.
+
+### Verifying GPU acceleration
+
+Because llamafile silently falls back to the CPU when a GPU backend can't
+be set up, it isn't always obvious whether offloading actually happened.
+To check:
+
+- Pass `-ngl 999` on NVIDIA and AMD to request maximum offloading (Metal
+  offloads by default).
+- Force a specific backend with `--gpu nvidia` or `--gpu amd`. This turns
+  an otherwise quiet CPU fallback into an explicit startup error, which
+  makes a missing or misconfigured CUDA/ROCm toolchain easy to spot.
+- Watch the startup logs for the messages about building and loading the
+  GPU module. If you don't see them, llamafile is running on the CPU.
 
 **NOTE** that the 0.10.* build of llamafile has not been tested on all
 GPUs/platforms yet, so we welcome your feedback both whether there are

@@ -211,7 +211,12 @@ public:
                 return true;
             });
 
-        if (!result) {
+        if (stopped) {
+            // User interrupted generation with Ctrl+C. We closed the connection
+            // ourselves by returning false from the receiver, so httplib reports
+            // Error::Canceled here; that is expected, not a failure. Any partial
+            // response was already streamed and is returned below.
+        } else if (!result) {
             err("error: HTTP request failed: %s", httplib::to_string(result.error()).c_str());
         } else if (result->status != 200) {
             err("error: server returned HTTP %d", result->status);

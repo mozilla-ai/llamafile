@@ -77,13 +77,13 @@ char *llamafile_get_prompt(void);                         // NOT DEFINED
 // USED: Defined in llamafile.c
 bool llamafile_has(char **, const char *);
 void llamafile_get_app_dir(char *, size_t);
+void llamafile_set_app_name(const char *); // app dir basename, default "llamafile"
 bool llamafile_extract(const char *, const char *);
 int llamafile_is_file_newer_than(const char *, const char *);
 
 // Common utilities for GPU backend loaders (defined in llamafile.c)
 const char *llamafile_get_dso_extension(void);
 bool llamafile_file_exists(const char *);
-int llamafile_makedirs(const char *, int);
 
 // Link function type for TryLoadPrebuiltDso
 typedef bool (*llamafile_link_dso_fn)(const char *dso_path);

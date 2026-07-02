@@ -1,7 +1,7 @@
 diff --git a/ggml/src/ggml-cuda/mmq.cuh b/ggml/src/ggml-cuda/mmq.cuh
 --- a/llama.cpp/ggml/src/ggml-cuda/mmq.cuh
 +++ b/llama.cpp/ggml/src/ggml-cuda/mmq.cuh
-@@ -4088,6 +4088,7 @@ extern DECL_MMQ_CASE(GGML_TYPE_Q3_K);
+@@ -4152,6 +4152,7 @@ extern DECL_MMQ_CASE(GGML_TYPE_Q3_K);
  extern DECL_MMQ_CASE(GGML_TYPE_Q4_K);
  extern DECL_MMQ_CASE(GGML_TYPE_Q5_K);
  extern DECL_MMQ_CASE(GGML_TYPE_Q6_K);
@@ -9,7 +9,7 @@ diff --git a/ggml/src/ggml-cuda/mmq.cuh b/ggml/src/ggml-cuda/mmq.cuh
  extern DECL_MMQ_CASE(GGML_TYPE_IQ2_XXS);
  extern DECL_MMQ_CASE(GGML_TYPE_IQ2_XS);
  extern DECL_MMQ_CASE(GGML_TYPE_IQ2_S);
-@@ -4096,6 +4097,7 @@ extern DECL_MMQ_CASE(GGML_TYPE_IQ3_S);
+@@ -4160,6 +4161,7 @@ extern DECL_MMQ_CASE(GGML_TYPE_IQ3_S);
  extern DECL_MMQ_CASE(GGML_TYPE_IQ1_S);
  extern DECL_MMQ_CASE(GGML_TYPE_IQ4_NL);
  extern DECL_MMQ_CASE(GGML_TYPE_IQ4_XS);

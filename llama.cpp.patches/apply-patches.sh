@@ -37,6 +37,9 @@ for patch_file in "$PATCHES_DIR"/*.patch; do
     fi
 done
 
+# Fetch the prebuilt web UI assets (see fetch-ui-assets.sh for details).
+"$SCRIPT_DIR/fetch-ui-assets.sh"
+
 echo ""
 echo "Patches applied successfully!"
 echo "Note: These changes are not committed to the submodule."

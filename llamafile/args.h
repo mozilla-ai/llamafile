@@ -45,6 +45,11 @@ struct LlamafileArgs {
     // Model path captured from -m (for display in combined mode TUI)
     std::string model_path;
 
+    // Remote model reference captured from -hf/--hf-repo/-mu/--model-url.
+    // llama.cpp downloads it over HTTPS at load time, so -m is not required
+    // when one of these is present; also used as the TUI display fallback.
+    std::string remote_model;
+
     // Note: Llamafile-specific flags are stored in FLAG_* globals (llamafile.h):
     //   --verbose  -> FLAG_verbose
     //   --nothink  -> FLAG_nothink

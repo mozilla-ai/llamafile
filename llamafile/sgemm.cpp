@@ -38,15 +38,27 @@ static bool sgemm_disabled() {
 typedef bool (*iqk_mixmul_func_t)(long, long, long, int, int, const void *, const void *, float *,
                                   long, long, const void *, int, int);
 
+// Flash-attention helper function pointers (issue #975).
+typedef bool (*fa_vec_dot_f16_func_t)(int, float *, const void *, const void *);
+typedef bool (*fa_fp16_to_fp32_row_func_t)(const void *, float *, int64_t);
+typedef bool (*fa_simd_gemm_func_t)(float *, const float *, const float *,
+                                     int, int, int);
+
 static const struct GemmFuncs {
     sgemm_func_t sgemm;
     typeof(llamafile_mixmul) *mixmul;
     iqk_mixmul_func_t iqk_mixmul = iqk_mul_mat_moe_unsupported;
+    fa_vec_dot_f16_func_t fa_vec_dot_f16 = llamafile_fa_vec_dot_f16_unsupported;
+    fa_fp16_to_fp32_row_func_t fa_fp16_to_fp32_row = llamafile_fa_fp16_to_fp32_row_unsupported;
+    fa_simd_gemm_func_t fa_simd_gemm = llamafile_fa_simd_gemm_unsupported;
     GemmFuncs() {
         if (sgemm_disabled()) {
             sgemm = llamafile_sgemm_unsupported;
             mixmul = llamafile_mixmul_unsupported;
             iqk_mixmul = iqk_mul_mat_moe_unsupported;
+            fa_vec_dot_f16 = llamafile_fa_vec_dot_f16_unsupported;
+            fa_fp16_to_fp32_row = llamafile_fa_fp16_to_fp32_row_unsupported;
+            fa_simd_gemm = llamafile_fa_simd_gemm_unsupported;
             return;
         }
 #ifdef __x86_64__
@@ -54,6 +66,10 @@ static const struct GemmFuncs {
             if (X86_HAVE(FMA)) {
                 if (X86_HAVE(AVX2)) {
                     if (X86_HAVE(AVX512F)) {
+                        // FA helpers (issue #975): AVX-512F is enough.
+                        fa_vec_dot_f16     = llamafile_fa_vec_dot_f16_amd_avx512f;
+                        fa_fp16_to_fp32_row = llamafile_fa_fp16_to_fp32_row_amd_avx512f;
+                        fa_simd_gemm       = llamafile_fa_simd_gemm_amd_avx512f;
                         if (X86_HAVE(AVX512VL) && //
                             X86_HAVE(AVX512BW) && //
                             X86_HAVE(AVX512DQ) && //
@@ -171,6 +187,35 @@ bool llamafile_mixmul_iqk(long Nx, long Ny, long ne00, int ne11, int typeA, cons
                           const void *B, float *C, long nb1, long nb2, const void *vrow_mapping,
                           int ith, int nth) {
     return funcs.iqk_mixmul(Nx, Ny, ne00, ne11, typeA, A, B, C, nb1, nb2, vrow_mapping, ith, nth);
+}
+
+/**
+ * Optimized f16 dot product for CPU flash-attention inner loop (#975).
+ * Returns true on success; false signals the caller to fall back to
+ * upstream's ggml_vec_dot_f16.
+ */
+bool llamafile_fa_vec_dot_f16(int n, float *s, const void *x, const void *y) {
+    return funcs.fa_vec_dot_f16(n, s, x, y);
+}
+
+/**
+ * Optimized f16-to-f32 row conversion for CPU flash-attention V dequant
+ * (#975). Returns true on success; false signals the caller to fall
+ * back to upstream's ggml_fp16_to_fp32_row.
+ */
+bool llamafile_fa_fp16_to_fp32_row(const void *x, float *y, int64_t n) {
+    return funcs.fa_fp16_to_fp32_row(x, y, n);
+}
+
+/**
+ * Optimized inline GEMM for CPU flash-attention tiled path (#975).
+ * Computes C[M x N] += A[M x K] * B[K x N] in f32. Returns true on
+ * success; false signals the caller (the tiled FA function) to fall
+ * back to ggml-cpu's static-inline simd_gemm.
+ */
+bool llamafile_fa_simd_gemm(float *C, const float *A, const float *B,
+                             int M, int K, int N) {
+    return funcs.fa_simd_gemm(C, A, B, M, K, N);
 }
 
 /**

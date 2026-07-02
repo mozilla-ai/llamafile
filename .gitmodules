@@ -13,3 +13,6 @@
 [submodule "agent.cpp"]
 	path = agent.cpp
 	url = https://github.com/mozilla-ai/agent.cpp.git
+[submodule "transcribe.cpp"]
+	path = transcribe.cpp
+	url = https://github.com/handy-computer/transcribe.cpp.git

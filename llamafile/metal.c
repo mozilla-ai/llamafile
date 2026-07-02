@@ -30,6 +30,8 @@
 // cannot resolve symbols from the parent process.
 //
 
+#define _COSMO_SOURCE  // exposes cosmo extensions like makedirs()
+
 #include "llamafile.h"
 #include <cosmo.h>
 #include <dlfcn.h>
@@ -301,7 +303,7 @@ static bool BuildMetal(const char *dso) {
     }
 
     // Create app directory
-    if (llamafile_makedirs(app_dir, 0755) != 0) {
+    if (makedirs(app_dir, 0755) != 0) {
         perror(app_dir);
         return false;
     }
@@ -317,7 +319,7 @@ static bool BuildMetal(const char *dso) {
             size_t parent_len = last_slash - src;
             memcpy(parent_dir, src, parent_len);
             parent_dir[parent_len] = '\0';
-            llamafile_makedirs(parent_dir, 0755);
+            makedirs(parent_dir, 0755);
         }
 
         switch (llamafile_is_file_newer_than(metal_srcs[i].zip, src)) {

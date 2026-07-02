@@ -137,22 +137,28 @@ if "%MINIMAL_ARCHS%"=="1" (
     set "ARCH_FLAGS=!ARCH_FLAGS! -gencode arch=compute_90,code=sm_90"
 )
 
-:: Detect CUDA version for Blackwell and compress support
-:: nvcc prints e.g. "Cuda compilation tools, release 13.2, V13.2.51".
-:: Splitting on ',', ' ', and '.' produces tokens 4..6 = "release", "13", "2".
-set "CUDA_MAJOR="
-set "CUDA_MINOR="
-for /f "tokens=5,6 delims=, ." %%a in ('nvcc --version 2^>nul ^| findstr /r "release [0-9]"') do (
+:: Detect CUDA version for Blackwell and compress support.
+:: nvcc emits e.g. "Cuda compilation tools, release 13.2, V13.2.51".
+:: Parse in flat single-char-delim steps. A previous attempt that used
+:: `delims=, .` (comma+space+dot together, with `.` right before the
+:: closing quote) errors with `." was unexpected at this time.` on the
+:: cmd.exe shipped with at least some Windows builds, so the loop never
+:: runs and the version falls back to 0. `/b /c:` anchors findstr to the
+:: literal version line — without /c:, the space in the pattern would
+:: split it into two OR'd regex patterns.
+set "CUDA_MAJOR=0"
+set "CUDA_MINOR=0"
+set "_REL_LINE="
+set "_REL_VER="
+for /f "tokens=2 delims=," %%a in ('nvcc --version 2^>nul ^| findstr /b /c:"Cuda compilation tools"') do set "_REL_LINE=%%a"
+for /f "tokens=2" %%a in ("!_REL_LINE!") do set "_REL_VER=%%a"
+for /f "tokens=1,2 delims=." %%a in ("!_REL_VER!") do (
     set "CUDA_MAJOR=%%a"
     set "CUDA_MINOR=%%b"
 )
 if "%CUDA_MAJOR%"=="13" (
     set "ARCH_FLAGS=!ARCH_FLAGS! -gencode arch=compute_120f,code=sm_120f"
 )
-
-:: Fall back to 0 if version parsing failed, to keep the numeric comparisons below valid.
-if not defined CUDA_MAJOR set "CUDA_MAJOR=0"
-if not defined CUDA_MINOR set "CUDA_MINOR=0"
 
 :: --compress-mode=size: opt-in via --compress (or --minimize-size). Requires CUDA >= 12.8.
 if "%COMPRESS%"=="1" (

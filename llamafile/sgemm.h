@@ -86,6 +86,27 @@ bool llamafile_mixmul_arm82(const struct ggml_compute_params *, const struct ggm
 bool llamafile_mixmul_iqk(long, long, long, int, int, const void *, const void *, float *, long,
                           long, const void *, int, int);
 
+// Flash-attention helpers (issue #975). Optimized replacements for the
+// hot ggml-cpu inner-loop helpers that cosmocc compiles at baseline
+// AVX2. Returns true when handled by the optimized kernel; caller
+// falls back to upstream's ggml helper on false. Public API takes
+// void* so callers don't need ggml.h.
+bool llamafile_fa_vec_dot_f16(int n, float *s, const void *x, const void *y);
+bool llamafile_fa_fp16_to_fp32_row(const void *x, float *y, int64_t n);
+// C[M x N] += A[M x K] * B[K x N], all f32.
+bool llamafile_fa_simd_gemm(float *C, const float *A, const float *B,
+                             int M, int K, int N);
+
+// Internal arch-specific implementations of the FA helpers.
+bool llamafile_fa_vec_dot_f16_amd_avx512f(int, float *, const void *, const void *);
+bool llamafile_fa_vec_dot_f16_unsupported(int, float *, const void *, const void *);
+bool llamafile_fa_fp16_to_fp32_row_amd_avx512f(const void *, float *, int64_t);
+bool llamafile_fa_fp16_to_fp32_row_unsupported(const void *, float *, int64_t);
+bool llamafile_fa_simd_gemm_amd_avx512f(float *, const float *, const float *,
+                                         int, int, int);
+bool llamafile_fa_simd_gemm_unsupported(float *, const float *, const float *,
+                                         int, int, int);
+
 #ifdef __cplusplus
 }
 #endif

@@ -20,11 +20,7 @@
 #include <stdio.h>
 
 #include "llamafile/llamafile.h"
-
-// LLAMAFILE_VERSION_STRING is defined by BUILD.mk
-#ifndef LLAMAFILE_VERSION_STRING
-#define LLAMAFILE_VERSION_STRING "0.0.0-dev"
-#endif
+#include "llamafile/version.h"
 
 // Forward declaration - defined in whisper.cpp/examples/cli/cli.cpp
 // When compiled with -DWHISPERFILE, cli.cpp renames main() to whisper_cli_main()
