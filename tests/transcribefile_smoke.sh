@@ -1,19 +1,23 @@
 #!/usr/bin/env bash
 # transcribefile_smoke.sh — regression smoke for the transcribefile APE.
 #
-# Two layers:
+# Three layers:
 #   1. Model-free probes — always run. Catches CLI argv / WAV-loader /
 #      help-text regressions without needing any model artifact.
 #   2. Parakeet end-to-end — gated on TRANSCRIBEFILE_PARAKEET_GGUF. Skipped
 #      (with a warning, not a failure) when the model isn't available, so
 #      `make check` stays green on machines without the model.
+#   3. Metal backend — needs layer 2's model plus macOS on Apple Silicon
+#      with a registered Metal device; skipped elsewhere. Asserts that
+#      --backend metal selects an MTL device and that the Metal and CPU
+#      transcripts match exactly.
 #
 # Usage:
 #   tests/transcribefile_smoke.sh <path-to-transcribefile-binary>
 #
 # Env:
 #   TRANSCRIBEFILE_PARAKEET_GGUF  Path to a parakeet GGUF; if unset or the
-#                                 file is missing, layer 2 is skipped.
+#                                 file is missing, layers 2 and 3 are skipped.
 
 set -euo pipefail
 

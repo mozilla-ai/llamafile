@@ -16,6 +16,7 @@
 
 #include <cosmo.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include "llamafile/llamafile.h"
@@ -24,6 +25,7 @@
 // -DTRANSCRIBEFILE (which renames its main() to transcribe_cli_main() and
 // drops the standalone main()). C++ linkage — both sides are C++.
 int transcribe_cli_main(int argc, char ** argv);
+
 
 #ifndef TRANSCRIBEFILE_VERSION_STRING
 #define TRANSCRIBEFILE_VERSION_STRING "0.0.0-dev"
@@ -36,6 +38,22 @@ static bool has_flag(char ** argv, const char * flag) {
         }
     }
     return false;
+}
+
+// Appended to upstream's usage text (same stream: stderr) so the flags
+// and behaviors added by this wrapper are discoverable from --help.
+static void print_wrapper_help(void) {
+    fprintf(stderr,
+            "\n"
+            "transcribefile options:\n"
+            "  --version             print transcribefile version and exit\n"
+            "transcribefile notes:\n"
+            "  GPU backends wired up in this build: metal (macOS on Apple\n"
+            "  Silicon; used by --backend auto/metal, first run compiles\n"
+            "  ggml-metal.dylib and caches it under ~/.llamafile). vulkan and\n"
+            "  cuda are not available yet.\n"
+            "  Default arguments are read from .args in the executable's zip\n"
+            "  store (one per line), so models can be bundled with zipalign.\n");
 }
 
 // Register GPU backends with ggml before the CLI enumerates devices.
@@ -79,6 +97,17 @@ int main(int argc, char ** argv) {
     // Merge default arguments embedded at /zip/.args (if present) with the
     // user's argv. No-op for a bare executable with no bundled .args.
     argc = cosmo_args("/zip/.args", &argv);
+
+    // --help never needs a compute device: printing usage should not pay
+    // the Metal dylib build/load latency or emit device-init logs, so the
+    // GPU load below is skipped. The CLI's help path ends in std::exit(0)
+    // (and its print_usage has internal linkage), so the wrapper's help
+    // section is appended via atexit: it runs right after upstream's
+    // usage text, whether the CLI exits or returns.
+    if (has_flag(argv, "-h") || has_flag(argv, "--help")) {
+        atexit(print_wrapper_help);
+        return transcribe_cli_main(argc, argv);
+    }
 
     load_gpu_backends(argv);
 

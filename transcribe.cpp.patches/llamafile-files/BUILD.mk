@@ -45,7 +45,15 @@ TRANSCRIBE_LIB_INCS := \
 # Common Compiler Flags
 # ==============================================================================
 
+# GGML_MULTIPLATFORM turns the GGML_CALL annotations (ported from the
+# llama.cpp patch set) into __ms_abi__ on x86-64, keeping the backend
+# interface structs ABI-identical to the GPU dylibs, which are built
+# with the same define (a no-op on aarch64, where the attribute doesn't
+# exist — hence the global -Wno-attributes). It is already inherited
+# from the global CPPFLAGS_ in build/config.mk; it is repeated here, as
+# in llama.cpp's BUILD.mk, so the cross-DSO ABI contract is explicit.
 TRANSCRIBE_GGML_CPPFLAGS := \
+	-DGGML_MULTIPLATFORM \
 	-DGGML_USE_CPU \
 	-DGGML_CPU_GENERIC \
 	-DGGML_USE_CPU_REPACK \
@@ -63,6 +71,7 @@ TRANSCRIBE_GGML_CPPFLAGS := \
 # zlib downstream (NO_ZLIB_COMPATIBLE_NAMES — call sites use the
 # mz_-prefixed API).
 TRANSCRIBE_LIB_CPPFLAGS := \
+	-DGGML_MULTIPLATFORM \
 	-DTRANSCRIBE_BUILD \
 	-DGGML_SCHED_MAX_COPIES=4 \
 	-DMINIZ_NO_INFLATE_APIS \
