@@ -110,8 +110,8 @@ pass "parakeet transcribes jfk.wav on metal"
 
 cpu=$("$APE" --backend cpu -q -m "$MODEL" "$SAMPLE" 2>/dev/null) \
     || fail "cpu run exited non-zero"
-mtl_text=$(echo "$mtl" | grep '^text:')
-cpu_text=$(echo "$cpu" | grep '^text:')
+mtl_text=$(echo "$mtl" | grep '^text:' || true)
+cpu_text=$(echo "$cpu" | grep '^text:' || true)
 [ -n "$mtl_text" ] || fail "metal output has no text: line"
 if [ "$mtl_text" != "$cpu_text" ]; then
     printf 'metal:\n%s\ncpu:\n%s\n' "$mtl_text" "$cpu_text" >&2
