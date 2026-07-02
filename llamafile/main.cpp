@@ -193,6 +193,30 @@ static void print_general_help(bool show_full_list_hint) {
            "  llamafile -m model.gguf --cli -p \"explain quantum computing\"\n");
 }
 
+static void print_server_help(bool show_full_list_hint) {
+    printf("llamafile --server - HTTP server mode\n"
+           "\n"
+           "usage: llamafile -m MODEL.gguf --server [options]\n"
+           "\n"
+           "Start an OpenAI-compatible HTTP server (no TUI). Serves a browser\n"
+           "web UI and a REST API for chat completions, embeddings, and more.\n"
+           "\n"
+           "server-specific options:\n"
+           "  --host ADDR      ip address to listen on (default 127.0.0.1)\n"
+           "  --port N         tcp port to listen on (default 8080)\n"
+           "  --api-key KEY    require this API key for authentication\n"
+           "\n");
+    if (show_full_list_hint) {
+        printf("all other llama.cpp options are also accepted.\n"
+               "run `llamafile --server --help` to see the full list.\n"
+               "\n");
+    }
+    printf("examples:\n"
+           "  llamafile -m model.gguf --server\n"
+           "  llamafile -m model.gguf --server --port 8080\n"
+           "  llamafile -m model.gguf --server --host 0.0.0.0 --port 8080\n");
+}
+
 static void print_chat_help(bool show_full_list_hint) {
     printf("llamafile --chat - TUI chat mode\n"
            "\n"
