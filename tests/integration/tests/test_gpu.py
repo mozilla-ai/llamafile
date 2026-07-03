@@ -176,7 +176,7 @@ class TestGPUAcceleration:
 
         try:
             ready = LlamafileRunner.wait_for_server(
-                server_port, timeout=timeouts.server_ready
+                server_port, timeout=timeouts.server_ready, proc=proc
             )
             assert ready
 
@@ -259,7 +259,7 @@ class TestCPUExecution:
 
         try:
             ready = LlamafileRunner.wait_for_server(
-                server_port, timeout=timeouts.server_ready
+                server_port, timeout=timeouts.server_ready, proc=proc
             )
             assert ready
 

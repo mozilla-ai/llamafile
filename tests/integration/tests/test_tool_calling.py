@@ -56,7 +56,7 @@ class TestToolCalling:
 
         try:
             ready = LlamafileRunner.wait_for_server(
-                server_port, timeout=timeouts.server_ready
+                server_port, timeout=timeouts.server_ready, proc=proc
             )
             assert ready
 
@@ -91,7 +91,7 @@ class TestToolCalling:
 
         try:
             ready = LlamafileRunner.wait_for_server(
-                server_port, timeout=timeouts.server_ready
+                server_port, timeout=timeouts.server_ready, proc=proc
             )
             assert ready
 
@@ -122,7 +122,7 @@ class TestToolCalling:
 
         try:
             ready = LlamafileRunner.wait_for_server(
-                server_port, timeout=timeouts.server_ready
+                server_port, timeout=timeouts.server_ready, proc=proc
             )
             assert ready
 

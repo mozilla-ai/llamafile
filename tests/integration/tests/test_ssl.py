@@ -175,7 +175,7 @@ class TestHttpsDownload:
         )
         try:
             assert LlamafileRunner.wait_for_server(
-                server_port, timeout=timeouts.server_ready
+                server_port, timeout=timeouts.server_ready, proc=proc
             ), "Server did not become ready (HTTPS download failed?)"
 
             if platform.system() != "Windows":

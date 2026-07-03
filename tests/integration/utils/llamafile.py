@@ -384,6 +384,7 @@ class LlamafileRunner:
     @staticmethod
     def wait_for_server(
         port: int,
+        proc: subprocess.Popen,
         host: str = "127.0.0.1",
         timeout: float = TIMEOUT_SERVER_READY,
         poll_interval: float = POLL_INTERVAL,
@@ -392,18 +393,30 @@ class LlamafileRunner:
 
         Args:
             port: Server port
+            proc: The server process. When it exits before the server
+                  becomes ready (e.g. a bare build launched without
+                  --model errors out at startup), give up immediately
+                  instead of polling a dead port for the full timeout.
             host: Server host
             timeout: Maximum time to wait in seconds
             poll_interval: Time between health checks
 
         Returns:
-            True if server is ready, False if timeout
+            True if server is ready, False if it exited early or timed out
         """
         url = f"http://{host}:{port}/health"
         start_time = time.time()
 
         logger.info("Waiting for server at %s (timeout=%.1fs)", url, timeout)
         while time.time() - start_time < timeout:
+            if proc.poll() is not None:
+                logger.warning(
+                    "Server process exited before becoming ready (rc=%s). "
+                    "If this is a bare llamafile build, did you pass "
+                    "--model / LLAMAFILE_MODEL?",
+                    proc.returncode,
+                )
+                return False
             try:
                 response = requests.get(url, timeout=2)
                 if response.status_code == 200:

@@ -17,7 +17,7 @@ class TestCombinedMode:
 
         try:
             ready = LlamafileRunner.wait_for_server(
-                server_port, timeout=timeouts.server_ready
+                server_port, timeout=timeouts.server_ready, proc=proc
             )
             assert ready, "Server did not become ready in combined mode"
 
@@ -39,7 +39,7 @@ class TestCombinedMode:
 
         try:
             ready = LlamafileRunner.wait_for_server(
-                server_port, timeout=timeouts.server_ready
+                server_port, timeout=timeouts.server_ready, proc=proc
             )
             assert ready, "Server did not become ready"
 

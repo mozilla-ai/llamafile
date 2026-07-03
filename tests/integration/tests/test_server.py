@@ -15,7 +15,7 @@ class TestServerBasic:
 
         try:
             ready = LlamafileRunner.wait_for_server(
-                server_port, timeout=timeouts.server_ready
+                server_port, timeout=timeouts.server_ready, proc=proc
             )
             assert ready, "Server did not become ready in time"
         finally:
@@ -28,7 +28,7 @@ class TestServerBasic:
 
         try:
             ready = LlamafileRunner.wait_for_server(
-                server_port, timeout=timeouts.server_ready
+                server_port, timeout=timeouts.server_ready, proc=proc
             )
             assert ready, "Server did not become ready"
 
@@ -53,7 +53,7 @@ class TestServerBasic:
 
         try:
             ready = LlamafileRunner.wait_for_server(
-                server_port, timeout=timeouts.server_ready
+                server_port, timeout=timeouts.server_ready, proc=proc
             )
             assert ready, "Server did not become ready"
 
@@ -84,7 +84,7 @@ class TestServerParameters:
 
         try:
             ready = LlamafileRunner.wait_for_server(
-                server_port, timeout=timeouts.server_ready
+                server_port, timeout=timeouts.server_ready, proc=proc
             )
             assert ready
 
@@ -130,7 +130,7 @@ class TestServerParameters:
 
         try:
             ready = LlamafileRunner.wait_for_server(
-                server_port, timeout=timeouts.server_ready
+                server_port, timeout=timeouts.server_ready, proc=proc
             )
             assert ready
 
