@@ -19,16 +19,42 @@ allow/deny behavior of each promise set.)
 import os
 import platform
 import subprocess
+import time
+
+import requests
 
 import pytest
 
-from utils.llamafile import LlamafileRunner
+from utils.llamafile import LlamafileRunner, POLL_INTERVAL
 
 IS_LINUX = platform.system() == "Linux"
 
 requires_linux = pytest.mark.skipif(
     not IS_LINUX, reason="SECCOMP enforcement is only observable on Linux"
 )
+
+
+def _wait_ready(proc, port, timeout, log_file=None):
+    """Like LlamafileRunner.wait_for_server, but fails immediately when the
+    server process exits instead of polling a dead port for the full
+    timeout (e.g. a bare build launched without --model errors out at
+    startup). Includes the log tail in the failure so the cause is visible."""
+    url = f"http://127.0.0.1:{port}/health"
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        if proc.poll() is not None:
+            log = LlamafileRunner.read_log_file(log_file) if log_file else ""
+            pytest.fail(
+                f"server exited early (rc={proc.returncode}) — did you pass "
+                f"--model / LLAMAFILE_MODEL? Log tail:\n{log[-2000:]}"
+            )
+        try:
+            if requests.get(url, timeout=2).status_code == 200:
+                return
+        except requests.RequestException:
+            pass
+        time.sleep(POLL_INTERVAL)
+    pytest.fail(f"server not ready after {timeout:.0f}s")
 
 
 def _status_field(pid: int, field: str) -> int | None:
@@ -99,9 +125,7 @@ class TestServerSandbox:
         log_file = str(tmp_path / "server.log")
         proc = cpu_runner.start_server(port=server_port, log_file=log_file)
         try:
-            assert LlamafileRunner.wait_for_server(
-                server_port, timeout=timeouts.server_ready
-            ), "Server did not become ready"
+            _wait_ready(proc, server_port, timeouts.server_ready, log_file)
 
             pid = _resolve_server_pid(proc.pid)
             assert _seccomp_filters(pid) == _baseline_filters() + 1, (
@@ -130,9 +154,7 @@ class TestServerSandbox:
             port=server_port, log_file=log_file, extra_args=["--unsecure"]
         )
         try:
-            assert LlamafileRunner.wait_for_server(
-                server_port, timeout=timeouts.server_ready
-            ), "Server did not become ready"
+            _wait_ready(proc, server_port, timeouts.server_ready, log_file)
             pid = _resolve_server_pid(proc.pid)
             assert _seccomp_filters(pid) == _baseline_filters(), (
                 "--unsecure must not install a filter"
@@ -149,9 +171,7 @@ class TestServerSandbox:
         log_file = str(tmp_path / "server.log")
         proc = cpu_runner.start_server(port=server_port, log_file=log_file)
         try:
-            assert LlamafileRunner.wait_for_server(
-                server_port, timeout=timeouts.server_ready
-            ), "Server did not become ready"
+            _wait_ready(proc, server_port, timeouts.server_ready, log_file)
         finally:
             _stop_hard(proc)
 
@@ -215,9 +235,7 @@ class TestCombinedModeSandbox:
         )
         os.close(slave)
         try:
-            assert LlamafileRunner.wait_for_server(
-                server_port, timeout=timeouts.server_ready
-            ), "Combined-mode server did not become ready"
+            _wait_ready(proc, server_port, timeouts.server_ready, log_file)
             pid = _resolve_server_pid(proc.pid)
             assert _seccomp_filters(pid) == _baseline_filters()
         finally:
