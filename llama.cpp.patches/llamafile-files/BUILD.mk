@@ -436,6 +436,7 @@ UI_GEN_OBJ := $(UI_CPP_GEN:%.cpp=%.cpp.o)
 TOOL_LLAMAFILE_OBJS := \
 	o/$(MODE)/llamafile/llamafile.o \
 	o/$(MODE)/llamafile/gpu.a \
+	o/$(MODE)/llamafile/sandbox.o \
 	o/$(MODE)/llamafile/zip.o
 
 # Server objects depend on the llamafile bridge header and on the

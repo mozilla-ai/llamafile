@@ -168,6 +168,18 @@ int cli_main(int argc, char **argv) {
         params.n_gpu_layers = INT_MAX;
     }
 
+    // Drop network and filesystem-write access before the untrusted GGUF
+    // file is parsed. Must happen after common_params_parse() (-hf model
+    // downloads need the network) and before threads/weights come up.
+    // See llamafile/sandbox.c.
+    int sandbox = llamafile_sandbox("stdio rpath tty");
+    if (sandbox == LLAMAFILE_SANDBOX_FAILED) {
+        perror("pledge");
+        return 1;
+    }
+    if (FLAG_verbose)
+        fprintf(stderr, "sandbox: %s\n", llamafile_sandbox_describe(sandbox));
+
     // Load model
     llama_model_params model_params = common_model_params_to_llama(params);
     llama_model *model = llama_model_load_from_file(params.model.path.c_str(), model_params);

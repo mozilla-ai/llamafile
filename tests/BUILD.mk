@@ -121,6 +121,28 @@ o/$(MODE)/tests/gpu_backend_test: \
 	$(CXX) $(LDFLAGS) -o $@ $^ $(LDLIBS)
 
 # ==============================================================================
+# Test: sandbox_test (issue #930 pledge/SECCOMP sandboxing)
+# ==============================================================================
+#
+# Forks children that install the promise sets llamafile uses (server:
+# stdio+anet, cli: stdio+rpath+tty) and asserts allowed syscalls still
+# work while blocked ones fail with EPERM. Self-skips on OSes where
+# pledge() can't be enforced (anything but Linux/OpenBSD). Links against
+# sandbox.o alone: it stubs llamafile_has_gpu() to stay off the GPU stack.
+
+SANDBOX_TEST_DEPS := \
+	o/$(MODE)/llamafile/sandbox.o
+
+# sandbox_test.o is built by the generic %.o: %.c rule (-iquote. resolves
+# the llamafile/llamafile.h include)
+
+o/$(MODE)/tests/sandbox_test: \
+		o/$(MODE)/tests/sandbox_test.o \
+		$(SANDBOX_TEST_DEPS)
+	@mkdir -p $(@D)
+	$(CC) $(LDFLAGS) -o $@ $^ $(LDLIBS)
+
+# ==============================================================================
 # Test: backend_ops_test (upstream ggml test-backend-ops under llamafile)
 # ==============================================================================
 #
@@ -183,4 +205,5 @@ o/$(MODE)/tests: \
 	o/$(MODE)/tests/extract_data_uris_test.runs \
 	o/$(MODE)/tests/fa_helpers_test.runs \
 	o/$(MODE)/tests/gpu_backend_test.runs \
+	o/$(MODE)/tests/sandbox_test.runs \
 	o/$(MODE)/tests/transcribefile_smoke.runs

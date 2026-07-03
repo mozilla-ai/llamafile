@@ -35,6 +35,7 @@ extern bool FLAG_nologo;        // Suppresses logo display (chatbot_main.cpp)
 extern bool FLAG_nothink;       // Filters thinking/reasoning content (chatbot_cli.cpp)
 extern bool FLAG_precise;       // Forces precise math in tinyblas (tinyblas_cpu.h)
 extern bool FLAG_recompile;     // Forces GPU library recompilation (metal.c)
+extern bool FLAG_unsecure;      // Disables pledge() sandboxing (sandbox.c)
 extern int FLAG_gpu;            // GPU backend selection (llamafile.c, metal.c, cuda.c)
 extern int FLAG_verbose;        // Verbose output (chatbot_main.cpp, metal.c, cuda.c)
 
@@ -113,6 +114,21 @@ bool llamafile_has_vulkan(void);          // Defined in vulkan.c (dynamic loader
 int llamafile_gpu_parse(const char *);    // Defined in llamafile.c
 const char *llamafile_describe_gpu(void); // Defined in llamafile.c
 void llamafile_early_gpu_init(char **);   // Defined in llamafile.c
+
+// =============================================================================
+// Sandboxing - pledge()/SECCOMP syscall restrictions (defined in sandbox.c)
+// =============================================================================
+
+#define LLAMAFILE_SANDBOX_FAILED -1      // pledge() failed, errno is set
+#define LLAMAFILE_SANDBOX_ACTIVE 0       // restrictions are being enforced
+#define LLAMAFILE_SANDBOX_UNSECURE 1     // skipped: --unsecure flag
+#define LLAMAFILE_SANDBOX_GPU 2          // skipped: GPU backend loaded
+#define LLAMAFILE_SANDBOX_UNSUPPORTED 3  // skipped: OS can't enforce pledge()
+
+bool llamafile_sandbox_supported(void);         // Probe only, installs nothing
+int llamafile_sandbox_apply(const char *);      // Unconditional pledge()
+int llamafile_sandbox(const char *);            // Honors --unsecure and GPU mode
+const char *llamafile_sandbox_describe(int);    // Status code -> human string
 
 // Log callback type for Metal backend (matches ggml_log_callback)
 typedef void (*llamafile_log_callback)(int level, const char *text, void *user_data);

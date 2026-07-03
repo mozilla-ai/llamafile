@@ -172,6 +172,7 @@ static void print_general_help(bool show_full_list_hint) {
            "  --gpu MODE       GPU backend (auto, nvidia, amd, apple, disable)\n"
            "  --nologo         suppress the startup logo\n"
            "  --ascii          use ASCII art instead of Unicode for logo\n"
+           "  --unsecure       disable pledge() sandboxing (Linux/OpenBSD)\n"
            "  --verbose        enable verbose logging\n"
            "  --version        show version information\n"
            "  --help           show this help\n"

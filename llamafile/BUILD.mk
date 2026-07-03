@@ -138,6 +138,7 @@ LLAMAFILE_SRCS_C := \
 	llamafile/gpu_backend.c \
 	llamafile/llamafile.c \
 	llamafile/metal.c \
+	llamafile/sandbox.c \
 	llamafile/vulkan.c \
 	llamafile/zip.c
 

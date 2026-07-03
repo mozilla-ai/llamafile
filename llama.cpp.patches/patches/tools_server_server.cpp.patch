@@ -9,19 +9,22 @@ diff --git a/tools/server/server.cpp b/tools/server/server.cpp
  #include <signal.h>
  #include <thread> // for std::thread::hardware_concurrency
  
-@@ -21,6 +22,11 @@
+@@ -21,6 +22,14 @@
  #include <windows.h>
  #endif
  
 +#ifdef COSMOCC
++#include <cerrno>
++#include <cstring>
 +#include <cosmo.h>
++#include <libc/dce.h> // IsOpenbsd
 +#include "llamafile.h"
 +#endif
 +
  static std::function<void(int)> shutdown_handler;
  static std::atomic_flag is_terminating = ATOMIC_FLAG_INIT;
  
-@@ -71,15 +77,26 @@ static server_http_context::handler_t ex_wrapper(server_http_context::handler_t
+@@ -71,15 +80,26 @@ static server_http_context::handler_t ex_wrapper(server_http_context::handler_t
      };
  }
  
@@ -52,7 +55,76 @@ diff --git a/tools/server/server.cpp b/tools/server/server.cpp
      common_init();
  
      if (!common_params_parse(argc, argv, params, LLAMA_EXAMPLE_SERVER)) {
-@@ -332,6 +349,13 @@ int llama_server(int argc, char ** argv) {
+@@ -264,6 +284,13 @@ int llama_server(int argc, char ** argv) {
+     if (is_router_server) {
+         SRV_INF("%s", "starting router server, no model will be loaded in this process\n");
+ 
++#ifdef COSMOCC
++        // the router spawns child server processes on demand, which needs
++        // fork/exec; it cannot be pledge()d itself, but every child it
++        // spawns applies its own sandbox in the branch below
++        SRV_WRN("%s", "sandbox: disabled in router mode (spawns child servers)\n");
++#endif
++
+         clean_up = [&models_routes]() {
+             SRV_INF("%s: cleaning up before exit...\n", __func__);
+             if (models_routes.has_value()) {
+@@ -297,6 +324,54 @@ int llama_server(int argc, char ** argv) {
+             llama_backend_free();
+         };
+ 
++#ifdef COSMOCC
++        // pledge() SECCOMP sandbox (llamafile issue #930). Placement is
++        // constrained on every side:
++        //   - after common_params_parse(): -hf downloads need connect()
++        //   - after ctx_http.init(): the TLS certificate/key are read there
++        //   - before ctx_http.start(): SECCOMP filters only cover threads
++        //     created after installation, so the HTTP listener/worker
++        //     threads must not exist yet
++        //   - before load_model(): untrusted GGUF data is parsed sandboxed
++        if (on_ready || on_shutdown_available) {
++            // combined mode runs the TUI in this process as an HTTP client,
++            // which needs connect(); the accept-only sandbox would break it
++            SRV_WRN("%s", "sandbox: disabled in combined mode; use --server for a sandboxed server\n");
++        } else {
++            // anet permits accept() but never connect(); OpenBSD's native
++            // pledge has no anet, inet is the closest promise there
++            std::string promises = IsOpenbsd() ? "stdio inet" : "stdio anet";
++            // rpath is needed only when files are read from the real
++            // filesystem after startup; ZipOS (/zip/...) reads are served
++            // from the already-mapped executable without syscalls
++            auto on_disk = [](const std::string & p) {
++                return !p.empty() && !string_starts_with(p, "/zip/");
++            };
++            bool need_rpath = on_disk(params.model.path)
++                           || on_disk(params.mmproj.path)
++                           || !params.public_path.empty();
++            for (const auto & la : params.lora_adapters) {
++                need_rpath = need_rpath || on_disk(la.path);
++            }
++            if (need_rpath) {
++                promises += " rpath";
++            }
++            if (!params.slot_save_path.empty()) {
++                promises += " wpath cpath";
++            }
++            int sandbox = llamafile_sandbox(promises.c_str());
++            if (sandbox == LLAMAFILE_SANDBOX_ACTIVE) {
++                SRV_INF("sandbox: pledge(\"%s\") active\n", promises.c_str());
++            } else if (sandbox == LLAMAFILE_SANDBOX_FAILED) {
++                SRV_ERR("sandbox: pledge: %s\n", strerror(errno));
++                clean_up();
++                return 1;
++            } else {
++                SRV_WRN("sandbox: %s\n", llamafile_sandbox_describe(sandbox));
++            }
++        }
++#endif
++
+         // start the HTTP server before loading the model to be able to serve /health requests
+         if (!ctx_http.start()) {
+             clean_up();
+@@ -332,6 +407,13 @@ int llama_server(int argc, char ** argv) {
              // this will unblock start_loop()
              ctx_server.terminate();
          };
@@ -66,7 +138,7 @@ diff --git a/tools/server/server.cpp b/tools/server/server.cpp
      }
  
      // TODO: refactor in common/console
-@@ -368,6 +392,11 @@ int llama_server(int argc, char ** argv) {
+@@ -368,6 +450,11 @@ int llama_server(int argc, char ** argv) {
      } else {
          SRV_INF("server is listening on %s\n", ctx_http.listening_address.c_str());
  
@@ -78,7 +150,7 @@ diff --git a/tools/server/server.cpp b/tools/server/server.cpp
          // optionally, notify router server that this instance is ready
          std::thread monitor_thread;
          if (child.is_child()) {
-@@ -392,5 +421,48 @@ int llama_server(int argc, char ** argv) {
+@@ -392,5 +479,62 @@ int llama_server(int argc, char ** argv) {
          }
      }
  
@@ -97,7 +169,7 @@ diff --git a/tools/server/server.cpp b/tools/server/server.cpp
 +#else
      return 0;
 +#endif
- }
++}
 +
 +// Standalone entry point for llama-server executable
 +// Not compiled when building as part of llamafile TUI (which has its own main)
@@ -110,6 +182,20 @@ diff --git a/tools/server/server.cpp b/tools/server/server.cpp
 +    // Check if verbose mode is requested (must be set before GPU init)
 +    bool verbose = llamafile_has(argv, "--verbose");
 +    FLAG_verbose = verbose ? 1 : 0;
++
++    // --unsecure is llamafile's flag, not llama.cpp's: consume it here so
++    // common_params_parse() never sees it (llamafile's own main strips it
++    // in parse_llamafile_args instead)
++    int argc_out = 1;
++    for (int i = 1; i < argc; i++) {
++        if (!strcmp(argv[i], "--unsecure")) {
++            FLAG_unsecure = true;
++            continue;
++        }
++        argv[argc_out++] = argv[i];
++    }
++    argc = argc_out;
++    argv[argc] = nullptr;
 +
 +    // Initialize GPU support early (must happen BEFORE llama_backend_init())
 +    // This triggers dynamic loading of GPU backends (CUDA, ROCm, Metal)
@@ -125,5 +211,5 @@ diff --git a/tools/server/server.cpp b/tools/server/server.cpp
 +    }
 +#endif
 +    return server_main(argc, argv, nullptr, nullptr);
-+}
+ }
 +#endif

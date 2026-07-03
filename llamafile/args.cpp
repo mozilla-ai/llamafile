@@ -19,6 +19,7 @@
 #include "args.h"
 #include "llamafile.h"
 
+#include <cstdlib>
 #include <cstring>
 #include <vector>
 
@@ -36,6 +37,7 @@ static bool is_llamafile_flag(const char* arg) {
            strcmp(arg, "--ascii") == 0 ||
            strcmp(arg, "--nologo") == 0 ||
            strcmp(arg, "--nothink") == 0 ||
+           strcmp(arg, "--unsecure") == 0 ||
            strcmp(arg, "--version") == 0;
 }
 
@@ -72,6 +74,11 @@ LlamafileArgs parse_llamafile_args(int argc, char** argv) {
         args.mode = ProgramMode::CHAT;
     } else if (llamafile_has(argv, "--cli")) {
         args.mode = ProgramMode::CLI;
+    } else if (std::getenv("LLAMA_SERVER_ROUTER_PORT")) {
+        // spawned by a router server (server-models.cpp sets this env var):
+        // the child must be a headless server instance, never a combined
+        // TUI — this also lets it install its pledge() sandbox
+        args.mode = ProgramMode::SERVER;
     } else {
         // AUTO mode: will run combined chat + server
         args.mode = ProgramMode::AUTO;
@@ -86,6 +93,9 @@ LlamafileArgs parse_llamafile_args(int argc, char** argv) {
     // Check logo flags
     FLAG_nologo = llamafile_has(argv, "--nologo");
     FLAG_ascii = llamafile_has(argv, "--ascii");
+
+    // Check --unsecure flag (disables pledge() sandboxing, see sandbox.c)
+    FLAG_unsecure = llamafile_has(argv, "--unsecure");
 
     // Filter out llamafile-specific arguments
     // These are not recognized by llama.cpp and would cause errors
