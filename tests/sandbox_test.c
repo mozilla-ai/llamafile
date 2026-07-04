@@ -33,8 +33,12 @@
 #include "llamafile/llamafile.h"
 
 #include <arpa/inet.h>
+#include <cosmo.h>
 #include <errno.h>
 #include <fcntl.h>
+#include <libc/calls/calls.h>  // unveil
+#include <libc/dce.h>          // IsLinux
+#include <limits.h>
 #include <netinet/in.h>
 #include <pthread.h>
 #include <stdio.h>
@@ -150,6 +154,41 @@ static void child_anet_promises(void) {
     _exit(0);
 }
 
+// unveil() confinement: reads under an unveiled directory succeed while
+// the rest of the filesystem is denied. Landlock accepts rules on any
+// filesystem but enforces on only some (see llamafile_sandbox_server's
+// governability probe), so if a read inside the unveiled dir is itself
+// denied we treat the filesystem as ungovernable and skip -- matching the
+// production fallback -- rather than failing.
+static void child_unveil(void) {
+    char dir[] = "/tmp/lf_uv_XXXXXX";
+    CHECK(mkdtemp(dir), "mkdtemp");
+    char inside[PATH_MAX];
+    snprintf(inside, sizeof(inside), "%s/weights.bin", dir);
+    int fd = open(inside, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+    CHECK(fd != -1, "create file inside temp dir");
+    close(fd);
+
+    unveil(dir, "r");
+    unveil(0, 0);  // lock
+
+    int in = open(inside, O_RDONLY);
+    if (in == -1) {
+        // filesystem accepts unveil() but denies everything: not governable
+        fprintf(stderr, "sandbox_test: unveil: SKIP (filesystem not "
+                        "Landlock-governable)\n");
+        _exit(0);
+    }
+    close(in);
+
+    errno = 0;
+    CHECK(open("/etc/passwd", O_RDONLY) == -1,
+          "/etc/passwd blocked outside unveiled dir");
+    CHECK(errno == EACCES || errno == EPERM,
+          "unveil denial is EACCES/EPERM, not a kill");
+    _exit(0);
+}
+
 static int run_case(const char *name, void (*fn)(void)) {
     pid_t pid = fork();
     if (!pid)
@@ -164,15 +203,52 @@ static int run_case(const char *name, void (*fn)(void)) {
     return 0;
 }
 
-int main(void) {
-    if (!llamafile_sandbox_supported()) {
-        printf("sandbox_test: SKIP: pledge() not enforceable on this OS "
-               "(needs Linux with SECCOMP or OpenBSD)\n");
-        return 0;
-    }
+// Pure promise-string derivation (finding 10: keep the server policy
+// unit-testable rather than buried in the vendored server.cpp patch).
+static int test_promises(void) {
+    struct {
+        bool openbsd, slot_save;
+        const char *want;
+    } cases[] = {
+        {false, false, "stdio anet rpath"},
+        {false, true, "stdio anet rpath wpath cpath"},
+        {true, false, "stdio inet rpath"},
+        {true, true, "stdio inet rpath wpath cpath"},
+    };
     int rc = 0;
+    for (size_t i = 0; i < sizeof(cases) / sizeof(*cases); ++i) {
+        char got[64];
+        llamafile_sandbox_server_promises(got, sizeof(got), cases[i].openbsd,
+                                          cases[i].slot_save);
+        if (strcmp(got, cases[i].want)) {
+            fprintf(stderr, "sandbox_test: promises: FAILED want=\"%s\" got=\"%s\"\n",
+                    cases[i].want, got);
+            rc = 1;
+        }
+    }
+    if (!rc)
+        printf("sandbox_test: server promise derivation: OK\n");
+    return rc;
+}
+
+int main(void) {
+    int rc = 0;
+
+    // Pure logic, runs on every platform.
+    rc |= test_promises();
+
+    // The enforcement cases assert Linux SECCOMP semantics: the "anet"
+    // promise is a cosmo Linux extension OpenBSD's pledge(2) rejects, and
+    // the EPERM assertions assume PLEDGE_PENALTY_RETURN_EPERM (Linux only;
+    // OpenBSD kills violators). So gate them to Linux.
+    if (!IsLinux() || !llamafile_sandbox_supported()) {
+        printf("sandbox_test: SKIP enforcement: needs Linux with SECCOMP "
+               "(anet/EPERM semantics are Linux-specific)\n");
+        return rc;
+    }
     rc |= run_case("stdio+rpath (cli promises)", child_rpath_promises);
     rc |= run_case("stdio only (embedded weights)", child_stdio_only);
     rc |= run_case("stdio+anet+rpath (server promises)", child_anet_promises);
+    rc |= run_case("unveil confinement", child_unveil);
     return rc;
 }

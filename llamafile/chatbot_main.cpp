@@ -166,13 +166,9 @@ int main(int argc, char **argv) {
     // network) and before threads/weights come up. Unlike --cli, the chat
     // TUI keeps wpath+cpath so /dump and /push can still write files.
     // See llamafile/sandbox.c.
-    int sandbox = llamafile_sandbox("stdio rpath wpath cpath tty");
-    if (sandbox == LLAMAFILE_SANDBOX_FAILED) {
-        perror("pledge");
+    if (llamafile_sandbox_enter("stdio rpath wpath cpath tty", verbose) ==
+        LLAMAFILE_SANDBOX_FAILED)
         exit(1);
-    }
-    if (verbose)
-        fprintf(stderr, "sandbox: %s\n", llamafile_sandbox_describe(sandbox));
 
     // Suppress logging for model loading unless --verbose was specified
     // We must set this AFTER common_init() since it overwrites the log callback

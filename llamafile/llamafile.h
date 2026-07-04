@@ -128,7 +128,26 @@ void llamafile_early_gpu_init(char **);   // Defined in llamafile.c
 bool llamafile_sandbox_supported(void);         // Probe only, installs nothing
 int llamafile_sandbox_apply(const char *);      // Unconditional pledge()
 int llamafile_sandbox(const char *);            // Honors --unsecure and GPU mode
+int llamafile_sandbox_enter(const char *, bool);// sandbox() + perror/verbose report
 const char *llamafile_sandbox_describe(int);    // Status code -> human string
+
+// Server sandbox: unveil() confinement + accept()-only pledge(). Fills
+// promises_out with the pledge string and *confined_out with whether path
+// confinement was applied (both for logging). Honors --unsecure/GPU.
+int llamafile_sandbox_server(const char *model_path, const char *mmproj_path,
+                             const char *public_path,
+                             const char *const *lora_paths, int n_loras,
+                             const char *slot_save_path, char *promises_out,
+                             size_t promises_len, bool *confined_out);
+
+// Pure promise-string derivation, exposed for unit testing.
+void llamafile_sandbox_server_promises(char *out, size_t len, bool is_openbsd,
+                                       bool has_slot_save);
+
+// Removes every occurrence of flag from argv in place, updating *argc, and
+// returns true if it was present. Used to consume llamafile-only flags
+// (e.g. --unsecure) before handing argv to llama.cpp's parser. In llamafile.c.
+bool llamafile_consume_flag(int *argc, char **argv, const char *flag);
 
 // Log callback type for Metal backend (matches ggml_log_callback)
 typedef void (*llamafile_log_callback)(int level, const char *text, void *user_data);

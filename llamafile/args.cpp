@@ -19,7 +19,6 @@
 #include "args.h"
 #include "llamafile.h"
 
-#include <cstdlib>
 #include <cstring>
 #include <vector>
 
@@ -74,11 +73,6 @@ LlamafileArgs parse_llamafile_args(int argc, char** argv) {
         args.mode = ProgramMode::CHAT;
     } else if (llamafile_has(argv, "--cli")) {
         args.mode = ProgramMode::CLI;
-    } else if (std::getenv("LLAMA_SERVER_ROUTER_PORT")) {
-        // spawned by a router server (server-models.cpp sets this env var):
-        // the child must be a headless server instance, never a combined
-        // TUI — this also lets it install its pledge() sandbox
-        args.mode = ProgramMode::SERVER;
     } else {
         // AUTO mode: will run combined chat + server
         args.mode = ProgramMode::AUTO;

@@ -156,7 +156,7 @@ These patches integrate llamafile's file handling APIs for loading models from b
 
 | Patch | Description |
 |-------|-------------|
-| `tools_server_server.cpp.patch` | Renames upstream's `llama_server()` to `server_main()` and adds `on_ready`/`on_shutdown_available` callbacks for combined TUI+server mode; adds Metal/GPU backend trigger before `common_init()`; installs the pledge()/SECCOMP sandbox (`llamafile_sandbox()`, issue #930) before the HTTP listener threads spawn and before model load, honoring `--unsecure`, GPU, router, and combined modes; adds Cosmopolitan-specific standalone `main()` with `cosmo_args`, verbose flag handling, `--unsecure` consumption, and GPU pre-initialization; handles `LLAMAFILE_TUI` exit to avoid Metal cleanup crashes |
+| `tools_server_server.cpp.patch` | Renames upstream's `llama_server()` to `server_main()` and adds `on_ready`/`on_shutdown_available` callbacks for combined TUI+server mode; adds Metal/GPU backend trigger before `common_init()`; installs the pledge()/unveil() sandbox (`llamafile_sandbox_server()`, issue #930) — the policy lives in `llamafile/sandbox.c`; the patch only quiesces the log worker (`common_log_pause`/`resume`, so no thread escapes the per-thread filter) around the call, before the HTTP listener spawns and before model load, and skips it in combined/GPU modes; adds Cosmopolitan-specific standalone `main()` with `cosmo_args`, verbose flag handling, `--unsecure` consumption (`llamafile_consume_flag`), and GPU pre-initialization; handles `LLAMAFILE_TUI` exit to avoid Metal cleanup crashes |
 
 The web UI moved upstream from prebuilt `tools/server/public/*` assets to
 a Svelte/PWA project under `tools/ui/`, embedded at CMake time via
