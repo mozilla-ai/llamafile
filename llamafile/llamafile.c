@@ -289,9 +289,13 @@ struct llamafile *llamafile_open_gguf(const char *fname, const char *mode) {
         // embedded by llamafile-convert). EACCES/EPERM: the sandbox
         // (unveil/pledge) denies opening it directly; the embedded copy
         // in our own /zip/ store is still reachable via the executable.
-        if (errno == ENOENT || errno == EACCES || errno == EPERM) {
+        int open_errno = errno;
+        if (open_errno == ENOENT || open_errno == EACCES || open_errno == EPERM) {
             if (!(file = llamafile_open_zip(GetProgramExecutableName(), fname, mode))) {
-                errno = ENOENT;
+                // no embedded copy either: report why the real open failed
+                // (e.g. "Permission denied" for a sandbox/mode denial, not a
+                // misleading "No such file or directory")
+                errno = open_errno;
                 return 0;
             }
             return file;

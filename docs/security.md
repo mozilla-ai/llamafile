@@ -30,12 +30,13 @@ Linux (`stdio inet rpath` on OpenBSD):
   an outbound connection.
 - Filesystem access is **read-only** (`rpath`), and `unveil()` confines
   those reads to the executable and the directories holding the weights
-  (the model, an `--mmproj` file, and any LoRA adapters). The rest of the
-  filesystem — `/etc/passwd`, your SSH keys, other users' files — is
-  invisible to the server even though it is world-readable. Writing,
-  creating, deleting, executing programs, and forking are all denied.
-  (`--slot-save-path` additionally grants read-write-create access to that
-  one directory so slot save/restore works.)
+  (the model and its shards, an `--mmproj` file, LoRA adapters, a draft
+  model, control vectors) plus the two name-resolution files a non-numeric
+  `--host` needs. The rest of the filesystem — `/etc/passwd`, your SSH
+  keys, other users' files — is invisible to the server even though it is
+  world-readable. Writing, creating, deleting, executing programs, and
+  forking are all denied. (`--slot-save-path` and a prompt cache
+  additionally grant read-write-create access to their directories.)
 - The read-only promise is needed even for a bundled llamafile whose
   weights are embedded as `/zip/model.gguf`: the loader reads them by
   reopening the executable's own zip store, which is a real `open()`.

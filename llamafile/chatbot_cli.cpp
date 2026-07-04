@@ -171,9 +171,12 @@ int cli_main(int argc, char **argv) {
     // Drop network and filesystem-write access before the untrusted GGUF
     // file is parsed. Must happen after common_params_parse() (-hf model
     // downloads need the network) and before threads/weights come up.
-    // See llamafile/sandbox.c.
-    if (llamafile_sandbox_enter("stdio rpath tty", FLAG_verbose) ==
-        LLAMAFILE_SANDBOX_FAILED)
+    // Quiesce the log worker across the pledge so it doesn't outlive the
+    // per-thread filter unsandboxed (see llamafile/sandbox.c rule 1).
+    common_log_pause(common_log_main());
+    int sandbox = llamafile_sandbox_enter("stdio rpath tty", FLAG_verbose);
+    common_log_resume(common_log_main());
+    if (sandbox == LLAMAFILE_SANDBOX_FAILED)
         return 1;
 
     // Load model

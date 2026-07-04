@@ -54,7 +54,7 @@ diff --git a/tools/server/server.cpp b/tools/server/server.cpp
      common_init();
  
      if (!common_params_parse(argc, argv, params, LLAMA_EXAMPLE_SERVER)) {
-@@ -297,6 +316,53 @@ int llama_server(int argc, char ** argv) {
+@@ -297,6 +316,67 @@ int llama_server(int argc, char ** argv) {
              llama_backend_free();
          };
  
@@ -78,17 +78,31 @@ diff --git a/tools/server/server.cpp b/tools/server/server.cpp
 +            // would escape them. Quiesce the llama.cpp log worker across the
 +            // call: pause() joins it, resume() respawns it afterward so the
 +            // fresh thread inherits the filters.
-+            std::vector<const char *> lora_paths;
-+            for (const auto & la : params.lora_adapters) {
-+                lora_paths.push_back(la.path.c_str());
-+            }
++            //
++            // Collect every on-disk path the loader opens after the sandbox
++            // locks, so unveil() confines reads to their directories without
++            // denying a legitimate weights file. When llama.cpp gains a new
++            // file parameter, add it here (the sandbox probe would otherwise
++            // fail to load it under confinement).
++            std::vector<const char *> read_paths, rw_paths;
++            read_paths.push_back(params.model.path.c_str());
++            read_paths.push_back(params.mmproj.path.c_str());
++            read_paths.push_back(params.speculative.draft.mparams.path.c_str());
++            read_paths.push_back(params.speculative.ngram_cache.lookup_cache_static.c_str());
++            read_paths.push_back(params.public_path.c_str());
++            for (const auto & la : params.lora_adapters)
++                read_paths.push_back(la.path.c_str());
++            for (const auto & cv : params.control_vectors)
++                read_paths.push_back(cv.fname.c_str());
++            rw_paths.push_back(params.slot_save_path.c_str());
++            rw_paths.push_back(params.path_prompt_cache.c_str());
++            rw_paths.push_back(params.speculative.ngram_cache.lookup_cache_dynamic.c_str());
 +            char promises[64];
 +            bool confined = false;
 +            common_log_pause(common_log_main());
 +            int sandbox = llamafile_sandbox_server(
-+                params.model.path.c_str(), params.mmproj.path.c_str(),
-+                params.public_path.c_str(), lora_paths.data(),
-+                (int) lora_paths.size(), params.slot_save_path.c_str(),
++                read_paths.data(), (int) read_paths.size(),
++                rw_paths.data(), (int) rw_paths.size(),
 +                promises, sizeof(promises), &confined);
 +            common_log_resume(common_log_main());
 +            if (sandbox == LLAMAFILE_SANDBOX_ACTIVE) {
@@ -108,7 +122,7 @@ diff --git a/tools/server/server.cpp b/tools/server/server.cpp
          // start the HTTP server before loading the model to be able to serve /health requests
          if (!ctx_http.start()) {
              clean_up();
-@@ -332,6 +398,13 @@ int llama_server(int argc, char ** argv) {
+@@ -332,6 +412,13 @@ int llama_server(int argc, char ** argv) {
              // this will unblock start_loop()
              ctx_server.terminate();
          };
@@ -122,7 +136,7 @@ diff --git a/tools/server/server.cpp b/tools/server/server.cpp
      }
  
      // TODO: refactor in common/console
-@@ -368,6 +441,11 @@ int llama_server(int argc, char ** argv) {
+@@ -368,6 +455,11 @@ int llama_server(int argc, char ** argv) {
      } else {
          SRV_INF("server is listening on %s\n", ctx_http.listening_address.c_str());
  
@@ -134,7 +148,7 @@ diff --git a/tools/server/server.cpp b/tools/server/server.cpp
          // optionally, notify router server that this instance is ready
          std::thread monitor_thread;
          if (child.is_child()) {
-@@ -392,5 +470,54 @@ int llama_server(int argc, char ** argv) {
+@@ -392,5 +484,54 @@ int llama_server(int argc, char ** argv) {
          }
      }
  

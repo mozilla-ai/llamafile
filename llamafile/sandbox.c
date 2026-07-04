@@ -144,6 +144,12 @@ int llamafile_sandbox_enter(const char *promises, bool verbose) {
     return status;
 }
 
+// A path Landlock must NOT reach if confinement is real. The governability
+// probe reads it back after locking: if it's still readable, unveil()
+// installed nothing (no Landlock, or an ungoverned filesystem) and we must
+// not claim confinement. It is deliberately outside every weights dir.
+#define SANDBOX_CANARY "/etc/passwd"
+
 // Derives the server pledge() promise string. Pure and side-effect-free
 // so it can be unit-tested. rpath is unconditional: the model loader
 // always performs a real open() -- of the on-disk weights, or of the
@@ -151,12 +157,12 @@ int llamafile_sandbox_enter(const char *promises, bool verbose) {
 // -- so a server can never load a model without it. unveil() is what
 // actually confines that rpath to the weights directories.
 void llamafile_sandbox_server_promises(char *out, size_t len,
-                                       bool is_openbsd, bool has_slot_save) {
+                                       bool is_openbsd, bool has_rw) {
     // anet = accept()-only networking (no connect); OpenBSD's native
     // pledge has no anet, so inet is the closest promise there.
     const char *base = is_openbsd ? "stdio inet rpath" : "stdio anet rpath";
-    if (has_slot_save) {
-        // slot save/restore reads and writes the state file on disk
+    if (has_rw) {
+        // slot save/restore and the prompt cache read and write on disk
         snprintf(out, len, "%s wpath cpath", base);
     } else {
         snprintf(out, len, "%s", base);
@@ -174,74 +180,118 @@ static bool path_on_disk(const char *path) {
     return path && *path && strncmp(path, "/zip/", 5) && !access(path, F_OK);
 }
 
-// unveil()s a path's directory read-only, so the whole weights directory
-// (including multi-part GGUF shards) is reachable while the rest of the
-// filesystem is not.
-static void unveil_read_dir(const char *path) {
+// Writes into `dir` the path that must be reachable to open `path`: the
+// path itself if it's a directory (a web root, a slot-save dir), else its
+// parent directory, so multi-part GGUF shards beside a weights file come
+// along -- except a file at the filesystem root, whose parent "/" would
+// expose everything, so the file itself is used. Returns false for paths
+// not on the real filesystem (empty, /zip/, or absent). Single source of
+// truth for both unveil_container() (apply) and the governability probe.
+static bool container_of(const char *path, char *dir, size_t len) {
     if (!path_on_disk(path))
-        return;
-    char dir[PATH_MAX];
-    strlcpy(dir, path, sizeof(dir));
-    char *slash = strrchr(dir, '/');
-    if (slash == dir) {
-        slash[1] = '\0';  // path is "/file" -> unveil "/"
-    } else if (slash) {
-        *slash = '\0';    // "dir/file" -> unveil "dir"
-    } else {
-        strlcpy(dir, ".", sizeof(dir));  // bare "file" -> unveil cwd
+        return false;
+    if (isdirectory(path)) {
+        strlcpy(dir, path, len);
+        return true;
     }
-    unveil(dir, "r");
+    strlcpy(dir, path, len);
+    char *slash = strrchr(dir, '/');
+    if (!slash)
+        strlcpy(dir, ".", len);        // bare "file" -> cwd
+    else if (slash == dir)
+        strlcpy(dir, path, len);       // "/file" -> the file, never "/"
+    else
+        *slash = '\0';                 // "dir/file" -> "dir"
+    return true;
 }
 
-// Adds the read rules for the executable and every weights directory,
-// plus read-write-create for the slot-save directory. Does NOT lock the
-// ruleset (caller calls unveil(0,0)).
-static void unveil_weights(const char *model_path, const char *mmproj_path,
-                           const char *public_path,
-                           const char *const *lora_paths, int n_loras,
-                           const char *slot_save_path) {
+// unveil()s the container of `path` with the given perms, if it's on disk.
+static void unveil_container(const char *path, const char *perms) {
+    char dir[PATH_MAX];
+    if (container_of(path, dir, sizeof(dir)))
+        unveil(dir, perms);
+}
+
+// Installs the unveil() read/read-write rules (does NOT lock; caller locks
+// with unveil(0,0)). The executable is always readable -- llamafile_open_zip
+// reopens it for embedded weights and the bundled web UI -- as are the name
+// resolution files a non-numeric --host needs. rw paths (which may not exist
+// yet, e.g. a prompt cache created on first save) get their container dir.
+static void unveil_apply(const char *const *read_paths, int n_read,
+                         const char *const *rw_paths, int n_rw) {
     unveil(GetProgramExecutableName(), "r");
-    unveil_read_dir(model_path);
-    unveil_read_dir(mmproj_path);
-    for (int i = 0; i < n_loras; ++i)
-        unveil_read_dir(lora_paths[i]);
-    if (path_on_disk(public_path))
-        unveil(public_path, "r");
-    if (slot_save_path && *slot_save_path)
-        unveil(slot_save_path, "rwc");
+    if (path_on_disk("/etc/hosts"))
+        unveil("/etc/hosts", "r");
+    if (path_on_disk("/etc/resolv.conf"))
+        unveil("/etc/resolv.conf", "r");
+    for (int i = 0; i < n_read; ++i)
+        unveil_container(read_paths[i], "r");
+    for (int i = 0; i < n_rw; ++i)
+        unveil_container(rw_paths[i], "rwc");
 }
 
-// Landlock accepts unveil() rules on any filesystem but then denies all
-// access on some (virtiofs, 9p, NFS, FUSE), which would break model
-// loading. Probe in a throwaway child: apply the real rules, lock, and
-// confirm the load-critical paths still open. A "no" here means we keep
-// pledge but skip path confinement, rather than locking down a process
-// that can no longer read its own weights.
-static bool unveil_is_governable(const char *model_path,
-                                 const char *mmproj_path,
-                                 const char *public_path,
-                                 const char *const *lora_paths, int n_loras,
-                                 const char *slot_save_path) {
+// True if `path` opens read-only under the (now locked) ruleset.
+static bool can_read(const char *path) {
+    int fd = open(path, O_RDONLY);
+    if (fd < 0)
+        return false;
+    close(fd);
+    return true;
+}
+
+// True only if opening `path` is *actively denied* (EACCES/EPERM), not
+// merely failing for some other reason such as ENOENT.
+static bool is_denied(const char *path) {
+    errno = 0;
+    int fd = open(path, O_RDONLY);
+    if (fd >= 0) {
+        close(fd);
+        return false;
+    }
+    return errno == EACCES || errno == EPERM;
+}
+
+// Probes whether unveil() confinement can be both enforced and survived on
+// this filesystem, in a throwaway child so a "no" doesn't lock down the
+// real process. Two failure modes to rule out:
+//   - it installed nothing (no Landlock kernel, or cosmo's silent no-op):
+//     the canary outside every rule stays readable -> not confined;
+//   - it over-denies (virtiofs/9p/NFS accept rules then block everything):
+//     a governed weights path can't be opened -> would break model load.
+// Every path_on_disk()/container check runs before the lock, since access()
+// is itself governed once the ruleset is locked.
+#define SANDBOX_PROBE_MAX 64
+static bool unveil_is_governable(const char *const *read_paths, int n_read,
+                                 const char *const *rw_paths, int n_rw) {
     pid_t pid = fork();
     if (pid < 0)
         return false;
     if (!pid) {
-        unveil_weights(model_path, mmproj_path, public_path, lora_paths,
-                       n_loras, slot_save_path);
-        unveil(0, 0);
+        // Snapshot the paths the locked ruleset must still let us read,
+        // computed while access() is unrestricted.
+        char verify[SANDBOX_PROBE_MAX][PATH_MAX];
+        int nv = 0;
+        strlcpy(verify[nv++], GetProgramExecutableName(), PATH_MAX);
+        for (int i = 0; i < n_read && nv < SANDBOX_PROBE_MAX; ++i)
+            if (path_on_disk(read_paths[i]))
+                strlcpy(verify[nv++], read_paths[i], PATH_MAX);
+        for (int i = 0; i < n_rw && nv < SANDBOX_PROBE_MAX; ++i)
+            if (container_of(rw_paths[i], verify[nv], PATH_MAX))
+                ++nv;
+
+        unveil_apply(read_paths, n_read, rw_paths, n_rw);
+        unveil(0, 0);  // lock
+
         int ok = 1;
-        int fd = open(GetProgramExecutableName(), O_RDONLY);
-        if (fd < 0)
+        for (int i = 0; ok && i < nv; ++i)
+            ok = can_read(verify[i]);
+        // Confinement must demonstrably bite: the canary, outside every
+        // rule, must be *denied* (EACCES/EPERM). Merely unreadable-for-
+        // another-reason (ENOENT on an exotic host) is inconclusive, so we
+        // conservatively treat it as "not confined" rather than claiming a
+        // guarantee unveil() didn't actually install.
+        if (ok && !is_denied(SANDBOX_CANARY))
             ok = 0;
-        else
-            close(fd);
-        if (ok && path_on_disk(model_path)) {
-            fd = open(model_path, O_RDONLY);
-            if (fd < 0)
-                ok = 0;
-            else
-                close(fd);
-        }
         _exit(ok ? 0 : 1);
     }
     int ws;
@@ -254,15 +304,16 @@ static bool unveil_is_governable(const char *model_path,
 
 // Installs the server sandbox: confines filesystem reads to the executable
 // and the weights directories via unveil(), then pledges accept()-only
-// networking. Honors --unsecure and GPU mode. Fills promises_out with the
-// pledge string for logging, and *confined_out with whether path
-// confinement was applied. The caller is responsible for quiescing
-// background threads (see rule 1 above) around this call.
-int llamafile_sandbox_server(const char *model_path, const char *mmproj_path,
-                             const char *public_path,
-                             const char *const *lora_paths, int n_loras,
-                             const char *slot_save_path, char *promises_out,
-                             size_t promises_len, bool *confined_out) {
+// networking. read_paths are opened read-only (model, mmproj, LoRA, draft
+// model, control vectors, a static web root); rw_paths get write+create
+// (slot-save dir, prompt cache). Honors --unsecure and GPU mode. Fills
+// promises_out with the pledge string and *confined_out with whether path
+// confinement was applied (both for logging). The caller is responsible for
+// quiescing background threads (see rule 1 above) around this call.
+int llamafile_sandbox_server(const char *const *read_paths, int n_read,
+                             const char *const *rw_paths, int n_rw,
+                             char *promises_out, size_t promises_len,
+                             bool *confined_out) {
     if (promises_out && promises_len)
         promises_out[0] = '\0';
     if (confined_out)
@@ -275,10 +326,15 @@ int llamafile_sandbox_server(const char *model_path, const char *mmproj_path,
     if (pledge(0, 0))
         return LLAMAFILE_SANDBOX_UNSUPPORTED;
 
-    bool has_slot_save = slot_save_path && *slot_save_path;
+    // wpath/cpath only when a write target is actually configured; callers
+    // pass fixed-position entries that are often empty strings.
+    bool has_rw = false;
+    for (int i = 0; i < n_rw; ++i)
+        if (rw_paths[i] && *rw_paths[i])
+            has_rw = true;
     char promises[64];
     llamafile_sandbox_server_promises(promises, sizeof(promises), IsOpenbsd(),
-                                      has_slot_save);
+                                      has_rw);
     if (promises_out)
         strlcpy(promises_out, promises, promises_len);
 
@@ -286,10 +342,8 @@ int llamafile_sandbox_server(const char *model_path, const char *mmproj_path,
     // pledge filter denies. Only apply it when the filesystem can actually
     // enforce it (probe first) -- otherwise skip confinement and keep
     // pledge, rather than making the server unable to read its weights.
-    if (unveil_is_governable(model_path, mmproj_path, public_path, lora_paths,
-                             n_loras, slot_save_path)) {
-        unveil_weights(model_path, mmproj_path, public_path, lora_paths,
-                       n_loras, slot_save_path);
+    if (unveil_is_governable(read_paths, n_read, rw_paths, n_rw)) {
+        unveil_apply(read_paths, n_read, rw_paths, n_rw);
         unveil(0, 0);  // lock the ruleset
         if (confined_out)
             *confined_out = true;
@@ -300,11 +354,10 @@ int llamafile_sandbox_server(const char *model_path, const char *mmproj_path,
         return LLAMAFILE_SANDBOX_FAILED;
     return LLAMAFILE_SANDBOX_ACTIVE;
 #else
-    (void)model_path;
-    (void)mmproj_path;
-    (void)public_path;
-    (void)lora_paths;
-    (void)n_loras;
+    (void)read_paths;
+    (void)n_read;
+    (void)rw_paths;
+    (void)n_rw;
     return LLAMAFILE_SANDBOX_UNSUPPORTED;
 #endif
 }
