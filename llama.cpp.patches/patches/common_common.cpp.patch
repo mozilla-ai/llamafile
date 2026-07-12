@@ -71,8 +71,8 @@ diff --git a/common/common.cpp b/common/common.cpp
  #else
 @@ -1201,10 +1246,31 @@ common_init_result::common_init_result(common_params & params, bool model_only)
      if (params.fit_params) {
-         LOG_INF("%s: fitting params to device memory ...\n", __func__);
-         LOG_INF("%s: (for bugs during this step try to reproduce them with -fit off, or provide --verbose logs if the bug only occurs with -fit on)\n", __func__);
+         COM_TRC("%s", "fitting params to device memory ...\n");
+         COM_TRC("%s", "(for bugs during this step try to reproduce them with -fit off, or provide --verbose logs if the bug only occurs with -fit on)\n");
 +
 +        // if a multimodal projection model is specified and will be loaded on GPU,
 +        // add its estimated size to the fit margins so the fit leaves enough room for it

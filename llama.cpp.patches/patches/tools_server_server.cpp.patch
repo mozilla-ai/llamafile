@@ -1,7 +1,7 @@
 diff --git a/tools/server/server.cpp b/tools/server/server.cpp
 --- a/llama.cpp/tools/server/server.cpp
 +++ b/llama.cpp/tools/server/server.cpp
-@@ -14,6 +14,7 @@
+@@ -15,6 +15,7 @@
  #include <atomic>
  #include <clocale>
  #include <exception>
@@ -9,7 +9,7 @@ diff --git a/tools/server/server.cpp b/tools/server/server.cpp
  #include <signal.h>
  #include <thread> // for std::thread::hardware_concurrency
  
-@@ -21,6 +22,11 @@
+@@ -22,6 +23,11 @@
  #include <windows.h>
  #endif
  
@@ -21,7 +21,7 @@ diff --git a/tools/server/server.cpp b/tools/server/server.cpp
  static std::function<void(int)> shutdown_handler;
  static std::atomic_flag is_terminating = ATOMIC_FLAG_INIT;
  
-@@ -71,15 +77,26 @@ static server_http_context::handler_t ex_wrapper(server_http_context::handler_t
+@@ -72,15 +78,26 @@ static server_http_context::handler_t ex_wrapper(server_http_context::handler_t
      };
  }
  
@@ -51,8 +51,8 @@ diff --git a/tools/server/server.cpp b/tools/server/server.cpp
 +
      common_init();
  
-     if (!common_params_parse(argc, argv, params, LLAMA_EXAMPLE_SERVER)) {
-@@ -332,6 +349,13 @@ int llama_server(int argc, char ** argv) {
+     // start the stream session manager GC right after common init, before any HTTP route can
+@@ -409,6 +426,13 @@ int llama_server(int argc, char ** argv) {
              // this will unblock start_loop()
              ctx_server.terminate();
          };
@@ -66,19 +66,19 @@ diff --git a/tools/server/server.cpp b/tools/server/server.cpp
      }
  
      // TODO: refactor in common/console
-@@ -368,6 +392,11 @@ int llama_server(int argc, char ** argv) {
-     } else {
-         SRV_INF("server is listening on %s\n", ctx_http.listening_address.c_str());
+@@ -428,6 +452,11 @@ int llama_server(int argc, char ** argv) {
  
-+        // Notify caller that server is ready (for combined mode TUI startup)
-+        if (on_ready) {
-+            on_ready(ctx_http.listening_address);
-+        }
+     SRV_INF("listening on %s\n", ctx_http.listening_address.c_str());
+ 
++    // Notify caller that server is ready (for combined mode TUI startup)
++    if (on_ready) {
++        on_ready(ctx_http.listening_address);
++    }
 +
-         // optionally, notify router server that this instance is ready
-         std::thread monitor_thread;
-         if (child.is_child()) {
-@@ -392,5 +421,48 @@ int llama_server(int argc, char ** argv) {
+     if (is_router_server) {
+         SRV_WRN("%s", "NOTE: router mode is experimental\n");
+         SRV_WRN("%s", "      it is not recommended to use this mode in untrusted environments\n");
+@@ -468,5 +497,48 @@ int llama_server(int argc, char ** argv) {
          }
      }
  

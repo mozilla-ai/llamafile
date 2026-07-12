@@ -79,6 +79,7 @@ LLAMA_SRCS_CPP := \
 	llama.cpp/src/models/delta-net-base.cpp \
 	llama.cpp/src/models/dots1.cpp \
 	llama.cpp/src/models/dream.cpp \
+	llama.cpp/src/models/dflash.cpp \
 	llama.cpp/src/models/eagle3.cpp \
 	llama.cpp/src/models/ernie4-5-moe.cpp \
 	llama.cpp/src/models/ernie4-5.cpp \
@@ -240,7 +241,6 @@ COMMON_SRCS_CPP := \
 	llama.cpp/common/jinja/runtime.cpp \
 	llama.cpp/common/jinja/string.cpp \
 	llama.cpp/common/jinja/value.cpp \
-	llama.cpp/common/json-partial.cpp \
 	llama.cpp/common/json-schema-to-grammar.cpp \
 	llama.cpp/common/license.cpp \
 	llama.cpp/common/llguidance.cpp \
@@ -420,6 +420,7 @@ TOOL_SERVER_SRCS := \
 	llama.cpp/tools/server/server-models.cpp \
 	llama.cpp/tools/server/server-queue.cpp \
 	llama.cpp/tools/server/server-schema.cpp \
+	llama.cpp/tools/server/server-stream.cpp \
 	llama.cpp/tools/server/server-task.cpp \
 	llama.cpp/tools/server/server-tools.cpp
 

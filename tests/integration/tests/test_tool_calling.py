@@ -8,6 +8,10 @@ from utils.llamafile import LlamafileRunner
 
 
 # Example tool definition for testing
+# MiniCPM5 and other Jinja-templated models need --jinja for tool-call parsing.
+TOOL_CALLING_SERVER_ARGS = ["--jinja", "-ngl", "0"]
+
+
 CALCULATOR_TOOL = {
     "type": "function",
     "function": {
@@ -52,7 +56,9 @@ class TestToolCalling:
 
     def test_tool_call_basic(self, llamafile, server_port, timeouts):
         """Test that model can make a tool call."""
-        proc = llamafile.start_server(port=server_port)
+        proc = llamafile.start_server(
+            port=server_port, extra_args=TOOL_CALLING_SERVER_ARGS
+        )
 
         try:
             ready = LlamafileRunner.wait_for_server(
@@ -87,7 +93,9 @@ class TestToolCalling:
 
     def test_tool_call_correct_function(self, llamafile, server_port, timeouts):
         """Test that model calls the correct tool."""
-        proc = llamafile.start_server(port=server_port)
+        proc = llamafile.start_server(
+            port=server_port, extra_args=TOOL_CALLING_SERVER_ARGS
+        )
 
         try:
             ready = LlamafileRunner.wait_for_server(
@@ -118,7 +126,9 @@ class TestToolCalling:
 
     def test_tool_call_with_arguments(self, llamafile, server_port, timeouts):
         """Test that tool calls include correct arguments."""
-        proc = llamafile.start_server(port=server_port)
+        proc = llamafile.start_server(
+            port=server_port, extra_args=TOOL_CALLING_SERVER_ARGS
+        )
 
         try:
             ready = LlamafileRunner.wait_for_server(
