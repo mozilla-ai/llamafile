@@ -116,34 +116,55 @@ const char *llamafile_describe_gpu(void); // Defined in llamafile.c
 void llamafile_early_gpu_init(char **);   // Defined in llamafile.c
 
 // =============================================================================
-// Sandboxing - pledge()/SECCOMP syscall restrictions (defined in sandbox.c)
+// Sandboxing - pledge()/SECCOMP + unveil()/Landlock (defined in sandbox.c)
 // =============================================================================
 
-#define LLAMAFILE_SANDBOX_FAILED -1      // pledge() failed, errno is set
-#define LLAMAFILE_SANDBOX_ACTIVE 0       // restrictions are being enforced
-#define LLAMAFILE_SANDBOX_UNSECURE 1     // skipped: --unsecure flag
-#define LLAMAFILE_SANDBOX_GPU 2          // skipped: GPU backend loaded
-#define LLAMAFILE_SANDBOX_UNSUPPORTED 3  // skipped: OS can't enforce pledge()
+// The pledge() syscall sandbox (no outbound network, no writes, no exec) is
+// applied by default. unveil() path confinement is opt-in (--confine-reads),
+// because locking the readable paths at startup is incompatible with files a
+// server opens by path at request time (multimodal media, etc.).
+
+#define LLAMAFILE_SANDBOX_FAILED -1          // pledge() failed, errno is set
+#define LLAMAFILE_SANDBOX_ACTIVE 0           // pledge() active
+#define LLAMAFILE_SANDBOX_UNSECURE 1         // skipped: --unsecure flag
+#define LLAMAFILE_SANDBOX_GPU 2              // skipped: GPU backend loaded
+#define LLAMAFILE_SANDBOX_UNSUPPORTED 3      // skipped: OS can't enforce pledge()
+#define LLAMAFILE_SANDBOX_ACTIVE_CONFINED 4  // pledge() active + unveil() applied
+#define LLAMAFILE_SANDBOX_ACTIVE_UNCONFINED 5 // pledge() active; unveil() asked
+                                             // for but filesystem can't enforce it
+
+extern bool FLAG_confine_reads;  // opt-in unveil() path confinement (sandbox.c)
 
 bool llamafile_sandbox_supported(void);         // Probe only, installs nothing
 int llamafile_sandbox_apply(const char *);      // Unconditional pledge()
 int llamafile_sandbox(const char *);            // Honors --unsecure and GPU mode
 int llamafile_sandbox_enter(const char *, bool);// sandbox() + perror/verbose report
 const char *llamafile_sandbox_describe(int);    // Status code -> human string
+bool llamafile_sandbox_is_active(int);          // true for the ACTIVE* statuses
 
-// Server sandbox: unveil() confinement + accept()-only pledge(). read_paths
-// are opened read-only (model, mmproj, LoRA, draft model, control vectors,
-// static web root); rw_paths get write+create (slot-save dir, prompt cache).
-// Fills promises_out with the pledge string and *confined_out with whether
-// path confinement was applied (both for logging). Honors --unsecure/GPU.
-int llamafile_sandbox_server(const char *const *read_paths, int n_read,
-                             const char *const *rw_paths, int n_rw,
-                             char *promises_out, size_t promises_len,
-                             bool *confined_out);
+// Inputs to the server sandbox. read_paths are opened read-only (model,
+// mmproj, LoRA, draft model, control vectors, media dir, static web root);
+// rw_paths get write+create (slot-save dir, prompt cache). confine requests
+// unveil() path confinement; needs_outbound relaxes accept()-only networking
+// to full sockets when the server must dial out (--rpc, tools, MCP proxy).
+struct llamafile_sandbox_spec {
+    const char *const *read_paths;
+    int n_read;
+    const char *const *rw_paths;
+    int n_rw;
+    bool confine;
+    bool needs_outbound;
+};
+
+// Applies the server sandbox: pledge() always, plus unveil() when
+// spec->confine. Fills promises_out with the pledge string for logging.
+// Returns an ACTIVE* status (see describe()) or a skip/FAILED code.
+int llamafile_sandbox_server(const struct llamafile_sandbox_spec *spec,
+                             char *promises_out, size_t promises_len);
 
 // Pure promise-string derivation, exposed for unit testing.
 void llamafile_sandbox_server_promises(char *out, size_t len, bool is_openbsd,
-                                       bool has_rw);
+                                       bool has_rw, bool needs_outbound);
 
 // Removes every occurrence of flag from argv in place, updating *argc, and
 // returns true if it was present. Used to consume llamafile-only flags

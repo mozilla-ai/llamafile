@@ -14,6 +14,12 @@ Landlock. These tests verify externally that the sandbox is really in place:
     ``/zip/`` llamafile whose weights load through the executable;
   - ``--unsecure``, combined mode, and GPU mode skip the sandbox and say so.
 
+pledge() is on by default; unveil() path confinement is opt-in via
+``--confine-reads`` (the default must NOT confine, so files opened by path at
+request time keep working). The confinement tests below check that the default
+does not confine and that ``--confine-reads`` does; the syscall-level proof
+that confinement denies reads outside the weights dirs is in sandbox_test.c.
+
 Enforcement is only observable on Linux; on other hosts the enforcement
 tests skip and we only check that llamafile reports its status honestly.
 tests/sandbox_test.c covers the syscall-level allow/deny behavior and the
@@ -81,6 +87,16 @@ def _assert_sandbox_installed(pid: int):
         assert _seccomp_mode(pid) == 2, (
             "expected SECCOMP_MODE_FILTER; the pledge() sandbox is not installed"
         )
+
+
+def _assert_no_added_filter(pid: int):
+    """The process carries no filter beyond the runner's baseline (the
+    sandbox was skipped). Needs the exact count to tell our filter from a
+    container's; skip the check where it's unavailable."""
+    filters, base = _seccomp_filters(pid), _baseline_filters()
+    if filters is None or base is None:
+        pytest.skip("kernel lacks Seccomp_filters; cannot count filters")
+    assert filters == base, "expected no added SECCOMP filter"
 
 
 def _thread_filter_counts(pid: int) -> dict[int, int]:
@@ -200,11 +216,7 @@ class TestServerSandbox:
             assert LlamafileRunner.wait_for_server(
                 server_port, timeout=timeouts.server_ready, proc=proc
             ), "Server did not become ready"
-            pid = _resolve_server_pid(proc.pid)
-            filters, base = _seccomp_filters(pid), _baseline_filters()
-            if filters is None or base is None:
-                pytest.skip("kernel lacks Seccomp_filters; cannot count filters")
-            assert filters == base, "--unsecure must not install a filter"
+            _assert_no_added_filter(_resolve_server_pid(proc.pid))
         finally:
             _stop_hard(proc)
 
@@ -227,6 +239,66 @@ class TestServerSandbox:
         assert "sandbox:" in log, "server must log its sandbox status"
         if not IS_LINUX:
             assert "not supported on this OS" in log
+
+
+@pytest.mark.sandbox
+@pytest.mark.server
+@pytest.mark.cpu
+class TestConfineReads:
+    """The pledge()/unveil() split: pledge() is on by default, unveil() path
+    confinement is opt-in via --confine-reads."""
+
+    @requires_linux
+    def test_default_does_not_confine(self, cpu_runner, server_port, timeouts, tmp_path):
+        """By default the server is pledged but NOT path-confined, so files
+        opened by path at request time (multimodal media, etc.) keep working.
+        The log must say active without claiming confinement."""
+        log_file = str(tmp_path / "server.log")
+        proc = cpu_runner.start_server(port=server_port, log_file=log_file)
+        try:
+            assert LlamafileRunner.wait_for_server(
+                server_port, timeout=timeouts.server_ready, proc=proc
+            ), "Server did not become ready"
+        finally:
+            _stop_hard(proc)
+        log = LlamafileRunner.read_log_file(log_file)
+        assert 'pledge("stdio anet rpath")' in log, "default should pledge, no confinement"
+        assert "confined to weights dirs" not in log, "default must not confine reads"
+
+    @requires_linux
+    def test_confine_reads_confines_and_serves(self, cpu_runner, server_port, timeouts, tmp_path):
+        """--confine-reads adds unveil() confinement and still serves."""
+        log_file = str(tmp_path / "server.log")
+        proc = cpu_runner.start_server(
+            port=server_port, log_file=log_file, extra_args=["--confine-reads"]
+        )
+        try:
+            assert LlamafileRunner.wait_for_server(
+                server_port, timeout=timeouts.server_ready, proc=proc
+            ), "Server did not become ready"
+            _assert_sandbox_installed(_resolve_server_pid(proc.pid))
+            resp = LlamafileRunner.chat_completion(
+                port=server_port,
+                messages=[{"role": "user", "content": "Say hi."}],
+                timeout=timeouts.http_request,
+            )
+            assert resp["choices"][0]["message"]["content"].strip()
+        finally:
+            _stop_hard(proc)
+        log = LlamafileRunner.read_log_file(log_file)
+        # This log line is emitted only after the governability probe confirms
+        # a canary outside the rules is actually denied (see sandbox.c), so it
+        # means confinement is installed and biting -- not merely requested.
+        assert "reads confined to weights dirs" in log
+
+    # Note: there is no integration test that drives a *live* server into
+    # reading a file outside the weights dirs, because the HTTP API exposes no
+    # arbitrary-read primitive to exploit -- static serving (httplib) and media
+    # loading (fs_validate_filename) both reject traversal/symlinks before a
+    # read is attempted, so unveil() never gets a chance to be the thing that
+    # denies. unveil() is the defense-in-depth backstop *behind* those checks;
+    # its enforcement (allowed inside, EACCES outside) is proven directly at
+    # the syscall level in tests/sandbox_test.c (child_unveil).
 
 
 def _find_zipalign(executable: str) -> str | None:
@@ -372,11 +444,7 @@ class TestCombinedModeSandbox:
             assert LlamafileRunner.wait_for_server(
                 server_port, timeout=timeouts.server_ready, proc=proc
             ), "Combined-mode server did not become ready"
-            pid = _resolve_server_pid(proc.pid)
-            filters, base = _seccomp_filters(pid), _baseline_filters()
-            if filters is None or base is None:
-                pytest.skip("kernel lacks Seccomp_filters; cannot count filters")
-            assert filters == base, "combined mode must not install a filter"
+            _assert_no_added_filter(_resolve_server_pid(proc.pid))
         finally:
             _stop_hard(proc)
 

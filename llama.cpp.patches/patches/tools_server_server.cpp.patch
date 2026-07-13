@@ -54,7 +54,7 @@ diff --git a/tools/server/server.cpp b/tools/server/server.cpp
      common_init();
  
      if (!common_params_parse(argc, argv, params, LLAMA_EXAMPLE_SERVER)) {
-@@ -297,6 +316,67 @@ int llama_server(int argc, char ** argv) {
+@@ -297,6 +316,85 @@ int llama_server(int argc, char ** argv) {
              llama_backend_free();
          };
  
@@ -70,23 +70,29 @@ diff --git a/tools/server/server.cpp b/tools/server/server.cpp
 +        //
 +        // Combined mode hosts an in-process HTTP client (the TUI) that needs
 +        // connect(), which the accept-only sandbox forbids, so it's skipped.
-+        if (on_ready || on_shutdown_available) {
++        const bool combined_mode = on_ready || on_shutdown_available;
++        if (combined_mode) {
 +            SRV_WRN("%s", "sandbox: disabled in combined mode; use --server for a sandboxed server\n");
 +        } else {
-+            // cosmo installs the SECCOMP/Landlock filters on the calling
-+            // thread only (no TSYNC), so any pre-existing background thread
-+            // would escape them. Quiesce the llama.cpp log worker across the
-+            // call: pause() joins it, resume() respawns it afterward so the
-+            // fresh thread inherits the filters.
++            // pledge() (no outbound network / writes / exec) is applied by
++            // default. unveil() path confinement is opt-in (--confine-reads),
++            // because a server opens files by path at request time (multimodal
++            // media, etc.) that can't be known when the ruleset locks.
 +            //
-+            // Collect every on-disk path the loader opens after the sandbox
-+            // locks, so unveil() confines reads to their directories without
-+            // denying a legitimate weights file. When llama.cpp gains a new
-+            // file parameter, add it here (the sandbox probe would otherwise
-+            // fail to load it under confinement).
++            // cosmo installs the SECCOMP/Landlock filters on the calling thread
++            // only (no TSYNC), so quiesce the llama.cpp log worker across the
++            // call: pause() joins it, resume() respawns it under the filter.
++            //
++            // When --confine-reads is on, unveil() confines reads to these
++            // directories, so collect every on-disk path the loader opens
++            // after the lock. Add to this list when llama.cpp gains a new file
++            // parameter (else it'd be denied under confinement). Paths read
++            // before the sandbox (ssl_file_key/cert in ctx_http.init(), -hf
++            // downloads in parse) need no entry.
 +            std::vector<const char *> read_paths, rw_paths;
 +            read_paths.push_back(params.model.path.c_str());
 +            read_paths.push_back(params.mmproj.path.c_str());
++            read_paths.push_back(params.media_path.c_str());  // request-time media
 +            read_paths.push_back(params.speculative.draft.mparams.path.c_str());
 +            read_paths.push_back(params.speculative.ngram_cache.lookup_cache_static.c_str());
 +            read_paths.push_back(params.public_path.c_str());
@@ -97,22 +103,34 @@ diff --git a/tools/server/server.cpp b/tools/server/server.cpp
 +            rw_paths.push_back(params.slot_save_path.c_str());
 +            rw_paths.push_back(params.path_prompt_cache.c_str());
 +            rw_paths.push_back(params.speculative.ngram_cache.lookup_cache_dynamic.c_str());
-+            char promises[64];
-+            bool confined = false;
-+            common_log_pause(common_log_main());
-+            int sandbox = llamafile_sandbox_server(
++
++            // Features that dial out at runtime need connect(), which the
++            // accept-only default forbids; relax to full sockets for them
++            // (still no writes/exec). --rpc has no params field -- its handler
++            // registers backends directly -- so detect it on argv/env.
++            const bool needs_outbound =
++                params.ui_mcp_proxy ||
++                !params.server_tools.empty() ||
++                llamafile_has(argv, "--rpc") ||
++                (std::getenv("LLAMA_ARG_RPC") != nullptr);
++
++            llamafile_sandbox_spec spec = {
 +                read_paths.data(), (int) read_paths.size(),
 +                rw_paths.data(), (int) rw_paths.size(),
-+                promises, sizeof(promises), &confined);
++                FLAG_confine_reads, needs_outbound,
++            };
++            char promises[64];
++            common_log_pause(common_log_main());
++            int sandbox = llamafile_sandbox_server(&spec, promises, sizeof(promises));
 +            common_log_resume(common_log_main());
-+            if (sandbox == LLAMAFILE_SANDBOX_ACTIVE) {
-+                SRV_INF("sandbox: pledge(\"%s\") active%s\n", promises,
-+                        confined ? ", reads confined to weights dirs"
-+                                 : " (path confinement unavailable on this filesystem)");
-+            } else if (sandbox == LLAMAFILE_SANDBOX_FAILED) {
-+                SRV_ERR("sandbox: pledge: %s\n", strerror(errno));
++            if (sandbox == LLAMAFILE_SANDBOX_FAILED) {
++                SRV_ERR("sandbox: pledge failed: %s; retry with --unsecure to disable sandboxing\n",
++                        strerror(errno));
 +                clean_up();
 +                return 1;
++            } else if (llamafile_sandbox_is_active(sandbox)) {
++                SRV_INF("sandbox: pledge(\"%s\") %s\n", promises,
++                        llamafile_sandbox_describe(sandbox));
 +            } else {
 +                SRV_WRN("sandbox: %s\n", llamafile_sandbox_describe(sandbox));
 +            }
@@ -122,7 +140,7 @@ diff --git a/tools/server/server.cpp b/tools/server/server.cpp
          // start the HTTP server before loading the model to be able to serve /health requests
          if (!ctx_http.start()) {
              clean_up();
-@@ -332,6 +412,13 @@ int llama_server(int argc, char ** argv) {
+@@ -332,6 +430,13 @@ int llama_server(int argc, char ** argv) {
              // this will unblock start_loop()
              ctx_server.terminate();
          };
@@ -136,7 +154,7 @@ diff --git a/tools/server/server.cpp b/tools/server/server.cpp
      }
  
      // TODO: refactor in common/console
-@@ -368,6 +455,11 @@ int llama_server(int argc, char ** argv) {
+@@ -368,6 +473,11 @@ int llama_server(int argc, char ** argv) {
      } else {
          SRV_INF("server is listening on %s\n", ctx_http.listening_address.c_str());
  
@@ -148,7 +166,7 @@ diff --git a/tools/server/server.cpp b/tools/server/server.cpp
          // optionally, notify router server that this instance is ready
          std::thread monitor_thread;
          if (child.is_child()) {
-@@ -392,5 +484,54 @@ int llama_server(int argc, char ** argv) {
+@@ -392,5 +502,54 @@ int llama_server(int argc, char ** argv) {
          }
      }
  

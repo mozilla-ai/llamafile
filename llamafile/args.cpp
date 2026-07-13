@@ -37,6 +37,7 @@ static bool is_llamafile_flag(const char* arg) {
            strcmp(arg, "--nologo") == 0 ||
            strcmp(arg, "--nothink") == 0 ||
            strcmp(arg, "--unsecure") == 0 ||
+           strcmp(arg, "--confine-reads") == 0 ||
            strcmp(arg, "--version") == 0;
 }
 
@@ -90,6 +91,9 @@ LlamafileArgs parse_llamafile_args(int argc, char** argv) {
 
     // Check --unsecure flag (disables pledge() sandboxing, see sandbox.c)
     FLAG_unsecure = llamafile_has(argv, "--unsecure");
+
+    // Check --confine-reads flag (opt-in unveil() path confinement, server mode)
+    FLAG_confine_reads = llamafile_has(argv, "--confine-reads");
 
     // Filter out llamafile-specific arguments
     // These are not recognized by llama.cpp and would cause errors

@@ -1,83 +1,99 @@
 # Security
 
-llamafile sandboxes itself with two [Cosmopolitan
+llamafile can sandbox itself with two [Cosmopolitan
 Libc](https://github.com/jart/cosmopolitan) primitives:
 
 - **[pledge()](https://man.openbsd.org/pledge.2)** restricts which system
   calls the process may make. On Linux it installs a SECCOMP BPF filter;
-  on OpenBSD it calls the native `pledge(2)`.
+  on OpenBSD it calls the native `pledge(2)`. **On by default.**
 - **[unveil()](https://man.openbsd.org/unveil.2)** restricts which parts of
   the filesystem the process can see. On Linux it uses the
   [Landlock](https://docs.kernel.org/userspace-api/landlock.html) LSM
-  (kernel 5.13+); on OpenBSD it calls the native `unveil(2)`.
+  (kernel 5.13+); on OpenBSD it calls the native `unveil(2)`. **Opt-in**,
+  via `--confine-reads`.
 
 Neither needs any kernel configuration or privileges. SECCOMP filtering
 requires Linux 3.5+ on x86-64 and 5.13+ (for Landlock) on either
-architecture; on older kernels, and on macOS, Windows, and other BSDs,
-the calls are no-ops and llamafile logs that sandboxing is unavailable and
-keeps running. Sandboxing is enabled by default and can be turned off with
-the `--unsecure` flag.
+architecture; on older kernels, and on macOS, Windows, and other BSDs, the
+calls are no-ops and llamafile logs that sandboxing is unavailable and keeps
+running. The pledge() sandbox can be turned off entirely with `--unsecure`.
 
-## What each mode is allowed to do after startup
+## The default: pledge()
 
-**HTTP server** (`llamafile --server`) runs under `stdio anet rpath` on
-Linux (`stdio inet rpath` on OpenBSD):
+The `llamafile --server` process runs under `stdio anet rpath` on Linux
+(`stdio inet rpath` on OpenBSD). After startup this means:
 
-- On Linux the only networking-related system call available after startup
-  is `accept()` (that's what `anet` means — accept connections but never
-  initiate them). If the server is ever compromised, this sharply limits
-  an attacker's ability to exfiltrate data, because the process cannot open
-  an outbound connection.
-- Filesystem access is **read-only** (`rpath`), and `unveil()` confines
-  those reads to the executable and the directories holding the weights
-  (the model and its shards, an `--mmproj` file, LoRA adapters, a draft
-  model, control vectors) plus the two name-resolution files a non-numeric
-  `--host` needs. The rest of the filesystem — `/etc/passwd`, your SSH
-  keys, other users' files — is invisible to the server even though it is
-  world-readable. Writing, creating, deleting, executing programs, and
-  forking are all denied. (`--slot-save-path` and a prompt cache
-  additionally grant read-write-create access to their directories.)
-- The read-only promise is needed even for a bundled llamafile whose
-  weights are embedded as `/zip/model.gguf`: the loader reads them by
-  reopening the executable's own zip store, which is a real `open()`.
-- Path confinement (`unveil`) requires a filesystem the kernel's Landlock
-  LSM can govern. On the handful it cannot (some network mounts, virtiofs,
-  9p), llamafile keeps the pledge() syscall sandbox but skips path
-  confinement rather than refusing to load the model, and says so in the
-  log.
+- **No outbound network.** `anet` allows `accept()` but not `connect()`, so
+  the only networking the server can do is answer connections it received.
+  If the server is ever compromised (say, through a bug in the GGUF parser
+  or an HTTP handler), this is the single most valuable restriction: it cuts
+  the attacker's ability to exfiltrate anything over the network.
+- **No writing, creating, deleting, executing, or forking.** A compromised
+  server can't modify your files, drop a payload, or launch a program.
+  (`--slot-save-path` and a prompt cache add write access to *their*
+  directories only.)
+- **Reads are allowed** (`rpath`) — anywhere the process could already read.
+  This is deliberate: a server routinely opens files whose paths it only
+  learns at request time (multimodal media, static assets), which cannot be
+  known when a path allow-list would have to be locked. If you want to
+  restrict *which* files are readable, see `--confine-reads` below.
 
-**CLI mode** (`llamafile --cli`) runs under `stdio rpath tty`: no network
-access at all, enforced by the operating-system kernel, and no ability to
-write to the filesystem. This keeps your computer safe in the event that a
-bug is ever discovered in the GGUF file format that lets an attacker craft
-malicious weights files and post them online.
+`--cli` runs under `stdio rpath tty` and `--chat` under
+`stdio rpath wpath cpath tty` — neither has any network access at all.
 
-**Chat mode** (`llamafile --chat`) runs under `stdio rpath wpath cpath
-tty`: like CLI mode it has no network access, but it may create and write
-files so interactive commands like `/dump` and `/upload` keep working.
+## Opt-in read confinement: `--confine-reads`
 
-## When the sandbox is not applied
+Passing `--confine-reads` to the server additionally applies `unveil()`,
+confining reads to the executable and the directories holding the weights
+(the model and its shards, `--mmproj`, LoRA adapters, a draft model, control
+vectors, `--media-path`, a static `--path` web root) plus the two
+name-resolution files a non-numeric `--host` needs. The rest of the
+filesystem — `/etc/passwd`, your SSH keys, other users' files — becomes
+invisible to the server even though it is world-readable.
 
-llamafile prints a notice in each of these cases:
+Two things to know before relying on it:
 
-- **Combined mode** (the default, TUI + server in one process) hosts an
-  in-process HTTP client that must `connect()` to the server, so the
-  accept-only sandbox can't be used. Run `llamafile --server` if you want
-  the sandboxed server.
-- **GPU mode**: GPU backends are loaded dynamically and their drivers need
-  device access that no reasonable promise set covers, so sandboxing is
-  skipped when a GPU backend is loaded. Pass `--gpu disable` to force CPU
-  inference with the sandbox.
+- **It confines directories, not individual files.** The model's *parent
+  directory* is unveiled (so multi-part GGUF shards beside it load), which
+  means anything else in that directory is readable too. Put weights in a
+  dedicated directory if you don't want their neighbours exposed.
+- **It's incompatible with reading files by arbitrary path at request time.**
+  Because the readable set is locked at startup, a request that references a
+  file outside the unveiled directories will be denied. The built-in flows
+  (media under `--media-path`, static files under `--path`) are covered;
+  bespoke setups that read elsewhere are not.
+- **It requires a filesystem Landlock can govern.** On the handful it cannot
+  (some network mounts, virtiofs, 9p) llamafile keeps the pledge() sandbox
+  but skips confinement rather than refusing to load the model, and logs
+  that it did so.
+
+## When the sandbox is relaxed or skipped
+
+llamafile logs a notice in each case:
+
+- **Outbound features** (`--rpc` for distributed inference, server-side
+  tools, the MCP proxy) legitimately need to `connect()` out, so the
+  networking promise is relaxed from `anet` to `inet` for them. Writes and
+  exec stay blocked.
+- **GPU mode gets no sandbox.** GPU backends are loaded dynamically and their
+  drivers need device access (`ioctl`, `/dev/*`) that no promise set covers,
+  so the sandbox is skipped whenever a GPU backend is loaded. **This is the
+  common production case** — a GPU server is not sandboxed. Pass
+  `--gpu disable` to force CPU inference with the sandbox.
+- **Combined mode** (the default `llamafile -m model.gguf`, TUI + server in
+  one process) hosts an in-process HTTP client that must `connect()` to the
+  server, so it's skipped. Run `llamafile --server` for the sandboxed server.
 - Model downloads (`-hf`, `--model-url`) happen *before* the sandbox is
   installed; once the download completes the process is sandboxed normally.
 
 ## A note on the penalty mode
 
 On Linux, sandbox violations are configured to return `EPERM` (permission
-denied) rather than killing the process, so a blocked syscall surfaces as
-an ordinary I/O error. OpenBSD's native `pledge(2)` always terminates a
-violating process with `SIGABRT` instead; that behavior is not
-configurable there.
+denied) rather than killing the process, so a blocked syscall surfaces as an
+ordinary I/O error. If a server refuses to start with a `pledge failed`
+error (an exotic kernel or an outer seccomp policy), `--unsecure` disables
+the sandbox. OpenBSD's native `pledge(2)` always terminates a violating
+process with `SIGABRT` instead; that behavior is not configurable there.
 
 ## Verifying the sandbox
 
@@ -89,10 +105,10 @@ reads to the unveiled directory (run on Linux):
 .cosmocc/4.0.2/bin/make o//tests/sandbox_test && o//tests/sandbox_test
 ```
 
-Integration tests verify the running server end-to-end — every thread of
-the server process carries the SECCOMP filter, completions still work
-inside the sandbox, a bundled `/zip/` llamafile loads under it, and
-`--unsecure` really disables it:
+Integration tests verify the running server end-to-end — every thread of the
+server process carries the SECCOMP filter, completions still work inside the
+sandbox, a bundled `/zip/` llamafile loads under it, `--confine-reads`
+confines while the default does not, and `--unsecure` really disables it:
 
 ```sh
 cd tests/integration
@@ -109,9 +125,9 @@ grep Seccomp /proc/$!/status   # "Seccomp: 2" means the filter is active
 
 ## Caveats
 
-Your llamafile is able to protect itself against the outside world, but
-that doesn't mean you're protected from llamafile. Sandboxing is
-self-imposed. If you obtained your llamafile from an untrusted source then
-its author could have simply modified it to not do that. In that case, you
-can run the untrusted llamafile inside another sandbox, such as a virtual
-machine, to make sure it behaves how you expect.
+Your llamafile is able to protect itself against the outside world, but that
+doesn't mean you're protected from llamafile. Sandboxing is self-imposed. If
+you obtained your llamafile from an untrusted source then its author could
+have simply modified it to not do that. In that case, you can run the
+untrusted llamafile inside another sandbox, such as a virtual machine, to
+make sure it behaves how you expect.

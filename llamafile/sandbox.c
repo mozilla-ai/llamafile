@@ -90,6 +90,7 @@
 #endif
 
 bool FLAG_unsecure = false;
+bool FLAG_confine_reads = false;
 
 // Reports whether the host OS can enforce pledge() promises
 // (Linux with SECCOMP_MODE_FILTER, or OpenBSD). Does not install anything.
@@ -101,33 +102,47 @@ bool llamafile_sandbox_supported(void) {
 #endif
 }
 
-// Installs the pledge() sandbox on the calling thread, unconditionally.
-// Threads created after this call inherit the restrictions. Returns
-// LLAMAFILE_SANDBOX_ACTIVE on success, LLAMAFILE_SANDBOX_UNSUPPORTED if
-// the OS can't enforce it, or LLAMAFILE_SANDBOX_FAILED with errno set.
-int llamafile_sandbox_apply(const char *promises) {
-#ifdef COSMOCC
-    if (pledge(0, 0))
+// Shared policy gate: LLAMAFILE_SANDBOX_ACTIVE means "install it", otherwise a
+// skip code. Both entry points consult this so the gate lives in one place.
+static int sandbox_skip_status(void) {
+    if (FLAG_unsecure)
+        return LLAMAFILE_SANDBOX_UNSECURE;
+    if (llamafile_has_gpu())
+        return LLAMAFILE_SANDBOX_GPU;
+    if (!llamafile_sandbox_supported())
         return LLAMAFILE_SANDBOX_UNSUPPORTED;
-    __pledge_mode = PLEDGE_PENALTY_RETURN_EPERM;
-    if (pledge(promises, 0))
-        return LLAMAFILE_SANDBOX_FAILED;
     return LLAMAFILE_SANDBOX_ACTIVE;
+}
+
+// Shared pledge() tail: EPERM penalty mode + install the filter.
+static int sandbox_install_pledge(const char *promises) {
+#ifdef COSMOCC
+    __pledge_mode = PLEDGE_PENALTY_RETURN_EPERM;
+    return pledge(promises, 0) ? LLAMAFILE_SANDBOX_FAILED
+                               : LLAMAFILE_SANDBOX_ACTIVE;
 #else
     (void)promises;
     return LLAMAFILE_SANDBOX_UNSUPPORTED;
 #endif
 }
 
-// Policy entry point used by the CLI and chat modes: honors --unsecure
-// and skips sandboxing when a GPU backend is loaded (GPU drivers need
-// dlopen/ioctl/device access that pledge would break).
+// Installs the pledge() sandbox unconditionally (no policy gate). Threads
+// created after this call inherit it. Used by the unit test and by the gated
+// entry points below.
+int llamafile_sandbox_apply(const char *promises) {
+    if (!llamafile_sandbox_supported())
+        return LLAMAFILE_SANDBOX_UNSUPPORTED;
+    return sandbox_install_pledge(promises);
+}
+
+// Policy entry point for the CLI and chat modes: honors --unsecure and GPU
+// mode, then pledges. These modes never confine paths -- they have no network
+// at all and legitimately read user-chosen files (e.g. --image).
 int llamafile_sandbox(const char *promises) {
-    if (FLAG_unsecure)
-        return LLAMAFILE_SANDBOX_UNSECURE;
-    if (llamafile_has_gpu())
-        return LLAMAFILE_SANDBOX_GPU;
-    return llamafile_sandbox_apply(promises);
+    int skip = sandbox_skip_status();
+    if (skip != LLAMAFILE_SANDBOX_ACTIVE)
+        return skip;
+    return sandbox_install_pledge(promises);
 }
 
 // Applies the CLI/chat sandbox and reports the outcome, collapsing the
@@ -161,23 +176,23 @@ static const char *const kSandboxCanaries[] = {
     "/etc/hostname",
 };
 
-// Derives the server pledge() promise string. Pure and side-effect-free
-// so it can be unit-tested. rpath is unconditional: the model loader
-// always performs a real open() -- of the on-disk weights, or of the
-// executable itself to read its embedded /zip/ store (llamafile_open_zip)
-// -- so a server can never load a model without it. unveil() is what
-// actually confines that rpath to the weights directories.
-void llamafile_sandbox_server_promises(char *out, size_t len,
-                                       bool is_openbsd, bool has_rw) {
-    // anet = accept()-only networking (no connect); OpenBSD's native
-    // pledge has no anet, so inet is the closest promise there.
-    const char *base = is_openbsd ? "stdio inet rpath" : "stdio anet rpath";
-    if (has_rw) {
-        // slot save/restore and the prompt cache read and write on disk
-        snprintf(out, len, "%s wpath cpath", base);
-    } else {
-        snprintf(out, len, "%s", base);
-    }
+// Derives the server pledge() promise string. Pure and side-effect-free so
+// it can be unit-tested. rpath is unconditional: the model loader always
+// performs a real open() -- of the on-disk weights, or of the executable
+// itself to read its embedded /zip/ store (llamafile_open_zip) -- so a server
+// can never load a model without it.
+void llamafile_sandbox_server_promises(char *out, size_t len, bool is_openbsd,
+                                       bool has_rw, bool needs_outbound) {
+    // "anet" is accept()-only networking (no connect) -- the default, so a
+    // compromised server can't dial out. When the server itself must make
+    // outbound connections (--rpc, server-side tools, the MCP proxy) we relax
+    // to "inet", which still blocks writes and exec. OpenBSD has no "anet", so
+    // it always uses "inet".
+    const char *net = (is_openbsd || needs_outbound) ? "inet" : "anet";
+    if (has_rw)  // slot save/restore and the prompt cache read+write on disk
+        snprintf(out, len, "stdio %s rpath wpath cpath", net);
+    else
+        snprintf(out, len, "stdio %s rpath", net);
 }
 
 #ifdef COSMOCC
@@ -320,70 +335,77 @@ static bool unveil_is_governable(const char *const *read_paths, int n_read,
 
 #endif  // COSMOCC
 
-// Installs the server sandbox: confines filesystem reads to the executable
-// and the weights directories via unveil(), then pledges accept()-only
-// networking. read_paths are opened read-only (model, mmproj, LoRA, draft
-// model, control vectors, a static web root); rw_paths get write+create
-// (slot-save dir, prompt cache). Honors --unsecure and GPU mode. Fills
-// promises_out with the pledge string and *confined_out with whether path
-// confinement was applied (both for logging). The caller is responsible for
-// quiescing background threads (see rule 1 above) around this call.
-int llamafile_sandbox_server(const char *const *read_paths, int n_read,
-                             const char *const *rw_paths, int n_rw,
-                             char *promises_out, size_t promises_len,
-                             bool *confined_out) {
+// Applies the server sandbox: pledge() always (accept()-only networking, no
+// writes/exec unless configured), plus unveil() path confinement when
+// spec->confine and the filesystem can enforce it. Fills promises_out with
+// the pledge string for logging; returns an ACTIVE* status or a skip/FAILED
+// code. The caller must quiesce background threads around this call (the
+// filters are per-thread; see rule 1 above).
+int llamafile_sandbox_server(const struct llamafile_sandbox_spec *spec,
+                             char *promises_out, size_t promises_len) {
     if (promises_out && promises_len)
         promises_out[0] = '\0';
-    if (confined_out)
-        *confined_out = false;
-    if (FLAG_unsecure)
-        return LLAMAFILE_SANDBOX_UNSECURE;
-    if (llamafile_has_gpu())
-        return LLAMAFILE_SANDBOX_GPU;
+    int skip = sandbox_skip_status();
+    if (skip != LLAMAFILE_SANDBOX_ACTIVE)
+        return skip;
 #ifdef COSMOCC
-    if (pledge(0, 0))
-        return LLAMAFILE_SANDBOX_UNSUPPORTED;
-
     // wpath/cpath only when a write target is actually configured; callers
     // pass fixed-position entries that are often empty strings.
     bool has_rw = false;
-    for (int i = 0; i < n_rw; ++i)
-        if (rw_paths[i] && *rw_paths[i])
+    for (int i = 0; i < spec->n_rw; ++i)
+        if (spec->rw_paths[i] && *spec->rw_paths[i])
             has_rw = true;
     char promises[64];
     llamafile_sandbox_server_promises(promises, sizeof(promises), IsOpenbsd(),
-                                      has_rw);
+                                      has_rw, spec->needs_outbound);
     if (promises_out)
         strlcpy(promises_out, promises, promises_len);
 
-    // unveil() must run before pledge(): it needs Landlock syscalls the
-    // pledge filter denies. Only apply it when the filesystem can actually
-    // enforce it (probe first) -- otherwise skip confinement and keep
-    // pledge, rather than making the server unable to read its weights.
-    if (unveil_is_governable(read_paths, n_read, rw_paths, n_rw)) {
-        unveil_apply(read_paths, n_read, rw_paths, n_rw);
-        unveil(0, 0);  // lock the ruleset
-        if (confined_out)
-            *confined_out = true;
+    // Opt-in unveil() path confinement, run before pledge() (it needs
+    // Landlock syscalls the pledge filter denies). Skip it when the
+    // filesystem can't enforce it, rather than locking down a server that can
+    // no longer read its weights. 0 = not requested, 1 = confined, 2 = asked
+    // for but unavailable.
+    int confine_state = 0;
+    if (spec->confine) {
+        if (unveil_is_governable(spec->read_paths, spec->n_read,
+                                 spec->rw_paths, spec->n_rw)) {
+            unveil_apply(spec->read_paths, spec->n_read,
+                         spec->rw_paths, spec->n_rw);
+            unveil(0, 0);  // lock the ruleset
+            confine_state = 1;
+        } else {
+            confine_state = 2;
+        }
     }
 
-    __pledge_mode = PLEDGE_PENALTY_RETURN_EPERM;
-    if (pledge(promises, 0))
+    if (sandbox_install_pledge(promises) == LLAMAFILE_SANDBOX_FAILED)
         return LLAMAFILE_SANDBOX_FAILED;
-    return LLAMAFILE_SANDBOX_ACTIVE;
+    return confine_state == 1 ? LLAMAFILE_SANDBOX_ACTIVE_CONFINED
+         : confine_state == 2 ? LLAMAFILE_SANDBOX_ACTIVE_UNCONFINED
+                              : LLAMAFILE_SANDBOX_ACTIVE;
 #else
-    (void)read_paths;
-    (void)n_read;
-    (void)rw_paths;
-    (void)n_rw;
+    (void)spec;
     return LLAMAFILE_SANDBOX_UNSUPPORTED;
 #endif
+}
+
+// True for the statuses where the pledge() filter is installed (whether or
+// not path confinement also applied), as opposed to a skip or failure.
+bool llamafile_sandbox_is_active(int status) {
+    return status == LLAMAFILE_SANDBOX_ACTIVE ||
+           status == LLAMAFILE_SANDBOX_ACTIVE_CONFINED ||
+           status == LLAMAFILE_SANDBOX_ACTIVE_UNCONFINED;
 }
 
 const char *llamafile_sandbox_describe(int status) {
     switch (status) {
     case LLAMAFILE_SANDBOX_ACTIVE:
         return "active";
+    case LLAMAFILE_SANDBOX_ACTIVE_CONFINED:
+        return "active, reads confined to weights dirs";
+    case LLAMAFILE_SANDBOX_ACTIVE_UNCONFINED:
+        return "active (path confinement requested but unavailable on this filesystem)";
     case LLAMAFILE_SANDBOX_UNSECURE:
         return "disabled by --unsecure";
     case LLAMAFILE_SANDBOX_GPU:

@@ -173,6 +173,7 @@ static void print_general_help(bool show_full_list_hint) {
            "  --nologo         suppress the startup logo\n"
            "  --ascii          use ASCII art instead of Unicode for logo\n"
            "  --unsecure       disable pledge() sandboxing (Linux/OpenBSD)\n"
+           "  --confine-reads  restrict server file reads to the weights dirs\n"
            "  --verbose        enable verbose logging\n"
            "  --version        show version information\n"
            "  --help           show this help\n"

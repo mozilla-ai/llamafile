@@ -220,23 +220,27 @@ static int run_case(const char *name, void (*fn)(void)) {
     return 0;
 }
 
-// Pure promise-string derivation (finding 10: keep the server policy
-// unit-testable rather than buried in the vendored server.cpp patch).
+// Pure promise-string derivation: keep the server policy unit-testable
+// rather than buried in the vendored server.cpp patch. Covers the
+// accept-only default, the wpath/cpath (has_rw) and inet (needs_outbound)
+// relaxations, and OpenBSD's lack of "anet".
 static int test_promises(void) {
     struct {
-        bool openbsd, slot_save;
+        bool openbsd, has_rw, outbound;
         const char *want;
     } cases[] = {
-        {false, false, "stdio anet rpath"},
-        {false, true, "stdio anet rpath wpath cpath"},
-        {true, false, "stdio inet rpath"},
-        {true, true, "stdio inet rpath wpath cpath"},
+        {false, false, false, "stdio anet rpath"},
+        {false, true, false, "stdio anet rpath wpath cpath"},
+        {false, false, true, "stdio inet rpath"},              // --rpc etc.
+        {false, true, true, "stdio inet rpath wpath cpath"},
+        {true, false, false, "stdio inet rpath"},              // OpenBSD: no anet
+        {true, true, false, "stdio inet rpath wpath cpath"},
     };
     int rc = 0;
     for (size_t i = 0; i < sizeof(cases) / sizeof(*cases); ++i) {
         char got[64];
         llamafile_sandbox_server_promises(got, sizeof(got), cases[i].openbsd,
-                                          cases[i].slot_save);
+                                          cases[i].has_rw, cases[i].outbound);
         if (strcmp(got, cases[i].want)) {
             fprintf(stderr, "sandbox_test: promises: FAILED want=\"%s\" got=\"%s\"\n",
                     cases[i].want, got);
