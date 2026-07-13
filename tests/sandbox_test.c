@@ -161,12 +161,20 @@ static void child_anet_promises(void) {
 // denied we treat the filesystem as ungovernable and skip -- matching the
 // production fallback -- rather than failing.
 static void child_unveil(void) {
+    // Two files we own: one inside a directory we will unveil (must stay
+    // readable), one outside it (a self-made canary that must become denied
+    // -- a sibling under /tmp, never a system file).
     char dir[] = "/tmp/lf_uv_XXXXXX";
     CHECK(mkdtemp(dir), "mkdtemp");
     char inside[PATH_MAX];
     snprintf(inside, sizeof(inside), "%s/weights.bin", dir);
     int fd = open(inside, O_WRONLY | O_CREAT | O_TRUNC, 0644);
     CHECK(fd != -1, "create file inside temp dir");
+    close(fd);
+
+    char canary[] = "/tmp/lf_canary_XXXXXX";
+    fd = mkstemp(canary);  // outside `dir`, so confinement must hide it
+    CHECK(fd != -1, "mkstemp canary");
     close(fd);
 
     unveil(dir, "r");
@@ -181,14 +189,14 @@ static void child_unveil(void) {
     }
     close(in);
 
-    // If a path outside the unveiled dir is still readable, unveil()
+    // If the canary outside the unveiled dir is still readable, unveil()
     // installed nothing (kernel without Landlock, or cosmo's silent no-op):
-    // there is no confinement to assert. Same call this makes in production
-    // via the governability probe's canary.
+    // there is no confinement to assert. Same check the production probe
+    // makes, on a file we created rather than a system file.
     errno = 0;
-    int canary = open("/etc/passwd", O_RDONLY);
-    if (canary != -1) {
-        close(canary);
+    int c = open(canary, O_RDONLY);
+    if (c != -1) {
+        close(c);
         fprintf(stderr, "sandbox_test: unveil: SKIP (Landlock unavailable; "
                         "confinement not installed)\n");
         _exit(0);

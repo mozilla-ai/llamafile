@@ -144,11 +144,22 @@ int llamafile_sandbox_enter(const char *promises, bool verbose) {
     return status;
 }
 
-// A path Landlock must NOT reach if confinement is real. The governability
-// probe reads it back after locking: if it's still readable, unveil()
-// installed nothing (no Landlock, or an ungoverned filesystem) and we must
-// not claim confinement. It is deliberately outside every weights dir.
-#define SANDBOX_CANARY "/etc/passwd"
+// Canary files the governability probe reads back after locking: if one is
+// still readable, unveil() installed nothing (no Landlock, or an ungoverned
+// filesystem) and we must not claim confinement. Requirements:
+//   - world-readable, so the ONLY thing that can deny it is Landlock -- a
+//     root-only file would be denied by ordinary permissions too, masking a
+//     no-op unveil() and yielding a false "confined";
+//   - outside every unveiled weights dir;
+//   - benign and commonly read by ordinary software (distro/hostname
+//     detection), so the probe isn't mistaken for credential recon the way
+//     reading /etc/passwd would be.
+// The probe uses the first one that exists; if none do, it conservatively
+// reports "not confined" rather than guessing.
+static const char *const kSandboxCanaries[] = {
+    "/etc/os-release",
+    "/etc/hostname",
+};
 
 // Derives the server pledge() promise string. Pure and side-effect-free
 // so it can be unit-tested. rpath is unconditional: the model loader
@@ -279,6 +290,14 @@ static bool unveil_is_governable(const char *const *read_paths, int n_read,
             if (container_of(rw_paths[i], verify[nv], PATH_MAX))
                 ++nv;
 
+        // Pick a canary that exists now, before the ruleset can hide it.
+        const char *canary = 0;
+        for (size_t i = 0; i < sizeof(kSandboxCanaries) / sizeof(*kSandboxCanaries); ++i)
+            if (!access(kSandboxCanaries[i], F_OK)) {
+                canary = kSandboxCanaries[i];
+                break;
+            }
+
         unveil_apply(read_paths, n_read, rw_paths, n_rw);
         unveil(0, 0);  // lock
 
@@ -286,11 +305,10 @@ static bool unveil_is_governable(const char *const *read_paths, int n_read,
         for (int i = 0; ok && i < nv; ++i)
             ok = can_read(verify[i]);
         // Confinement must demonstrably bite: the canary, outside every
-        // rule, must be *denied* (EACCES/EPERM). Merely unreadable-for-
-        // another-reason (ENOENT on an exotic host) is inconclusive, so we
-        // conservatively treat it as "not confined" rather than claiming a
-        // guarantee unveil() didn't actually install.
-        if (ok && !is_denied(SANDBOX_CANARY))
+        // rule, must now be *denied* (EACCES/EPERM). No canary, or one that
+        // fails for another reason, is inconclusive -- treat as "not
+        // confined" rather than claiming a guarantee unveil() didn't install.
+        if (ok && (!canary || !is_denied(canary)))
             ok = 0;
         _exit(ok ? 0 : 1);
     }
