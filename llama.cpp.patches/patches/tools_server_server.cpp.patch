@@ -54,7 +54,7 @@ diff --git a/tools/server/server.cpp b/tools/server/server.cpp
      common_init();
  
      if (!common_params_parse(argc, argv, params, LLAMA_EXAMPLE_SERVER)) {
-@@ -297,6 +316,85 @@ int llama_server(int argc, char ** argv) {
+@@ -297,6 +316,86 @@ int llama_server(int argc, char ** argv) {
              llama_backend_free();
          };
  
@@ -122,10 +122,11 @@ diff --git a/tools/server/server.cpp b/tools/server/server.cpp
 +            char promises[64];
 +            common_log_pause(common_log_main());
 +            int sandbox = llamafile_sandbox_server(&spec, promises, sizeof(promises));
++            int sandbox_errno = errno;  // capture before resume() spawns a thread
 +            common_log_resume(common_log_main());
 +            if (sandbox == LLAMAFILE_SANDBOX_FAILED) {
 +                SRV_ERR("sandbox: pledge failed: %s; retry with --unsecure to disable sandboxing\n",
-+                        strerror(errno));
++                        strerror(sandbox_errno));
 +                clean_up();
 +                return 1;
 +            } else if (llamafile_sandbox_is_active(sandbox)) {
@@ -140,7 +141,7 @@ diff --git a/tools/server/server.cpp b/tools/server/server.cpp
          // start the HTTP server before loading the model to be able to serve /health requests
          if (!ctx_http.start()) {
              clean_up();
-@@ -332,6 +430,13 @@ int llama_server(int argc, char ** argv) {
+@@ -332,6 +431,13 @@ int llama_server(int argc, char ** argv) {
              // this will unblock start_loop()
              ctx_server.terminate();
          };
@@ -154,7 +155,7 @@ diff --git a/tools/server/server.cpp b/tools/server/server.cpp
      }
  
      // TODO: refactor in common/console
-@@ -368,6 +473,11 @@ int llama_server(int argc, char ** argv) {
+@@ -368,6 +474,11 @@ int llama_server(int argc, char ** argv) {
      } else {
          SRV_INF("server is listening on %s\n", ctx_http.listening_address.c_str());
  
@@ -166,7 +167,7 @@ diff --git a/tools/server/server.cpp b/tools/server/server.cpp
          // optionally, notify router server that this instance is ready
          std::thread monitor_thread;
          if (child.is_child()) {
-@@ -392,5 +502,54 @@ int llama_server(int argc, char ** argv) {
+@@ -392,5 +503,56 @@ int llama_server(int argc, char ** argv) {
          }
      }
  
@@ -204,6 +205,8 @@ diff --git a/tools/server/server.cpp b/tools/server/server.cpp
 +    // via parse_llamafile_args instead)
 +    if (llamafile_consume_flag(&argc, argv, "--unsecure"))
 +        FLAG_unsecure = true;
++    if (llamafile_consume_flag(&argc, argv, "--confine-reads"))
++        FLAG_confine_reads = true;
 +
 +    // Initialize GPU support early (must happen BEFORE llama_backend_init())
 +    // This triggers dynamic loading of GPU backends (CUDA, ROCm, Metal)

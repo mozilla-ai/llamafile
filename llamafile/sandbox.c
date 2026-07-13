@@ -126,9 +126,10 @@ static int sandbox_install_pledge(const char *promises) {
 #endif
 }
 
-// Installs the pledge() sandbox unconditionally (no policy gate). Threads
-// created after this call inherit it. Used by the unit test and by the gated
-// entry points below.
+// Installs the pledge() sandbox unconditionally, skipping the --unsecure/GPU
+// policy gate (the gated entry points share sandbox_install_pledge() directly
+// instead). Exposed for the unit test, which drives the promise sets in a
+// forked child without the gate.
 int llamafile_sandbox_apply(const char *promises) {
     if (!llamafile_sandbox_supported())
         return LLAMAFILE_SANDBOX_UNSUPPORTED;
