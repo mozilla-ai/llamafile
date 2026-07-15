@@ -149,10 +149,20 @@ def _stop_hard(proc):
 
 @pytest.fixture
 def cpu_runner(executable, model) -> LlamafileRunner:
-    """Runner pinned to CPU: a loaded GPU backend disables the sandbox
-    (drivers need syscalls pledge forbids), so tests force --gpu disable
-    to make the sandbox state deterministic on any host."""
-    return LlamafileRunner(executable=executable, model=model, gpu="disable")
+    """Runner pinned to CPU, with --no-warmup.
+
+    --gpu disable: a loaded GPU backend disables the sandbox (drivers need
+    syscalls pledge forbids), so CPU is forced to make sandbox state
+    deterministic on any host.
+
+    --no-warmup: large models (e.g. 26B MXFP4 MoE) can take longer than the
+    120s server-ready timeout when the kernel page cache is cold, because
+    pledge may restrict the prefetch hints (posix_fadvise / MADV_WILLNEED)
+    that speed up the initial memory-mapped read.  Sandbox tests care about
+    whether the pledge filter is installed and whether inference works, not
+    about the warmup pass itself.
+    """
+    return LlamafileRunner(executable=executable, model=model, gpu="disable", no_warmup=True)
 
 
 @pytest.mark.sandbox

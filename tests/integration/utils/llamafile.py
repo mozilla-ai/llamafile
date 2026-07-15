@@ -133,6 +133,7 @@ class LlamafileRunner:
         model: str | None = None,
         gpu: str | None = None,
         default_thinking: bool = False,
+        no_warmup: bool = False,
     ):
         """Initialize the runner.
 
@@ -144,11 +145,16 @@ class LlamafileRunner:
                               one. Set to True for tests that exercise thinking
                               behavior; False otherwise so small reasoning
                               models don't derail unrelated assertions.
+            no_warmup: Pass --no-warmup to every server/combined start.  Use
+                       for tests that care about the server being up, not about
+                       warmup speed -- prevents cold-cache timeouts for large
+                       models without affecting inference correctness.
         """
         self.executable = os.path.abspath(executable)
         self.model = os.path.abspath(model) if model else None
         self.gpu = gpu
         self.default_thinking = default_thinking
+        self.no_warmup = no_warmup
 
         if not os.path.exists(self.executable):
             raise FileNotFoundError(f"Executable not found: {executable}")
@@ -328,6 +334,9 @@ class LlamafileRunner:
         if log_file:
             args.extend(["--log-file", log_file])
 
+        if self.no_warmup:
+            args.append("--no-warmup")
+
         if extra_args:
             args.extend(extra_args)
 
@@ -373,6 +382,9 @@ class LlamafileRunner:
 
         if log_file:
             args.extend(["--log-file", log_file])
+
+        if self.no_warmup:
+            args.append("--no-warmup")
 
         if extra_args:
             args.extend(extra_args)
