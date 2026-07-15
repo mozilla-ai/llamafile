@@ -32,7 +32,7 @@ import subprocess
 import pytest
 import requests
 
-from utils.llamafile import LlamafileRunner
+from utils.llamafile import LlamafileRunner, skip_if_bundled
 
 # Tiny model used for the network download test (~1 MiB)
 HF_TEST_REPO = "ggml-org/models"
@@ -110,9 +110,16 @@ def fresh_cache_env(cache_dir):
 
 
 @pytest.mark.ssl
+@pytest.mark.bare_executable
 @pytest.mark.server
 class TestHttpsServing:
     """Serving over TLS with --ssl-cert-file/--ssl-key-file."""
+
+    @pytest.fixture(autouse=True)
+    def _require_bare_executable(self, executable, model):
+        skip_if_bundled(executable)
+        if model is None:
+            pytest.skip("ssl serving tests need --model; pass a .gguf with the bare executable")
 
     def test_server_serves_https(self, llamafile, server_port, timeouts, ssl_cert):
         """Server comes up over HTTPS and a verifying client can connect."""
@@ -160,8 +167,13 @@ class TestHttpsServing:
 
 
 @pytest.mark.ssl
+@pytest.mark.bare_executable
 class TestHttpsDownload:
     """Model downloads over HTTPS (the client side of TLS support)."""
+
+    @pytest.fixture(autouse=True)
+    def _require_bare_executable(self, executable):
+        skip_if_bundled(executable)
 
     @pytest.mark.online
     def test_download_model_over_https(

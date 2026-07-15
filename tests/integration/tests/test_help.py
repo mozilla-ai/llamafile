@@ -15,6 +15,8 @@ import subprocess
 
 import pytest
 
+from utils.llamafile import skip_if_bundled
+
 
 HELP_TIMEOUT = 30.0
 
@@ -151,9 +153,7 @@ class TestHelpMissingModel:
 
     @pytest.fixture(autouse=True)
     def _require_bare_executable(self, executable):
-        if executable.endswith(".llamafile"):
-            pytest.skip("bundled .llamafile has an embedded model; "
-                        "run against a bare executable to test the missing-model path")
+        skip_if_bundled(executable)
 
     def _run_no_model(self, executable):
         if platform.system() == "Windows":

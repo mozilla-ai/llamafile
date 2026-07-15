@@ -11,9 +11,26 @@ import time
 from pathlib import Path
 from typing import Any
 
+import pytest
 import requests
 
 logger = logging.getLogger(__name__)
+
+
+def skip_if_bundled(executable: str) -> None:
+    """Skip the current test when *executable* is a pre-built .llamafile bundle.
+
+    Call from an autouse fixture in any class marked ``bare_executable``::
+
+        @pytest.fixture(autouse=True)
+        def _require_bare_executable(self, executable):
+            skip_if_bundled(executable)
+    """
+    if executable.endswith(".llamafile"):
+        pytest.skip(
+            "bare_executable tests run once against the bare llamafile binary; "
+            "skip for bundled .llamafile models"
+        )
 
 
 def read_until_idle(fd, idle_timeout=1.0, max_timeout=60.0):

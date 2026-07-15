@@ -30,6 +30,10 @@ LLAMAFILE_EXE=~/llamafile/o/llamafile/llamafile
 RUNNER=~/llamafile/tests/integration/run_tests.sh
 MODELS_DIR=~/llamafiles
 
+# Model used for the ssl serving tests (any small .gguf works; content is irrelevant).
+# Override via SSL_TEST_MODEL env var if you have a different one available.
+SSL_TEST_MODEL="${SSL_TEST_MODEL:-${MODELS_DIR}/Qwen3.5-0.8B-Q8_0.gguf}"
+
 for entry in "${TESTS[@]}"; do
     model="${entry%%;*}"
     filter="${entry#*;}"
@@ -43,4 +47,7 @@ for entry in "${TESTS[@]}"; do
 done
 
 echo "=== Running help tests (on bare executable: ${LLAMAFILE_EXE} ) ==="
-${RUNNER} --executable "${LLAMAFILE_EXE}" -m help
+"${RUNNER}" --executable "${LLAMAFILE_EXE}" -m help
+
+echo "=== Running ssl tests (on bare executable: ${LLAMAFILE_EXE}, model: ${SSL_TEST_MODEL}) ==="
+"${RUNNER}" --executable "${LLAMAFILE_EXE}" --model "${SSL_TEST_MODEL}" -m "ssl and not online"
