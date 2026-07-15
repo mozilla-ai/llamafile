@@ -337,8 +337,13 @@ class LlamafileRunner:
                       None, falls back to the runner's default_thinking.
                       When False, adds --reasoning off.
             extra_args: Additional command-line arguments
-            log_file: If provided, adds --log-file flag. Caller should read
-                      the file after terminating the process.
+            log_file: If provided, adds --log-file flag and redirects
+                      stdout/stderr to DEVNULL.  When a log file captures
+                      all diagnostics there is no need to pipe stdout/stderr,
+                      and leaving them as PIPE without a reader causes the
+                      OS pipe buffer (~64 KiB) to fill and the process to
+                      block indefinitely.  Omit log_file when you need to
+                      interact with the TUI via proc.stdout / proc.stdin.
 
         Returns:
             Popen process handle (caller must terminate)
@@ -355,12 +360,22 @@ class LlamafileRunner:
         if extra_args:
             args.extend(extra_args)
 
+        # When a log file is used, discard stdout/stderr via DEVNULL to avoid
+        # blocking when the pipe buffer fills up (nobody is reading the pipe).
+        # When no log file is set, use PIPE so callers can read TUI output.
+        if log_file:
+            stdout = subprocess.DEVNULL
+            stderr = subprocess.DEVNULL
+        else:
+            stdout = subprocess.PIPE
+            stderr = subprocess.PIPE
+
         logger.info("Starting combined mode: %s", " ".join(args))
         return subprocess.Popen(
             args,
             stdin=subprocess.PIPE,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
+            stdout=stdout,
+            stderr=stderr,
             text=True,
         )
 

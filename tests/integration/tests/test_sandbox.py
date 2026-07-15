@@ -433,12 +433,14 @@ class TestCombinedModeSandbox:
         """Combined mode hosts a TUI HTTP client in-process, which needs
         connect(); the accept-only sandbox is skipped and logged.
 
-        --verbose is required: non-server modes turn the common log down to
-        errors-only, which would swallow the skip notice.
+        --verbose is required: without it main.cpp injects --log-verbosity 1
+        (ERROR-only threshold), suppressing the WARN-level skip notice even
+        in the log file.  The log file (not a pipe) is used for output so
+        --verbose does not cause a pipe-buffer overflow.
         """
         log_file = str(tmp_path / "combined.log")
         proc = cpu_runner.start_combined(
-            port=server_port, log_file=log_file, extra_args=["--verbose"]
+            port=server_port, log_file=log_file, extra_args=["--verbose"],
         )
         try:
             assert LlamafileRunner.wait_for_server(
