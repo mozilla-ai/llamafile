@@ -34,17 +34,17 @@ MODELS_DIR=~/llamafiles
 # Override via SSL_TEST_MODEL env var if you have a different one available.
 SSL_TEST_MODEL="${SSL_TEST_MODEL:-${MODELS_DIR}/Qwen3.5-0.8B-Q8_0.gguf}"
 
-#for entry in "${TESTS[@]}"; do
-#    model="${entry%%;*}"
-#    filter="${entry#*;}"
-#
-#    echo "=== Testing ${model} ==="
-#    if [ -n "${filter}" ]; then
-#        "${RUNNER}" --executable "${MODELS_DIR}/${model}" -m "${filter}"
-#    else
-#        "${RUNNER}" --executable "${MODELS_DIR}/${model}"
-#    fi
-#done
+for entry in "${TESTS[@]}"; do
+    model="${entry%%;*}"
+    filter="${entry#*;}"
+
+    echo "=== Testing ${model} ==="
+    if [ -n "${filter}" ]; then
+        "${RUNNER}" --executable "${MODELS_DIR}/${model}" -m "${filter}"
+    else
+        "${RUNNER}" --executable "${MODELS_DIR}/${model}"
+    fi
+done
 
 echo "=== Running help tests (on bare executable: ${LLAMAFILE_EXE} ) ==="
 "${RUNNER}" --executable "${LLAMAFILE_EXE}" -m help
