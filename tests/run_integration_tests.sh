@@ -5,7 +5,7 @@
 TESTS=(
     "Apertus-8B-Instruct-2509.llamafile;not thinking and not multimodal"
     "Bonsai-1.7B.llamafile;not thinking and not multimodal"
-    "Bonsai-4B.llamafile;not thinking and not multimodal"
+    "Bonsai-4B.llamafile;not thinking and not multimodal and not tool_calling"  # upstream llama.cpp peg-native parser fails to convert <tool_call> output to tool_calls for this model
     "Bonsai-8B.llamafile;not thinking and not multimodal"
     "LFM2-24B-A2B-Q5_K_M.llamafile;not thinking and not multimodal"
     "Ministral-3-3B-Instruct-2512-BF16.llamafile;not thinking"

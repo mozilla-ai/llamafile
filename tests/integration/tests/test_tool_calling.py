@@ -86,7 +86,7 @@ class TestToolCalling:
             proc.wait()
 
     def test_tool_call_correct_function(self, llamafile, server_port, timeouts):
-        """Test that model calls the correct tool."""
+        """Test that model calls the correct tool when two are available."""
         proc = llamafile.start_server(port=server_port)
 
         try:
@@ -107,10 +107,13 @@ class TestToolCalling:
 
             message = response["choices"][0]["message"]
 
-            if "tool_calls" in message and len(message["tool_calls"]) > 0:
-                tool_call = message["tool_calls"][0]
-                # Should call weather, not calculator
-                assert tool_call["function"]["name"] == "get_weather"
+            assert "tool_calls" in message and len(message["tool_calls"]) > 0, (
+                f"Expected a tool call. Got: {message}"
+            )
+            # Should call weather, not calculator
+            assert message["tool_calls"][0]["function"]["name"] == "get_weather", (
+                f"Expected get_weather, got: {message['tool_calls'][0]['function']['name']}"
+            )
 
         finally:
             proc.terminate()
