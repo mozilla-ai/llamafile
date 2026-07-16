@@ -58,6 +58,7 @@ Use `-m` to select test categories:
 | `help` | `--help` output tests; no model needed |
 | `bare_executable` | Tests that run once against the bare binary (no embedded model); automatically skipped when the executable is a `.llamafile` bundle. Includes `help` and `ssl`. |
 | `ssl` | HTTPS/TLS tests: serving with `--ssl-cert-file` and model download over HTTPS. Needs `openssl` in PATH. Run against the bare executable with `--model`. |
+| `determinism` | Tests requiring reproducible output at temperature=0. Unreliable on gpt-oss models (see `tests/run_integration_tests.sh`); deselect with `-m "not determinism"`. |
 | `online` | Tests that need network access (the HTTPS model download from Hugging Face). Skip with `-m "not online"` if offline. |
 
 Examples:

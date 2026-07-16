@@ -36,6 +36,7 @@ from pathlib import Path
 import pytest
 
 from utils.llamafile import LlamafileRunner
+from utils.prompts import GREETING_PROMPT
 
 IS_LINUX = platform.system() == "Linux"
 
@@ -205,7 +206,7 @@ class TestServerSandbox:
             # inference must keep working inside the sandbox
             response = LlamafileRunner.chat_completion(
                 port=server_port,
-                messages=[{"role": "user", "content": "Say hello in one word."}],
+                messages=[{"role": "user", "content": GREETING_PROMPT}],
                 timeout=timeouts.http_request,
             )
             assert response["choices"][0]["message"]["content"].strip()
@@ -289,7 +290,7 @@ class TestConfineReads:
             _assert_sandbox_installed(_resolve_server_pid(proc.pid))
             resp = LlamafileRunner.chat_completion(
                 port=server_port,
-                messages=[{"role": "user", "content": "Say hi."}],
+                messages=[{"role": "user", "content": GREETING_PROMPT}],
                 timeout=timeouts.http_request,
             )
             assert resp["choices"][0]["message"]["content"].strip()
@@ -381,7 +382,7 @@ class TestCliSandbox:
         generates a response. --verbose surfaces the status line on
         stderr (CLI keeps stdout clean for the model output)."""
         result = cpu_runner.run_cli(
-            "Say hello.", extra_args=["--verbose"], timeout=timeouts.cli
+            GREETING_PROMPT, extra_args=["--verbose"], timeout=timeouts.cli
         )
         assert result.returncode == 0
         assert "sandbox: active" in result.stderr

@@ -8,6 +8,7 @@ import tempfile
 import pytest
 
 from utils.llamafile import LlamafileRunner
+from utils.prompts import GREETING_PROMPT
 
 
 def get_available_gpu() -> str | None:
@@ -139,7 +140,7 @@ class TestGPUAcceleration:
 
         try:
             result = runner.run_cli(
-                "Say hello",
+                GREETING_PROMPT,
                 timeout=timeouts.cli,
                 log_file=log_path,
                 extra_args=["--verbose"],
@@ -183,7 +184,7 @@ class TestGPUAcceleration:
             # Verify response works
             response = LlamafileRunner.chat_completion(
                 port=server_port,
-                messages=[{"role": "user", "content": "Say hello"}],
+                messages=[{"role": "user", "content": GREETING_PROMPT}],
                 timeout=timeouts.http_request,
             )
             assert len(response["choices"][0]["message"]["content"]) > 0
@@ -222,7 +223,7 @@ class TestCPUExecution:
 
         try:
             result = runner.run_cli(
-                "Say hello",
+                GREETING_PROMPT,
                 timeout=timeouts.cli,
                 log_file=log_path,
                 extra_args=["--verbose"],
@@ -266,7 +267,7 @@ class TestCPUExecution:
             # Verify response works
             response = LlamafileRunner.chat_completion(
                 port=server_port,
-                messages=[{"role": "user", "content": "Say hello"}],
+                messages=[{"role": "user", "content": GREETING_PROMPT}],
                 timeout=timeouts.http_request,
             )
             assert len(response["choices"][0]["message"]["content"]) > 0
