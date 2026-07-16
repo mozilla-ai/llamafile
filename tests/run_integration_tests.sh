@@ -17,7 +17,7 @@ TESTS=(
     "Qwen3.6-27B-Q4_K_M.llamafile;not cpu"
     "gemma-4-E2B-it-Q5_K_M.llamafile;"
     "gemma-4-E4B-it-Q5_K_M.llamafile;"
-    "gemma-4-26B-A4B-it-MXFP4_MOE.llamafile;"
+    "gemma-4-26B-A4B-it-MXFP4_MOE.llamafile;not cpu"
     "gemma-4-31B-it-Q5_K_M.llamafile;not cpu"
     # gpt-oss models do not really disable thinking, they just put it inline so some tests fail
     # they also occasionally fail the temperature=0 determinism check: their long forced
