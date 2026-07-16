@@ -3,6 +3,7 @@
 import pytest
 
 from utils.llamafile import LlamafileRunner
+from utils.prompts import ADD_2_2, GREETING_PROMPT
 
 
 @pytest.mark.server
@@ -34,7 +35,7 @@ class TestServerBasic:
 
             response = LlamafileRunner.chat_completion(
                 port=server_port,
-                messages=[{"role": "user", "content": "Say hello in one word."}],
+                messages=[{"role": "user", "content": GREETING_PROMPT}],
                 timeout=timeouts.http_request,
             )
 
@@ -59,14 +60,12 @@ class TestServerBasic:
 
             response = LlamafileRunner.chat_completion(
                 port=server_port,
-                messages=[
-                    {"role": "user", "content": "What is 2+2? Answer with just the number."}
-                ],
+                messages=[{"role": "user", "content": ADD_2_2.prompt}],
                 timeout=timeouts.http_request,
             )
 
             content = response["choices"][0]["message"]["content"]
-            assert "4" in content
+            assert ADD_2_2.check(content), f"Expected {ADD_2_2.describe()} in content: {content}"
 
         finally:
             proc.terminate()
@@ -78,6 +77,7 @@ class TestServerBasic:
 class TestServerParameters:
     """Test server with various parameters."""
 
+    @pytest.mark.determinism
     def test_server_with_temperature_zero(self, llamafile, server_port, timeouts):
         """Test that temperature=0 produces consistent output."""
         proc = llamafile.start_server(port=server_port)

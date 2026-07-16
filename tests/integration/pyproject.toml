@@ -31,4 +31,5 @@ markers = [
     "online: tests that need network access (deselect with '-m \"not online\"')",
     "sandbox: tests pledge()/SECCOMP sandboxing (enforcement checks need Linux)",
     "bare_executable: requires a bare llamafile binary with no embedded model (skip for pre-built .llamafile bundles)",
+    "determinism: requires reproducible output at temperature=0 (unreliable on gpt-oss models, whose long forced reasoning trace and MXFP4 quantization give a threaded matmul rounding difference more opportunities to flip a near-tied token; see tests/run_integration_tests.sh)",
 ]

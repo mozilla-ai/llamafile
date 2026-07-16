@@ -36,6 +36,7 @@ from pathlib import Path
 import pytest
 
 from utils.llamafile import LlamafileRunner
+from utils.prompts import GREETING_PROMPT
 
 IS_LINUX = platform.system() == "Linux"
 
@@ -149,10 +150,20 @@ def _stop_hard(proc):
 
 @pytest.fixture
 def cpu_runner(executable, model) -> LlamafileRunner:
-    """Runner pinned to CPU: a loaded GPU backend disables the sandbox
-    (drivers need syscalls pledge forbids), so tests force --gpu disable
-    to make the sandbox state deterministic on any host."""
-    return LlamafileRunner(executable=executable, model=model, gpu="disable")
+    """Runner pinned to CPU, with --no-warmup.
+
+    --gpu disable: a loaded GPU backend disables the sandbox (drivers need
+    syscalls pledge forbids), so CPU is forced to make sandbox state
+    deterministic on any host.
+
+    --no-warmup: large models (e.g. 26B MXFP4 MoE) can take longer than the
+    120s server-ready timeout when the kernel page cache is cold, because
+    pledge may restrict the prefetch hints (posix_fadvise / MADV_WILLNEED)
+    that speed up the initial memory-mapped read.  Sandbox tests care about
+    whether the pledge filter is installed and whether inference works, not
+    about the warmup pass itself.
+    """
+    return LlamafileRunner(executable=executable, model=model, gpu="disable", no_warmup=True)
 
 
 @pytest.mark.sandbox
@@ -195,7 +206,7 @@ class TestServerSandbox:
             # inference must keep working inside the sandbox
             response = LlamafileRunner.chat_completion(
                 port=server_port,
-                messages=[{"role": "user", "content": "Say hello in one word."}],
+                messages=[{"role": "user", "content": GREETING_PROMPT}],
                 timeout=timeouts.http_request,
             )
             assert response["choices"][0]["message"]["content"].strip()
@@ -279,7 +290,7 @@ class TestConfineReads:
             _assert_sandbox_installed(_resolve_server_pid(proc.pid))
             resp = LlamafileRunner.chat_completion(
                 port=server_port,
-                messages=[{"role": "user", "content": "Say hi."}],
+                messages=[{"role": "user", "content": GREETING_PROMPT}],
                 timeout=timeouts.http_request,
             )
             assert resp["choices"][0]["message"]["content"].strip()
@@ -371,7 +382,7 @@ class TestCliSandbox:
         generates a response. --verbose surfaces the status line on
         stderr (CLI keeps stdout clean for the model output)."""
         result = cpu_runner.run_cli(
-            "Say hello.", extra_args=["--verbose"], timeout=timeouts.cli
+            GREETING_PROMPT, extra_args=["--verbose"], timeout=timeouts.cli
         )
         assert result.returncode == 0
         assert "sandbox: active" in result.stderr
@@ -433,12 +444,14 @@ class TestCombinedModeSandbox:
         """Combined mode hosts a TUI HTTP client in-process, which needs
         connect(); the accept-only sandbox is skipped and logged.
 
-        --verbose is required: non-server modes turn the common log down to
-        errors-only, which would swallow the skip notice.
+        --verbose is required: without it main.cpp injects --log-verbosity 1
+        (ERROR-only threshold), suppressing the WARN-level skip notice even
+        in the log file.  The log file (not a pipe) is used for output so
+        --verbose does not cause a pipe-buffer overflow.
         """
         log_file = str(tmp_path / "combined.log")
         proc = cpu_runner.start_combined(
-            port=server_port, log_file=log_file, extra_args=["--verbose"]
+            port=server_port, log_file=log_file, extra_args=["--verbose"],
         )
         try:
             assert LlamafileRunner.wait_for_server(
