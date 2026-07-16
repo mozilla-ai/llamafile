@@ -17,6 +17,7 @@
 ## Reference
 
 * [Technical details](technical_details.md)
+* [Security](security.md)
 * [Supported Systems](support.md)
 * [Troubleshooting](troubleshooting.md)
 
