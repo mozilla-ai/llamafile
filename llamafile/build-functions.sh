@@ -177,6 +177,8 @@ compile_gpu_sources_parallel() {
 
     local count=0
     local total=$NUM_SOURCES
+    local pids=()
+    local fail=0
 
     for src in $CUDA_SOURCES; do
         count=$((count + 1))
@@ -198,6 +200,7 @@ compile_gpu_sources_parallel() {
 
         echo "[$count/$total] Compiling: $base.cu"
         $compiler -c $arch_flags $common_flags -o "$obj" "$src" &
+        pids+=("$!")
 
         # Limit parallel jobs by waiting when we hit the limit
         local running=$(jobs -r | wc -l)
@@ -209,7 +212,19 @@ compile_gpu_sources_parallel() {
 
     echo ""
     echo "Waiting for remaining compilations to finish..."
-    wait
+    # Reap each job individually and check its status. A bare `wait` returns 0
+    # even when a background nvcc/hipcc failed, which would silently drop the
+    # object and let the link produce an incomplete library (bit us on
+    # out-prod.cu / cublasSgemmBatched). Fail loudly instead.
+    for pid in "${pids[@]}"; do
+        if ! wait "$pid"; then
+            fail=1
+        fi
+    done
+    if [ "$fail" -ne 0 ]; then
+        echo "Error: one or more GPU source compilations failed (see errors above)" >&2
+        return 1
+    fi
 }
 
 # Compile core GGML C/C++ sources

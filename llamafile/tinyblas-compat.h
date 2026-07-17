@@ -58,6 +58,7 @@
 #define cublasSetStream           tinyblasSetStream
 #define cublasGetStream           tinyblasGetStream
 #define cublasSgemm               tinyblasSgemm
+#define cublasSgemmBatched        tinyblasSgemmBatched
 #define cublasSgemmStridedBatched tinyblasSgemmStridedBatched
 #define cublasGemmEx              tinyblasGemmEx
 #define cublasGemmBatchedEx       tinyblasGemmBatchedEx
