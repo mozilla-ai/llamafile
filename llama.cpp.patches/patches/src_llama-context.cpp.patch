@@ -1,10 +1,10 @@
 diff --git a/src/llama-context.cpp b/src/llama-context.cpp
 --- a/llama.cpp/src/llama-context.cpp
 +++ b/llama.cpp/src/llama-context.cpp
-@@ -476,6 +476,16 @@ void llama_context::sched_reserve() {
-     LLAMA_LOG_DEBUG("%s: worst-case: n_tokens = %d, n_seqs = %d, n_outputs = %d\n", __func__, n_tokens, n_seqs, n_outputs);
+@@ -520,6 +520,16 @@ void llama_context::resolve_fused_ops(const llama_memory_context_i * mctx, uint3
+         }
+     };
  
-     // resolve automatic Flash Attention use
 +    if (cparams.auto_fa && model.devices.empty()) {
 +        // llamafile: the CPU Flash Attention path (f16 mad/dot) is significantly
 +        // slower than the non-FA path on x86 (see mozilla-ai/llamafile#975).
@@ -16,5 +16,5 @@ diff --git a/src/llama-context.cpp b/src/llama-context.cpp
 +    }
 +
      if (cparams.auto_fa) {
-         auto * gf = graph_reserve(1, n_seqs, n_outputs, mctx.get(), true);
-         if (!gf) {
+         resolve(llm_fused_op_flash_attn_probe, cparams.flash_attn);
+         cparams.auto_fa = false;

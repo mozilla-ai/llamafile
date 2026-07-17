@@ -1,7 +1,7 @@
 diff --git a/ggml/src/ggml-cuda/mmq.cu b/ggml/src/ggml-cuda/mmq.cu
 --- a/llama.cpp/ggml/src/ggml-cuda/mmq.cu
 +++ b/llama.cpp/ggml/src/ggml-cuda/mmq.cu
-@@ -44,6 +44,7 @@ static void ggml_cuda_mul_mat_q_switch_type(ggml_backend_cuda_context & ctx, con
+@@ -46,6 +46,7 @@ static void ggml_cuda_mul_mat_q_switch_type(ggml_backend_cuda_context & ctx, con
          case GGML_TYPE_Q6_K:
              mul_mat_q_case<GGML_TYPE_Q6_K>(ctx, args, stream);
              break;
@@ -9,7 +9,7 @@ diff --git a/ggml/src/ggml-cuda/mmq.cu b/ggml/src/ggml-cuda/mmq.cu
          case GGML_TYPE_IQ2_XXS:
              mul_mat_q_case<GGML_TYPE_IQ2_XXS>(ctx, args, stream);
              break;
-@@ -68,6 +69,7 @@ static void ggml_cuda_mul_mat_q_switch_type(ggml_backend_cuda_context & ctx, con
+@@ -70,6 +71,7 @@ static void ggml_cuda_mul_mat_q_switch_type(ggml_backend_cuda_context & ctx, con
          case GGML_TYPE_IQ4_NL:
              mul_mat_q_case<GGML_TYPE_IQ4_NL>(ctx, args, stream);
              break;
@@ -17,7 +17,7 @@ diff --git a/ggml/src/ggml-cuda/mmq.cu b/ggml/src/ggml-cuda/mmq.cu
          default:
              GGML_ABORT("fatal error");
              break;
-@@ -285,6 +287,7 @@ bool ggml_cuda_should_use_mmq(enum ggml_type type, int cc, int64_t ne11, int64_t
+@@ -258,6 +260,7 @@ bool ggml_cuda_should_use_mmq(enum ggml_type type, int cc, int64_t ne11, int64_t
          case GGML_TYPE_Q4_K:
          case GGML_TYPE_Q5_K:
          case GGML_TYPE_Q6_K:
@@ -25,7 +25,7 @@ diff --git a/ggml/src/ggml-cuda/mmq.cu b/ggml/src/ggml-cuda/mmq.cu
          case GGML_TYPE_IQ2_XXS:
          case GGML_TYPE_IQ2_XS:
          case GGML_TYPE_IQ2_S:
-@@ -293,6 +296,7 @@ bool ggml_cuda_should_use_mmq(enum ggml_type type, int cc, int64_t ne11, int64_t
+@@ -266,6 +269,7 @@ bool ggml_cuda_should_use_mmq(enum ggml_type type, int cc, int64_t ne11, int64_t
          case GGML_TYPE_IQ1_S:
          case GGML_TYPE_IQ4_XS:
          case GGML_TYPE_IQ4_NL:
@@ -33,7 +33,7 @@ diff --git a/ggml/src/ggml-cuda/mmq.cu b/ggml/src/ggml-cuda/mmq.cu
              mmq_supported = true;
              break;
          default:
-@@ -355,9 +359,11 @@ bool ggml_cuda_should_use_mmq(enum ggml_type type, int cc, int64_t ne11, int64_t
+@@ -328,9 +332,11 @@ bool ggml_cuda_should_use_mmq(enum ggml_type type, int cc, int64_t ne11, int64_t
                      return ne11 <= 128;
                  case GGML_TYPE_Q6_K:
                      return ne11 <= (GGML_CUDA_CC_IS_RDNA3_0(cc) ? 128 : 256);

@@ -44,7 +44,7 @@ The `GGML_CALL` macro (defined as `__attribute__((__ms_abi__))` when `GGML_MULTI
 |-------|-------------|
 | `ggml_include_ggml-backend.h.patch` | Defines the `GGML_CALL` macro; adds it to the five `get_proc_address` return typedefs (`ggml_backend_split_buffer_type_t`, `ggml_backend_set_n_threads_t`, `ggml_backend_dev_get_extra_bufts_t`, `ggml_backend_set_abort_callback_t`, `ggml_backend_get_features_t`) |
 | `ggml_include_ggml-cpu.h.patch` | Adds `GGML_CALL` to declarations of `ggml_backend_cpu_set_n_threads` and `ggml_backend_cpu_set_abort_callback` (returned via `get_proc_address`) |
-| `ggml_include_ggml-cuda.h.patch` | Adds `GGML_CALL` to declarations of `ggml_backend_cuda_split_buffer_type`, `ggml_backend_cuda_register_host_buffer`, and `ggml_backend_cuda_unregister_host_buffer` |
+| `ggml_include_ggml-cuda.h.patch` | Adds `GGML_CALL` to the declaration of `ggml_backend_cuda_register_host_buffer` (upstream removed the row-split multi-GPU buffer in b10052, so the former `ggml_backend_cuda_split_buffer_type` annotation is gone) |
 | `ggml_src_ggml-backend-impl.h.patch` | Adds `GGML_CALL` to all 49+ function pointers across the five interface structs (`ggml_backend_buffer_type_i`, `ggml_backend_buffer_i`, `ggml_backend_i`, `ggml_backend_device_i`, `ggml_backend_reg_i`); also adds `free_struct` callback (see Cross-Module Memory below) |
 | `ggml_src_ggml-backend.cpp.patch` | Adds `GGML_CALL` to CPU buffer, buffer type, and multi-buffer callback implementations; also adds `free_struct` support (see Cross-Module Memory below) |
 | `ggml_src_ggml-cpu_ggml-cpu.cpp.patch` | Adds `GGML_CALL` to all CPU backend, device, and registry callback implementations, plus `get_proc_address`-returned functions (`set_n_threads`, `set_abort_callback`, `get_extra_buffers_type`, `get_features`) |
@@ -63,7 +63,7 @@ When GPU backends (CUDA, Vulkan, Metal) are loaded as dynamic libraries, memory 
 |-------|-------------|
 | `ggml_src_ggml-backend-impl.h.patch` | Adds `free_struct` callback to `ggml_backend_buffer_i` interface for cross-module buffer cleanup |
 | `ggml_src_ggml-backend.cpp.patch` | Implements `free_struct` callback support in `ggml_backend_buffer_free()` — calls DSO's `free_struct` instead of `delete` when set |
-| `ggml_src_ggml-cuda_ggml-cuda.cu.patch` | Adds `free_struct` implementation for CUDA buffers (regular, split, and host); sets it on fallback CPU buffers allocated within the DSO |
+| `ggml_src_ggml-cuda_ggml-cuda.cu.patch` | Adds `free_struct` implementation for CUDA buffers (regular and host; upstream removed the split buffer in b10052); sets it on fallback CPU buffers allocated within the DSO |
 | `ggml_src_ggml-metal_ggml-metal.cpp.patch` | Adds `free_struct` implementation for Metal shared and private buffers |
 | `ggml_src_ggml-vulkan_ggml-vulkan.cpp.patch` | Adds `free_struct` implementation for Vulkan buffers and host buffer fallback path |
 
@@ -205,6 +205,7 @@ can change on a llama.cpp bump — when it does, the asset list in
 | `ggml_src_ggml-vulkan_ggml-vulkan.cpp.patch` | Fixes unsigned integer underflow in `ggml_backend_vk_get_device_memory` where Vulkan's `heapUsage` can exceed `heapBudget` (clamps to zero instead of wrapping) |
 | `src_models_t5.cpp.patch` | Forward-declares the `graph<false>`/`graph<true>` explicit specializations before `build_arch_graph` so clang's `-std=gnu++23` doesn't reject them as specializations after implicit instantiation |
 | `src_models_eagle3.cpp.patch` | Moves `build_arch_graph` to the end of the file, after the `graph<true>`/`graph<false>` constructor specializations, so clang's `-std=gnu++23` doesn't reject them as explicit specializations appearing after the `make_unique<graph<...>>` implicit instantiation point |
+| `src_models_dflash.cpp.patch` | Same fix as `eagle3` for the DFlash model (new in b10052): moves `build_arch_graph` to the end of the file, after the `graph<true>`/`graph<false>` specializations, so clang's `-std=gnu++23` doesn't reject them as explicit specializations after the `make_unique<graph<...>>` implicit instantiation point |
 
 ## Creating New Patches
 

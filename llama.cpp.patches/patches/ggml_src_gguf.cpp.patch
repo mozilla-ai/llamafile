@@ -12,7 +12,7 @@ diff --git a/ggml/src/gguf.cpp b/ggml/src/gguf.cpp
  #include <cinttypes>
  #include <cstddef>
  #include <cstdint>
-@@ -976,7 +980,54 @@ struct gguf_context * gguf_init_from_buffer(const void * data, size_t size, stru
+@@ -980,7 +984,54 @@ struct gguf_context * gguf_init_from_buffer(const void * data, size_t size, stru
      return gguf_init_from_reader(gr, params);
  }
  
@@ -67,7 +67,7 @@ diff --git a/ggml/src/gguf.cpp b/ggml/src/gguf.cpp
      FILE * file = ggml_fopen(fname, "rb");
  
      if (!file) {
-@@ -987,6 +1038,7 @@ struct gguf_context * gguf_init_from_file(const char * fname, struct gguf_init_p
+@@ -991,6 +1042,7 @@ struct gguf_context * gguf_init_from_file(const char * fname, struct gguf_init_p
      struct gguf_context * result = gguf_init_from_file_ptr(file, params);
      fclose(file);
      return result;

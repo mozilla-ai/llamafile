@@ -150,7 +150,7 @@ diff --git a/ggml/src/ggml-backend-meta.cpp b/ggml/src/ggml-backend-meta.cpp
      GGML_UNUSED(buffer);
      return (void *) 0x1000000000000000; // FIXME
  }
-@@ -1236,14 +1236,14 @@ static enum ggml_status ggml_backend_meta_buffer_init_tensor_impl(ggml_backend_m
+@@ -1241,14 +1241,14 @@ static enum ggml_status ggml_backend_meta_buffer_init_tensor_impl(ggml_backend_m
      return GGML_STATUS_SUCCESS;
  }
  
@@ -165,18 +165,18 @@ diff --git a/ggml/src/ggml-backend-meta.cpp b/ggml/src/ggml-backend-meta.cpp
 -static void ggml_backend_meta_buffer_set_tensor(ggml_backend_buffer_t buffer, ggml_tensor * tensor, const void * data, size_t offset, size_t size) {
 +static void GGML_CALL ggml_backend_meta_buffer_set_tensor(ggml_backend_buffer_t buffer, ggml_tensor * tensor, const void * data, size_t offset, size_t size) {
      const size_t n_bufs = ggml_backend_meta_buffer_n_bufs(buffer);
-     GGML_ASSERT(ggml_is_contiguous(tensor));
- 
-@@ -1358,7 +1358,7 @@ static void ggml_backend_meta_buffer_set_tensor(ggml_backend_buffer_t buffer, gg
+     const ggml_backend_meta_split_state split_state = ggml_backend_meta_get_split_state(tensor, /*assume_sync =*/ false);
+     GGML_ASSERT(ggml_is_contiguous(tensor) || split_state.axis == GGML_BACKEND_SPLIT_AXIS_MIRRORED);
+@@ -1362,7 +1362,7 @@ static void ggml_backend_meta_buffer_set_tensor(ggml_backend_buffer_t buffer, gg
      }
  }
  
 -static void ggml_backend_meta_buffer_get_tensor(ggml_backend_buffer_t buffer, const ggml_tensor * tensor, void * data, size_t offset, size_t size) {
 +static void GGML_CALL ggml_backend_meta_buffer_get_tensor(ggml_backend_buffer_t buffer, const ggml_tensor * tensor, void * data, size_t offset, size_t size) {
      const size_t n_bufs = ggml_backend_meta_buffer_n_bufs(buffer);
-     GGML_ASSERT(ggml_is_contiguous(tensor));
- 
-@@ -1459,14 +1459,14 @@ static void ggml_backend_meta_buffer_get_tensor(ggml_backend_buffer_t buffer, co
+     const ggml_backend_meta_split_state split_state = ggml_backend_meta_get_split_state(tensor, /*assume_sync =*/ false);
+     GGML_ASSERT(ggml_is_contiguous(tensor) || split_state.axis == GGML_BACKEND_SPLIT_AXIS_MIRRORED);
+@@ -1462,14 +1462,14 @@ static void ggml_backend_meta_buffer_get_tensor(ggml_backend_buffer_t buffer, co
      }
  }
  
@@ -193,7 +193,7 @@ diff --git a/ggml/src/ggml-backend-meta.cpp b/ggml/src/ggml-backend-meta.cpp
      GGML_ASSERT(ggml_backend_buffer_is_meta(buffer));
      ggml_backend_meta_buffer_context * buf_ctx = (ggml_backend_meta_buffer_context *) buffer->context;
      for (size_t i = 0; i < buf_ctx->bufs.size(); i++) {
-@@ -1492,7 +1492,7 @@ bool ggml_backend_buffer_is_meta(ggml_backend_buffer_t buf) {
+@@ -1495,7 +1495,7 @@ bool ggml_backend_buffer_is_meta(ggml_backend_buffer_t buf) {
      return buf != nullptr && buf->iface.free_buffer == ggml_backend_meta_buffer_iface.free_buffer;
  }
  
@@ -202,7 +202,7 @@ diff --git a/ggml/src/ggml-backend-meta.cpp b/ggml/src/ggml-backend-meta.cpp
      const size_t n_simple_bufts = ggml_backend_meta_buft_n_bufts(buft);
  
      const ggml_init_params params = {
-@@ -1659,20 +1659,20 @@ struct ggml_backend_meta_context {
+@@ -1662,20 +1662,20 @@ struct ggml_backend_meta_context {
      }
  };
  
@@ -226,7 +226,7 @@ diff --git a/ggml/src/ggml-backend-meta.cpp b/ggml/src/ggml-backend-meta.cpp
      const size_t n_backends = ggml_backend_meta_n_backends(backend);
      GGML_ASSERT(offset == 0);
      GGML_ASSERT(ggml_is_contiguous(tensor));
-@@ -1717,7 +1717,7 @@ static void ggml_backend_meta_set_tensor_async(ggml_backend_t backend, ggml_tens
+@@ -1720,7 +1720,7 @@ static void ggml_backend_meta_set_tensor_async(ggml_backend_t backend, ggml_tens
      }
  }
  
@@ -235,7 +235,7 @@ diff --git a/ggml/src/ggml-backend-meta.cpp b/ggml/src/ggml-backend-meta.cpp
      const size_t n_backends = ggml_backend_meta_n_backends(backend);
      GGML_ASSERT(offset == 0);
      GGML_ASSERT(ggml_is_contiguous(tensor));
-@@ -1762,14 +1762,14 @@ static void ggml_backend_meta_get_tensor_async(ggml_backend_t backend, const ggm
+@@ -1765,14 +1765,14 @@ static void ggml_backend_meta_get_tensor_async(ggml_backend_t backend, const ggm
      }
  }
  
@@ -252,7 +252,7 @@ diff --git a/ggml/src/ggml-backend-meta.cpp b/ggml/src/ggml-backend-meta.cpp
      GGML_ASSERT(cgraph->grads == nullptr);
      const size_t n_backends = ggml_backend_meta_n_backends(backend);
      ggml_backend_meta_context * backend_ctx = (ggml_backend_meta_context *) backend->context;
-@@ -2239,7 +2239,7 @@ bool ggml_backend_is_meta(ggml_backend_t backend) {
+@@ -2242,7 +2242,7 @@ bool ggml_backend_is_meta(ggml_backend_t backend) {
      return backend != nullptr && backend->iface.get_name == ggml_backend_meta_i.get_name;
  }
  

@@ -76,7 +76,9 @@ LLAMA_SRCS_CPP := \
 	llama.cpp/src/models/deepseek2.cpp \
 	llama.cpp/src/models/deepseek2ocr.cpp \
 	llama.cpp/src/models/deepseek32.cpp \
+	llama.cpp/src/models/deepseek4.cpp \
 	llama.cpp/src/models/delta-net-base.cpp \
+	llama.cpp/src/models/dflash.cpp \
 	llama.cpp/src/models/dots1.cpp \
 	llama.cpp/src/models/dream.cpp \
 	llama.cpp/src/models/eagle3.cpp \
@@ -109,6 +111,7 @@ LLAMA_SRCS_CPP := \
 	llama.cpp/src/models/hunyuan-dense.cpp \
 	llama.cpp/src/models/hunyuan-moe.cpp \
 	llama.cpp/src/models/hunyuan-vl.cpp \
+	llama.cpp/src/models/hy-v3.cpp \
 	llama.cpp/src/models/internlm2.cpp \
 	llama.cpp/src/models/jais.cpp \
 	llama.cpp/src/models/jais2.cpp \
@@ -198,6 +201,7 @@ LLAMA_SRCS_CPP := \
 	llama.cpp/src/llama-impl.cpp \
 	llama.cpp/src/llama-io.cpp \
 	llama.cpp/src/llama-kv-cache-dsa.cpp \
+	llama.cpp/src/llama-kv-cache-dsv4.cpp \
 	llama.cpp/src/llama-kv-cache-iswa.cpp \
 	llama.cpp/src/llama-kv-cache.cpp \
 	llama.cpp/src/llama-memory-hybrid.cpp \
@@ -240,7 +244,6 @@ COMMON_SRCS_CPP := \
 	llama.cpp/common/jinja/runtime.cpp \
 	llama.cpp/common/jinja/string.cpp \
 	llama.cpp/common/jinja/value.cpp \
-	llama.cpp/common/json-partial.cpp \
 	llama.cpp/common/json-schema-to-grammar.cpp \
 	llama.cpp/common/license.cpp \
 	llama.cpp/common/llguidance.cpp \
@@ -251,7 +254,6 @@ COMMON_SRCS_CPP := \
 	llama.cpp/common/peg-parser.cpp \
 	llama.cpp/common/preset.cpp \
 	llama.cpp/common/reasoning-budget.cpp \
-	llama.cpp/common/regex-partial.cpp \
 	llama.cpp/common/sampling.cpp \
 	llama.cpp/common/speculative.cpp \
 	llama.cpp/common/unicode.cpp
@@ -420,6 +422,7 @@ TOOL_SERVER_SRCS := \
 	llama.cpp/tools/server/server-models.cpp \
 	llama.cpp/tools/server/server-queue.cpp \
 	llama.cpp/tools/server/server-schema.cpp \
+	llama.cpp/tools/server/server-stream.cpp \
 	llama.cpp/tools/server/server-task.cpp \
 	llama.cpp/tools/server/server-tools.cpp
 

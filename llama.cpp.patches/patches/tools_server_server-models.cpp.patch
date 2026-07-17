@@ -1,15 +1,15 @@
 diff --git a/tools/server/server-models.cpp b/tools/server/server-models.cpp
 --- a/llama.cpp/tools/server/server-models.cpp
 +++ b/llama.cpp/tools/server/server-models.cpp
-@@ -33,6 +33,7 @@
- #include <netinet/in.h>
- #include <arpa/inet.h>
- #include <unistd.h>
+@@ -30,6 +30,7 @@
+ #include <cstring>
+ 
+ #ifndef _WIN32
 +#include <csignal>
  extern char **environ;
  #endif
  
-@@ -496,13 +497,19 @@ void server_models::load_models() {
+@@ -508,13 +509,19 @@ void server_models::load_models() {
          }
  
          // wait for all targeted models to reach UNLOADED; cv.wait handles unlock/relock
@@ -31,7 +31,7 @@ diff --git a/tools/server/server-models.cpp b/tools/server/server-models.cpp
  
          // collect all threads to join in one pass while the lock is held:
          // - monitoring threads from just-unloaded models (to_unload)
-@@ -807,9 +814,12 @@ void server_models::unload_lru() {
+@@ -765,9 +772,12 @@ void server_models::unload_lru() {
          // wait for unload to complete
          {
              std::unique_lock<std::mutex> lk(mutex);
@@ -47,19 +47,21 @@ diff --git a/tools/server/server-models.cpp b/tools/server/server-models.cpp
          }
      }
  }
-@@ -823,7 +833,10 @@ void server_models::load(const std::string & name) {
+@@ -787,7 +797,12 @@ void server_models::load(const std::string & name, const load_options & opts) {
      std::unique_lock<std::mutex> lk(mutex);
      // edge case: block until any in-progress reload has finished so we always load
      // against the freshest preset and a consistent mapping state
 -    cv.wait(lk, [this]() { return !is_reloading; });
-+    // Use wait_for() instead of wait() to work around the XNU futex timeout bug.
++    // Use wait_for() instead of wait() to work around a Cosmopolitan libc bug
++    // where untimed futex waits on XNU (macOS) expire after ~72 minutes,
++    // causing condition_variable::wait() to throw ETIMEDOUT.
 +    while (is_reloading) {
 +        cv.wait_for(lk, std::chrono::seconds(30));
 +    }
  
-     auto meta = mapping[name].meta;
+     auto meta = opts.custom_meta.has_value() ? *opts.custom_meta : mapping[name].meta;
      if (meta.status != SERVER_MODEL_STATUS_UNLOADED) {
-@@ -915,15 +928,34 @@ void server_models::load(const std::string & name) {
+@@ -889,15 +904,34 @@ void server_models::load(const std::string & name, const load_options & opts) {
          });
  
          std::thread stopping_thread([&]() {
@@ -95,9 +97,9 @@ diff --git a/tools/server/server-models.cpp b/tools/server/server-models.cpp
 +                    this->cv_stop.wait_for(lk, std::chrono::seconds(30));
 +                }
              }
-             // child crashed or finished on its own — skip graceful shutdown sequence
+             // child crashed or finished on its own, skip graceful shutdown sequence
              if (child_proc->stopped.load(std::memory_order_acquire)) {
-@@ -1237,14 +1269,16 @@ void server_models::wait(const std::string & name, std::function<bool(const serv
+@@ -1164,16 +1198,22 @@ void server_models::wait(const std::string & name, std::function<bool(const serv
  }
  
  void server_models::wait(std::unique_lock<std::mutex> & lk, const std::string & name, std::function<bool(const server_model_meta &)> predicate) {
@@ -107,20 +109,27 @@ diff --git a/tools/server/server-models.cpp b/tools/server/server-models.cpp
 +    // causing condition_variable::wait() to throw ETIMEDOUT.
 +    while (true) {
          auto it = mapping.find(name);
--        if (it != mapping.end()) {
+         if (it != mapping.end()) {
 -            return predicate(it->second.meta);
 -
-+        if (it != mapping.end() && predicate(it->second.meta)) {
++            if (predicate(it->second.meta)) {
++                break;
++            }
++        } else {
++            // model was removed from mapping by another code path (e.g. load_models()).
++            // nothing left to wait for - tell the caller to proceed.
 +            break;
          }
--        return false;
+-        // model was removed from mapping by another code path (e.g. load_models()).
+-        // nothing left to wait for - tell the caller to proceed.
+-        return true;
 -    });
 +        cv.wait_for(lk, std::chrono::seconds(30));
 +    }
  }
  
  bool server_models::ensure_model_ready(const std::string & name) {
-@@ -1894,10 +1928,10 @@ server_http_proxy::server_http_proxy(
+@@ -2103,10 +2143,10 @@ server_http_proxy::server_http_proxy(
      auto pipe = std::make_shared<pipe_t<msg_t>>();
  
      if (scheme == "https") {

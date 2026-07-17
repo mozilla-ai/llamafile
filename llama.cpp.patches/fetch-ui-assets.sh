@@ -101,7 +101,6 @@ ui_missing_assets() {
         return 1
     }
     _have 'index.html'           || echo 'index.html'
-    _have 'loading.html'         || echo 'loading.html'
     _have 'manifest.webmanifest' || echo 'manifest.webmanifest'
     _have 'sw.js'                || echo 'sw.js'
     _have 'build.json'           || echo 'build.json'
