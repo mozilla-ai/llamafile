@@ -169,6 +169,8 @@ probe_glslc_extension coopmat2.comp               GGML_VULKAN_COOPMAT2_GLSLC_SUP
 probe_glslc_extension coopmat2_decode_vector.comp GGML_VULKAN_COOPMAT2_DECODE_VECTOR_GLSLC_SUPPORT
 probe_glslc_extension integer_dot.comp            GGML_VULKAN_INTEGER_DOT_GLSLC_SUPPORT
 probe_glslc_extension bfloat16.comp               GGML_VULKAN_BFLOAT16_GLSLC_SUPPORT
+probe_glslc_extension float_e2m1.comp             GGML_VULKAN_FLOAT_E2M1_GLSLC_SUPPORT
+probe_glslc_extension float_e4m3.comp             GGML_VULKAN_FLOAT_E4M3_GLSLC_SUPPORT
 echo ""
 
 # The defines bake into vulkan-shaders-gen, the generated header, and every
