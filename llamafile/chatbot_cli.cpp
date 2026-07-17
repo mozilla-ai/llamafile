@@ -315,6 +315,7 @@ int cli_main(int argc, char **argv) {
         // Use mtmd pipeline for multimodal prompt evaluation
         mtmd_input_text text;
         text.text = formatted_prompt.c_str();
+        text.text_len = formatted_prompt.size();
         text.add_special = true;
         text.parse_special = true;
 
