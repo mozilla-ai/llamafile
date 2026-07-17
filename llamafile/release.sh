@@ -55,7 +55,8 @@ ZIP_FILE="${DEST_DIR}/llamafile-${LLAMAFILE_VERSION}.zip"
 echo "Zipping ${ZIP_DIR} into ${ZIP_FILE}"
 
 # now zip the release directory
-zip -r "${ZIP_FILE}" "${ZIP_DIR}"
+cd "${RELEASE_DIR}"
+zip -r "${ZIP_FILE}" "llamafile-${LLAMAFILE_VERSION}"
 
 if [ -f "${ZIP_FILE}" ]; then
   echo "${ZIP_FILE} ready."
