@@ -83,7 +83,7 @@ diff --git a/tools/server/server.cpp b/tools/server/server.cpp
      bool is_run_by_cli = (argv == nullptr);
  
      common_models_handler models_handler;
-@@ -415,6 +449,86 @@ int llama_server(common_params & params, int argc, char ** argv) {
+@@ -415,6 +449,92 @@ int llama_server(common_params & params, int argc, char ** argv) {
              llama_backend_free();
          };
  
@@ -109,8 +109,12 @@ diff --git a/tools/server/server.cpp b/tools/server/server.cpp
 +            // media, etc.) that can't be known when the ruleset locks.
 +            //
 +            // cosmo installs the SECCOMP/Landlock filters on the calling thread
-+            // only (no TSYNC), so quiesce the llama.cpp log worker across the
-+            // call: pause() joins it, resume() respawns it under the filter.
++            // only (no TSYNC), so quiesce every pre-existing background thread
++            // across the call: the llama.cpp log worker (pause() joins it,
++            // resume() respawns it under the filter) and the stream-session GC
++            // started at the top of server_main() (stop joins it, start
++            // respawns it; no sessions exist yet, so stopping is a no-op
++            // beyond the join).
 +            //
 +            // When --confine-reads is on, unveil() confines reads to these
 +            // directories, so collect every on-disk path the loader opens
@@ -150,8 +154,10 @@ diff --git a/tools/server/server.cpp b/tools/server/server.cpp
 +            };
 +            char promises[64];
 +            common_log_pause(common_log_main());
++            server_stream_session_manager_stop();
 +            int sandbox = llamafile_sandbox_server(&spec, promises, sizeof(promises));
-+            int sandbox_errno = errno;  // capture before resume() spawns a thread
++            int sandbox_errno = errno;  // capture before the respawns spawn threads
++            server_stream_session_manager_start();
 +            common_log_resume(common_log_main());
 +            if (sandbox == LLAMAFILE_SANDBOX_FAILED) {
 +                SRV_ERR("sandbox: pledge failed: %s; retry with --unsecure to disable sandboxing\n",
@@ -170,7 +176,7 @@ diff --git a/tools/server/server.cpp b/tools/server/server.cpp
          // start the HTTP server before loading the model to be able to serve /health requests
          if (!ctx_http.start()) {
              clean_up();
-@@ -447,6 +561,13 @@ int llama_server(common_params & params, int argc, char ** argv) {
+@@ -447,6 +567,13 @@ int llama_server(common_params & params, int argc, char ** argv) {
              // this will unblock start_loop()
              ctx_server.terminate();
          };
@@ -184,7 +190,7 @@ diff --git a/tools/server/server.cpp b/tools/server/server.cpp
      }
  
      // register signal handler if not running by CLI
-@@ -481,6 +602,11 @@ int llama_server(common_params & params, int argc, char ** argv) {
+@@ -481,6 +608,11 @@ int llama_server(common_params & params, int argc, char ** argv) {
          // when the HTTP server stops, clean up and exit
          clean_up();
      } else {
@@ -196,7 +202,7 @@ diff --git a/tools/server/server.cpp b/tools/server/server.cpp
          // optionally, notify router server that this instance is ready
          std::thread monitor_thread;
          if (child.is_child()) {
-@@ -505,5 +631,56 @@ int llama_server(common_params & params, int argc, char ** argv) {
+@@ -505,5 +637,56 @@ int llama_server(common_params & params, int argc, char ** argv) {
          }
      }
  
