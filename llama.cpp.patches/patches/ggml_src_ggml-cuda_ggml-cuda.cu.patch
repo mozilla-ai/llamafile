@@ -398,7 +398,44 @@ diff --git a/ggml/src/ggml-cuda/ggml-cuda.cu b/ggml/src/ggml-cuda/ggml-cuda.cu
      ggml_backend_cuda_device_context * dev_ctx = (ggml_backend_cuda_device_context *) dev->context;
  
      // check if all the sources are allocated on this device
-@@ -5108,7 +5133,7 @@ static bool ggml_backend_cuda_device_supports_op(ggml_backend_dev_t dev, const g
+@@ -4791,6 +4816,13 @@ static bool ggml_backend_cuda_device_supports_op(ggml_backend_dev_t dev, const g
+                     case GGML_TYPE_Q5_K:
+                     case GGML_TYPE_Q6_K:
+                     case GGML_TYPE_Q8_K:
++                    // IQ quant mul_mat kernels (mmq/mmvq) and the dequant
++                    // converters are compiled out under GGML_CUDA_NO_IQ_QUANTS
++                    // (llamafile's --minimize-size CUDA build). Report them
++                    // unsupported so the scheduler falls back to the CPU
++                    // backend instead of dispatching to a missing kernel and
++                    // hitting GGML_ASSERT(convert_func != nullptr).
++#ifndef GGML_CUDA_NO_IQ_QUANTS
+                     case GGML_TYPE_IQ1_M:
+                     case GGML_TYPE_IQ1_S:
+                     case GGML_TYPE_IQ2_S:
+@@ -4800,6 +4832,7 @@ static bool ggml_backend_cuda_device_supports_op(ggml_backend_dev_t dev, const g
+                     case GGML_TYPE_IQ3_XXS:
+                     case GGML_TYPE_IQ4_NL:
+                     case GGML_TYPE_IQ4_XS:
++#endif // GGML_CUDA_NO_IQ_QUANTS
+                     case GGML_TYPE_BF16:
+                         return true;
+                     default:
+@@ -4890,9 +4923,14 @@ static bool ggml_backend_cuda_device_supports_op(ggml_backend_dev_t dev, const g
+                 if (src0_type == GGML_TYPE_Q5_1 && src1_type == GGML_TYPE_F32) {
+                     return true;
+                 }
++                // ggml_cpy_f32_iq4_nl_cuda is compiled out under
++                // GGML_CUDA_NO_IQ_QUANTS; don't advertise the copy or the
++                // dispatch below GGML_ABORTs on an unhandled type combination.
++#ifndef GGML_CUDA_NO_IQ_QUANTS
+                 if (src0_type == GGML_TYPE_F32 && src1_type == GGML_TYPE_IQ4_NL) {
+                     return true;
+                 }
++#endif // GGML_CUDA_NO_IQ_QUANTS
+                 if (src0_type == GGML_TYPE_F32 && src1_type == GGML_TYPE_I32) {
+                     return true;
+                 }
+@@ -5108,7 +5146,7 @@ static bool ggml_backend_cuda_device_supports_op(ggml_backend_dev_t dev, const g
      }
  }
  
@@ -407,7 +444,7 @@ diff --git a/ggml/src/ggml-cuda/ggml-cuda.cu b/ggml/src/ggml-cuda/ggml-cuda.cu
      ggml_backend_cuda_device_context * dev_ctx = (ggml_backend_cuda_device_context *) dev->context;
      const bool integrated = ggml_cuda_info().devices[dev_ctx->device].integrated;
      return (ggml_backend_buft_is_cuda(buft) && buft->device == dev) || (integrated && ggml_backend_buft_is_cuda_host(buft));
-@@ -5129,13 +5154,13 @@ static int64_t get_op_batch_size(const ggml_tensor * op) {
+@@ -5129,13 +5167,13 @@ static int64_t get_op_batch_size(const ggml_tensor * op) {
      }
  }
  
@@ -423,7 +460,7 @@ diff --git a/ggml/src/ggml-cuda/ggml-cuda.cu b/ggml/src/ggml-cuda/ggml-cuda.cu
  #ifdef GGML_CUDA_NO_PEER_COPY
      return nullptr;
  #else
-@@ -5153,14 +5178,14 @@ static ggml_backend_event_t ggml_backend_cuda_device_event_new(ggml_backend_dev_
+@@ -5153,14 +5191,14 @@ static ggml_backend_event_t ggml_backend_cuda_device_event_new(ggml_backend_dev_
  #endif
  }
  
@@ -440,7 +477,7 @@ diff --git a/ggml/src/ggml-cuda/ggml-cuda.cu b/ggml/src/ggml-cuda/ggml-cuda.cu
      GGML_UNUSED(dev);
      CUDA_CHECK(cudaEventSynchronize((cudaEvent_t)event->context));
  }
-@@ -5189,23 +5214,23 @@ struct ggml_backend_cuda_reg_context {
+@@ -5189,23 +5227,23 @@ struct ggml_backend_cuda_reg_context {
      std::vector<ggml_backend_dev_t> devices;
  };
  
@@ -468,7 +505,7 @@ diff --git a/ggml/src/ggml-cuda/ggml-cuda.cu b/ggml/src/ggml-cuda/ggml-cuda.cu
      static std::vector<ggml_backend_feature> features = []() {
          std::vector<ggml_backend_feature> features;
      #define _STRINGIFY(...) #__VA_ARGS__
-@@ -5262,7 +5287,7 @@ static ggml_backend_feature * ggml_backend_cuda_get_features(ggml_backend_reg_t
+@@ -5262,7 +5300,7 @@ static ggml_backend_feature * ggml_backend_cuda_get_features(ggml_backend_reg_t
      GGML_UNUSED(reg);
  }
  
