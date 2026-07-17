@@ -95,6 +95,7 @@ if not exist "%HIPCC%" (
 
 :: -------- AMD GPU architecture targets --------
 :: gfx906:  Vega 20 (Radeon VII, MI50)
+:: gfx942:  CDNA3 (AMD Instinct MI300X/MI300A)
 :: gfx1030: RDNA2 (RX 6900 XT, RX 6800 series)
 :: gfx1031: RDNA2 (RX 6700 series)
 :: gfx1032: RDNA2 (RX 6600 series)
@@ -102,15 +103,22 @@ if not exist "%HIPCC%" (
 :: gfx1101: RDNA3 (RX 7800 series)
 :: gfx1102: RDNA3 (RX 7600 series)
 :: gfx1103: RDNA3 (RX 7000 mobile)
-set "ARCH_FLAGS="
-set "ARCH_FLAGS=%ARCH_FLAGS% --offload-arch=gfx906"
-set "ARCH_FLAGS=%ARCH_FLAGS% --offload-arch=gfx1030"
-set "ARCH_FLAGS=%ARCH_FLAGS% --offload-arch=gfx1031"
-set "ARCH_FLAGS=%ARCH_FLAGS% --offload-arch=gfx1032"
-set "ARCH_FLAGS=%ARCH_FLAGS% --offload-arch=gfx1100"
-set "ARCH_FLAGS=%ARCH_FLAGS% --offload-arch=gfx1101"
-set "ARCH_FLAGS=%ARCH_FLAGS% --offload-arch=gfx1102"
-set "ARCH_FLAGS=%ARCH_FLAGS% --offload-arch=gfx1103"
+:: ARCH_FLAGS can be overridden via the OFFLOAD_ARCH env var, e.g.
+::   set "OFFLOAD_ARCH=--offload-arch=gfx942" ^& llamafile\rocm.bat  (single-arch fast build)
+if defined OFFLOAD_ARCH (
+    set "ARCH_FLAGS=%OFFLOAD_ARCH%"
+) else (
+    set "ARCH_FLAGS="
+    set "ARCH_FLAGS=!ARCH_FLAGS! --offload-arch=gfx906"
+    set "ARCH_FLAGS=!ARCH_FLAGS! --offload-arch=gfx942"
+    set "ARCH_FLAGS=!ARCH_FLAGS! --offload-arch=gfx1030"
+    set "ARCH_FLAGS=!ARCH_FLAGS! --offload-arch=gfx1031"
+    set "ARCH_FLAGS=!ARCH_FLAGS! --offload-arch=gfx1032"
+    set "ARCH_FLAGS=!ARCH_FLAGS! --offload-arch=gfx1100"
+    set "ARCH_FLAGS=!ARCH_FLAGS! --offload-arch=gfx1101"
+    set "ARCH_FLAGS=!ARCH_FLAGS! --offload-arch=gfx1102"
+    set "ARCH_FLAGS=!ARCH_FLAGS! --offload-arch=gfx1103"
+)
 
 :: -------- copy TinyBLAS files --------
 copy /y "%LLAMAFILE_DIR%\tinyblas.h"       "%BUILD_DIR%\" >nul
@@ -124,7 +132,10 @@ set "COMMON_FLAGS=%COMMON_FLAGS% -Wno-ignored-attributes -Wno-nested-anon-types"
 set "COMMON_FLAGS=%COMMON_FLAGS% -I%BUILD_DIR% -I%GGML_INC_DIR% -I%GGML_SRC_DIR% -I%GGML_CUDA_DIR%"
 set "COMMON_FLAGS=%COMMON_FLAGS% -I"%HIP_PATH%\include""
 set "COMMON_FLAGS=%COMMON_FLAGS% -DNDEBUG -DGGML_BUILD=1 -DGGML_SHARED=1 -DGGML_BACKEND_SHARED=1 -DGGML_BACKEND_BUILD=1 -DGGML_MULTIPLATFORM"
-set "COMMON_FLAGS=%COMMON_FLAGS% -DGGML_USE_HIP=1 -DGGML_USE_TINYBLAS=1 -DGGML_HIP_NO_VMM -D__HIP_PLATFORM_AMD__"
+set "COMMON_FLAGS=%COMMON_FLAGS% -DGGML_USE_HIP=1 -DGGML_USE_TINYBLAS=1 -DGGML_HIP_NO_VMM=1 -D__HIP_PLATFORM_AMD__"
+:: --offload-compress shrinks the fat binary (mirrors rocm.sh / #995); requires a
+:: recent ROCm HIP SDK -- drop this flag if your clang++ rejects it
+set "COMMON_FLAGS=%COMMON_FLAGS% --offload-compress"
 
 :: -------- extract GGML version --------
 set "GGML_VERSION=unknown"
@@ -191,21 +202,35 @@ for %%f in ("%GGML_CUDA_DIR%\*.cu") do (
     set "OBJ_FILES=!OBJ_FILES! "!OBJ!""
 )
 
-:: Template-instances sources
-for %%f in ("%GGML_CUDA_DIR%\template-instances\*.cu") do (
-    set /a COUNT+=1
-    set "BASE=%%~nf"
-    set "OBJ=%BUILD_DIR%\ti-!BASE!.obj"
-    set "SRC=%%f"
-    if not exist "!OBJ!" (
-        echo [!COUNT!] Compiling: ti-!BASE!.cu
-        "%HIPCC%" -c %ARCH_FLAGS% %COMMON_FLAGS% -o "!OBJ!" "!SRC!"
-        if errorlevel 1 (echo Error compiling ti-!BASE!.cu & exit /b 1)
-        set /a COMPILED+=1
-    ) else (
-        echo [!COUNT!] Skipping: ti-!BASE!.cu (up to date^)
+:: Template-instances sources (mirror rocm.sh collect_gpu_sources: include all
+:: fattn-mma / fattn-tile / mmf / mmq instances, but only the 4 default fattn-vec
+:: quant combos -- f16-f16, q4_0-q4_0, q8_0-q8_0, bf16-bf16 -- to match upstream
+:: CMake defaults and keep the DLL size down)
+for %%f in (
+    "%GGML_CUDA_DIR%\template-instances\fattn-mma-*.cu"
+    "%GGML_CUDA_DIR%\template-instances\fattn-tile-*.cu"
+    "%GGML_CUDA_DIR%\template-instances\mmf-*.cu"
+    "%GGML_CUDA_DIR%\template-instances\mmq-*.cu"
+    "%GGML_CUDA_DIR%\template-instances\fattn-vec-instance-f16-f16.cu"
+    "%GGML_CUDA_DIR%\template-instances\fattn-vec-instance-q4_0-q4_0.cu"
+    "%GGML_CUDA_DIR%\template-instances\fattn-vec-instance-q8_0-q8_0.cu"
+    "%GGML_CUDA_DIR%\template-instances\fattn-vec-instance-bf16-bf16.cu"
+) do (
+    if exist "%%f" (
+        set /a COUNT+=1
+        set "BASE=%%~nf"
+        set "OBJ=%BUILD_DIR%\ti-!BASE!.obj"
+        set "SRC=%%f"
+        if not exist "!OBJ!" (
+            echo [!COUNT!] Compiling: ti-!BASE!.cu
+            "%HIPCC%" -c %ARCH_FLAGS% %COMMON_FLAGS% -o "!OBJ!" "!SRC!"
+            if errorlevel 1 (echo Error compiling ti-!BASE!.cu & exit /b 1)
+            set /a COMPILED+=1
+        ) else (
+            echo [!COUNT!] Skipping: ti-!BASE!.cu (up to date^)
+        )
+        set "OBJ_FILES=!OBJ_FILES! "!OBJ!""
     )
-    set "OBJ_FILES=!OBJ_FILES! "!OBJ!""
 )
 
 echo.
