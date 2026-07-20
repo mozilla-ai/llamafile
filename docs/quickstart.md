@@ -182,6 +182,39 @@ curl -L -o gpt-oss.gguf https://huggingface.co/unsloth/gpt-oss-20b-GGUF/resolve/
 
 Windows users may need to change `./llamafile.exe` to `.\llamafile.exe` when running the above command.
 
+### Which release file do I download?
+
+On the [releases page](https://github.com/mozilla-ai/llamafile/releases) each
+release ships several *independent* single-file programs. They are **not**
+bundled together inside `llamafile`; pick the one that matches the task you
+want to perform:
+
+| File | What it is |
+| --- | --- |
+| `llamafile` | Runs LLMs (chat/completions). This is the program referenced throughout these docs. |
+| `llamafile-thin` | The same `llamafile` program, but **without the pre-built GPU libraries bundled in** (see below). |
+| `whisperfile` | Speech-to-text, built on [whisper.cpp](https://github.com/ggml-org/whisper.cpp). See the [whisperfile docs](whisperfile/index.md). |
+| `transcribefile` | Speech-to-text, built on [transcribe.cpp](https://github.com/handy-computer/transcribe.cpp). |
+| `diffusionfile` | Image generation (Stable Diffusion). |
+| `zipalign` | A small utility for embedding weights or other assets into a llamafile. |
+
+#### `llamafile` vs `llamafile-thin`
+
+Both are the *same* executable — the only difference is whether the pre-built
+GPU support libraries are packaged inside:
+
+- **`llamafile`** has the pre-built CUDA and Vulkan libraries (for both Linux
+  `.so` and Windows `.dll`) appended into the file, so GPU acceleration works
+  out of the box without a local GPU toolchain. This makes the download larger.
+- **`llamafile-thin`** is a copy of the binary taken *before* those GPU
+  libraries were added, so it is a much smaller download. It still runs on the
+  CPU, and can still use your GPU when the matching GPU support libraries are
+  available on your system.
+
+As a rule of thumb: use **`llamafile`** if you want GPU acceleration to just
+work; use **`llamafile-thin`** if you want the smallest download, only need CPU
+inference, or already have your GPU libraries set up.
+
 
 ## Running llamafile with models downloaded by third-party applications
 
