@@ -50,6 +50,18 @@ below llamafile runs on the CPU.
 The 0.10.* series has not been tested on every GPU and platform yet, so
 treat the AMD and Windows paths in particular as best-effort.
 
+### IQ-quantized models on NVIDIA GPUs
+
+The CUDA library bundled in our releases is size-optimized and leaves out
+the IQ-quant kernels (the `IQ1_*`, `IQ2_*`, `IQ3_*`, `IQ4_*` quantizations).
+When you offload an IQ-quantized model to an NVIDIA GPU, llamafile keeps just
+those layers on the CPU automatically — the output is correct, those specific
+layers simply don't get GPU acceleration. Every other quantization (`Q*_*`,
+`MXFP4`, `NVFP4`, `F16`, `BF16`, …) runs fully on the GPU. The Apple Metal and
+AMD (ROCm) builds are not size-optimized and include full IQ-quant GPU support.
+For full IQ acceleration on NVIDIA, build or supply a full (non-minimized) CUDA
+library — see [Building the GPU libraries](building_dlls.md).
+
 GPU on MacOS ARM64 is supported by compiling a small module using the
 Xcode Command Line Tools, which need to be installed. This is a one time
 cost that happens the first time you run your llamafile. The DSO built
