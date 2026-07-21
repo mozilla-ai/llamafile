@@ -41,6 +41,15 @@ Whether you are a new user or a long-time fan, please share what you find most v
 [Read more via the blog](https://blog.mozilla.ai/llamafile-returns/) and add your voice to the discussion [here](https://github.com/mozilla-ai/llamafile/discussions/809).
 
 
+## `llamafile` vs `llamafile-thin`
+
+Release builds publish both `llamafile-<version>` and `llamafile-<version>-thin`.
+
+- **`llamafile`**: the engine with GPU backend libraries (`ggml-cuda` / `ggml-vulkan` for Linux/Windows) embedded via `zipalign` so GPU acceleration can work from a single download.
+- **`llamafile-thin`**: the **same engine** without those GPU libraries appended — smaller download for CPU-only use or custom GPU setups.
+
+`whisperfile`, `diffusionfile`, and `transcribefile` remain separate release artifacts; they are not packed inside the main `llamafile` binary.
+
 ## How llamafile works
 
 A llamafile is an executable LLM that you can run on your own

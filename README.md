@@ -66,6 +66,19 @@ responses.
 
 **Note - Only executables under 4GB can run on Windows, so any llamafile above 4GB won't work. Download the [llamafile](https://github.com/mozilla-ai/llamafile/releases) binary and run it with any [external weights/models(GGUF)](https://docs.mozilla.ai/llamafile/getting-started/quickstart#using-llamafile-with-external-weights).**
 
+### `llamafile` vs `llamafile-thin` (release binaries)
+
+GitHub releases ship both `llamafile-<version>` and `llamafile-<version>-thin`. They are the **same engine binary**; the difference is packaging:
+
+| Artifact | What it contains | Typical size | When to use |
+|---|---|---|---|
+| **`llamafile`** | Engine **plus** prebuilt GPU backend libraries embedded with `zipalign` (`ggml-cuda` / `ggml-vulkan` `.so`/`.dll`) | Larger (hundreds of MB) | One-file download with GPU acceleration libs already inside |
+| **`llamafile-thin`** | Engine **only** (no GPU libs zip-appended) | Smaller (~tens of MB) | CPU-only, or you already provide GPU backends yourself |
+
+Other release tools (`whisperfile`, `diffusionfile`, `transcribefile`, `zipalign`) are separate single-purpose binaries — they are **not** bundled inside `llamafile` / `llamafile-thin`. The full `llamafile` binary is the LLM runner (plus optional embedded GPU DSOs), not a mega-binary of every tool.
+
+See `llamafile/release.sh` for how the thin copy is taken before GPU libs are zipalign'd into the full binary.
+
 ## Documentation
 
 Check the full documentation at [docs.mozilla.ai/llamafile](https://docs.mozilla.ai/llamafile), or directly jump into one of the following subsections:
