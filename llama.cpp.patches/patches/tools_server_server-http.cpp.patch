@@ -1,7 +1,19 @@
-diff --git a/tools/server/server-http.cpp b/tools/server/server-http.cpp
 --- a/llama.cpp/tools/server/server-http.cpp
 +++ b/llama.cpp/tools/server/server-http.cpp
-@@ -104,7 +104,7 @@ bool server_http_context::init(const common_params & params) {
+@@ -11,6 +11,12 @@
+ #include <memory>
+ #include <string>
+ #include <thread>
++#include <cerrno>
++#include <cstring>
++#include <sys/stat.h>
++#ifndef _WIN32
++#include <unistd.h>
++#endif
+ 
+ //
+ // HTTP implementation using cpp-httplib
+@@ -104,7 +110,7 @@
  
      auto & srv = pimpl->srv;
  
@@ -10,3 +22,44 @@ diff --git a/tools/server/server-http.cpp b/tools/server/server-http.cpp
      if (!params.ssl_file_key.empty() && !params.ssl_file_cert.empty()) {
          SRV_TRC("running with SSL: key = %s, cert = %s\n", params.ssl_file_key.c_str(), params.ssl_file_cert.c_str());
          srv = std::make_unique<httplib::SSLServer>(
+@@ -434,6 +440,27 @@
+         is_sock = true;
+         SRV_TRC("%s", "setting address family to AF_UNIX\n");
+         srv->set_address_family(AF_UNIX);
++        // Stale filesystem sockets make bind(2) fail with EADDRINUSE. Remove any
++        // pre-existing path first so --host /path.sock is restartable. If the
++        // path exists but is not a socket, leave it alone and let bind fail with
++        // a clear errno (issue #971).
++#ifndef _WIN32
++        {
++            struct stat st;
++            if (::stat(hostname.c_str(), &st) == 0) {
++                if (S_ISSOCK(st.st_mode)) {
++                    if (::unlink(hostname.c_str()) != 0) {
++                        SRV_ERR("couldn't remove existing HTTP server socket '%s': %s (errno=%d)\n",
++                                hostname.c_str(), strerror(errno), errno);
++                    } else {
++                        SRV_TRC("removed existing HTTP server socket path: %s\n", hostname.c_str());
++                    }
++                } else {
++                    SRV_ERR("HTTP server socket path exists and is not a socket: %s\n", hostname.c_str());
++                }
++            }
++        }
++#endif
+         // bind_to_port requires a second arg, any value other than 0 should
+         // simply get ignored
+         was_bound = srv->bind_to_port(hostname, 8080);
+@@ -452,7 +479,11 @@
+     }
+ 
+     if (!was_bound) {
+-        SRV_ERR("couldn't bind HTTP server socket, hostname: %s, port: %d\n", hostname.c_str(), port);
++        // Surface errno so AF_UNIX failures are diagnosable (path length,
++        // permissions, EADDRINUSE, etc.). errno is from the last failed bind
++        // or listen inside cpp-httplib.
++        SRV_ERR("couldn't bind HTTP server socket, hostname: %s, port: %d: %s (errno=%d)\n",
++                hostname.c_str(), port, strerror(errno), errno);
+         return false;
+     }
+ 
