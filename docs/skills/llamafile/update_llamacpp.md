@@ -13,7 +13,8 @@ This document is the canonical procedure for a llama.cpp bump. It is built by
 |------|---------|----------|
 | `make reset-repo` | Clean slate: drop all local changes, reset submodules | repo root |
 | `make setup` | Pull submodules **and** apply patches (+ fetch UI assets). Needs a clean tree (can't pull onto a dirty one). Doubles as the patch-**application** test. | repo root |
-| `tools/check_patches.sh` | Triage **only**: of the pre-existing patches, which still apply to the freshly-bumped submodule (line-number fuzz tolerated) and which need hand-work. | repo root |
+| `tools/check_patches.sh` | Triage **only**: of the pre-existing patches, which still apply to the freshly-bumped submodule (line-number fuzz tolerated) and which need hand-work. Prints the conflicting patch's name and file:line. | repo root |
+| `apply-patches.sh --tolerant` | Reconcile-apply during a bump: apply every patch that fits, leave one `.rej` per drifted hunk (instead of aborting like strict `setup`), and do the non-patch steps (copy `llamafile-files/`, remove Makefile, fetch UI). | repo root |
 | `llamafile:generate-patches` | Regenerate **all** patches from in-place submodule edits. The only sanctioned way to produce patches. | (wraps the `cd`) |
 | `llamafile:verify-clean` | Clean round-trip: `reset-repo` → `setup` → clean build → `check`. The post-generate verification. | repo root |
 | `llamafile:build` / `llamafile:check` | Build all targets / run unit tests. | repo root |
@@ -33,8 +34,9 @@ This document is the canonical procedure for a llama.cpp bump. It is built by
 - **DO** use `git diff $OLD_ID..$COMMIT_ID` for **upstream-drift recon only**
   (seeing what changed upstream to drive BUILD.mk / integration work). That is
   the one legitimate ad-hoc `git diff` use.
-- **DO** use `git apply --reject <patch>` to *reconcile* a drifted patch (Step 3):
-  it applies every hunk that still fits and drops only the stragglers as `.rej`
+- **DO** reconcile with `apply-patches.sh --tolerant` for the whole set at once,
+  or `git apply --reject <patch>` for a single drifted patch (Step 3):
+  each applies every hunk that still fits and drops only the stragglers as `.rej`
   files, so a 50-hunk mechanical patch (e.g. the `GGML_CALL` ones) collapses to
   hand-editing the 1–2 hunks that actually moved. This is distinct from — and
   doesn't violate — the DON'Ts above: `check_patches.sh` triages (file-level,
@@ -156,6 +158,34 @@ Make the submodule build and work against the new upstream, editing files
   `BUILD.mk`/`license.cpp`. Also: a full build needs **all** submodules
   initialized (`reset-repo` deinits them all); to prove *just* llama.cpp,
   `.cosmocc/4.0.2/bin/make o/$(MODE)/llama.cpp`.
+
+Reconcile with the pre-built tools — don't hand-roll `git apply` loops. After
+the bump the tree is pristine upstream with **none** of llamafile's changes;
+re-applying the patch set *replays* those changes onto the new base (a rebase),
+and Step 5 regenerates the patches from the result. Run on the clean, freshly
+bumped tree:
+
+- **Triage** already named (Step 2) the conflicting patches and their file:line —
+  `check_patches.sh` prints the `git apply --check` diagnostic under each failing
+  patch's name.
+- **No conflicts (the common case):** just run `make setup`. It applies every
+  patch and does the non-patch steps (copies `llamafile-files/`, removes the
+  Makefile, fetches the UI) deterministically.
+- **Conflicts:** strict `make setup`/`apply-patches.sh` is fail-early (aborts on
+  the first reject), so use the tolerant variant, which applies every hunk that
+  fits, does the same non-patch steps, and leaves one `*.rej` per drifted hunk
+  (listing them at the end):
+
+  ```bash
+  ./llama.cpp.patches/apply-patches.sh --tolerant
+  ```
+
+  Edit each `*.rej` into place — the one irreducibly-manual step (see the
+  `git apply --reject` note in DO/DON'T) — then delete them:
+
+  ```bash
+  find llama.cpp -name '*.rej' -delete
+  ```
 
 ### Step 4 — Prove the reconciliation works (on the dirty tree)
 
