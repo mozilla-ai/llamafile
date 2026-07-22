@@ -246,6 +246,13 @@ hardware/platforms and report them in the PR:
       assets return **415**, and expect `Content-Encoding: gzip` on the response.
 - [ ] Long-run stability (the `cv.wait` / futex class only shows after hours)
 
+**Reconciled a GPU-only patch?** The host build compiles none of the GPU backends
+— CUDA, Vulkan, and Metal DSOs build at runtime on the target — so any hunk you
+hand-edited in `ggml-cuda/*`, `ggml-vulkan/*`, or `ggml-metal/*` is **not**
+exercised by `verify-clean`; a green round-trip only proves the CPU-path patches.
+Call such reconciliations out in the PR and make sure the matching GPU smoke test
+above is run before merge.
+
 ## Recurring breakage (check these proactively)
 
 Distilled from PRs #941, #951, #983 — these recur almost every bump and are the
