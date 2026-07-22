@@ -213,9 +213,8 @@ Files in `llama.cpp` are usually modified in-place for development and testing.
 Once they are ready to be committed, you can update all files in the `llama.cpp.patches` directory by running the following:
 
 ```sh
-cd llama.cpp
-# echo y answers the script's interactive confirmation prompt
-echo y | ../tools/generate_patches.sh --output-dir ../llama.cpp.patches
+# echo y answers the prompt; the subshell restores the cwd even on failure
+( cd llama.cpp && echo y | ../tools/generate_patches.sh --output-dir ../llama.cpp.patches )
 ```
 
 Patch filenames will automatically reflect the file path with underscores replacing slashes (e.g., `common_arg.cpp.patch` for `common/arg.cpp`).

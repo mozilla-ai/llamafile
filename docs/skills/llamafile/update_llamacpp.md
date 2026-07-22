@@ -57,12 +57,15 @@ If the tree is already set up, reset to a clean slate first — this is the comm
 case when resuming a bump in an existing worktree:
 
 ```bash
-.cosmocc/4.0.2/bin/make reset-repo   # drops applied patches, resets all submodules
+make reset-repo   # drops applied patches, resets all submodules
 ```
 
-`reset-repo` is destructive (it `rm -rf`s each submodule dir before restoring
-it); a permission-gated environment may prompt or block it — prefer the
-`.cosmocc/.../make` form shown here, which reads as the sanctioned build command.
+`reset-repo` and `setup` use **bare** `make` — both are exempt from the cosmocc
+version check, and `setup` must run bare on a fresh clone since it downloads
+cosmocc (every *other* target uses `.cosmocc/4.0.2/bin/make`). `reset-repo` is
+destructive (it `rm -rf`s each submodule dir before restoring it), so a
+permission-gated environment may prompt or block it; if bare `make` is blocked,
+the equivalent `.cosmocc/4.0.2/bin/make reset-repo` usually goes through.
 
 ### Step 1 — Bump the submodule
 
@@ -150,9 +153,9 @@ Make the submodule build and work against the new upstream, editing files
   removes the upstream `Makefile`, and fetches the UI. If you reconcile by hand
   (applying patches directly rather than via `setup`, e.g. because some patches
   don't yet apply), replicate those steps or the build fails on a missing
-  `BUILD.mk`/`license.cpp`. Also: a full `make` needs **all three** submodules
-  initialized (`reset-repo` deinits whisper/sd); to prove *just* llama.cpp,
-  `make o/$(MODE)/llama.cpp`.
+  `BUILD.mk`/`license.cpp`. Also: a full build needs **all** submodules
+  initialized (`reset-repo` deinits them all); to prove *just* llama.cpp,
+  `.cosmocc/4.0.2/bin/make o/$(MODE)/llama.cpp`.
 
 ### Step 4 — Prove the reconciliation works (on the dirty tree)
 

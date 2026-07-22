@@ -54,7 +54,7 @@ This command:
 The `-j $(nproc)` flag enables parallel compilation (adjust based on CPU cores).
 Adapt `nproc` to the OS where you are building, (e.g. `sysctl -n hw.physicalcpu` on mac)
 
-**Critical:** Always use `.cosmocc/4.0.2/bin/make`, not system make. The cosmocc toolchain includes its own make with Cosmopolitan-specific behavior.
+**Critical:** Always use `.cosmocc/4.0.2/bin/make`, not system make. The cosmocc toolchain includes its own make with Cosmopolitan-specific behavior. The only exceptions are `make setup` and `make reset-repo`, which use bare `make` — `setup` bootstraps cosmocc on a fresh clone, and both are exempt from the version check.
 
 ### Clean Build
 

@@ -77,9 +77,8 @@ ready to commit. To avoid manual errors, use the script `tools/generate_patches.
 saves all new files and patches in the specified output directory.
 
 ```sh
-cd llama.cpp
-# echo y answers the script's interactive confirmation prompt
-echo y | ../tools/generate_patches.sh --output-dir ../llama.cpp.patches
+# echo y answers the prompt; the subshell restores the cwd even on failure
+( cd llama.cpp && echo y | ../tools/generate_patches.sh --output-dir ../llama.cpp.patches )
 ```
 
 After this operation, one can double check which files have been modified / added
