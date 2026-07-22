@@ -44,6 +44,26 @@ This document is the canonical procedure for a llama.cpp bump. It is built by
 
 ## The procedure
 
+### Step 0 — Starting state (fresh clone vs. already-set-up worktree)
+
+The steps below assume a **clean** tree: submodules at their pinned commits with
+no patches applied. A fresh clone is clean; a worktree you (or a previous
+session) already ran `make setup` on is **not** — the applied patches live as
+uncommitted working-tree changes inside the submodules (`git status` shows
+`m llama.cpp`, `m whisper.cpp`, …), and Step 1's `git submodule update` will not
+run over them.
+
+If the tree is already set up, reset to a clean slate first — this is the common
+case when resuming a bump in an existing worktree:
+
+```bash
+.cosmocc/4.0.2/bin/make reset-repo   # drops applied patches, resets all submodules
+```
+
+`reset-repo` is destructive (it `rm -rf`s each submodule dir before restoring
+it); a permission-gated environment may prompt or block it — prefer the
+`.cosmocc/.../make` form shown here, which reads as the sanctioned build command.
+
 ### Step 1 — Bump the submodule
 
 Creates a new branch with the submodule at its latest commit. The tree is now
