@@ -18,6 +18,11 @@ stale objects. Always `make clean` first here — do not rebuild incrementally.
 `make setup` both pulls submodules and applies patches, and it cannot pull
 submodules onto a dirty tree — that is exactly why `reset-repo` runs first.
 
+Note: `reset-repo` is destructive (it `rm -rf`s the submodule dirs before
+restoring them), so a permission-gated environment may prompt or block it. Run
+it through the `$MAKE` (`.cosmocc/.../make`) form below rather than raw
+`git clean`/`reset`; allowlist `make reset-repo` if round-trips keep stalling.
+
 ```bash
 # ensure the toolchain is available
 if [ ! -d .cosmocc/4.0.2 ]; then
