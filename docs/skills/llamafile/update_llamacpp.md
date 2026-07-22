@@ -145,6 +145,11 @@ Before generating any patches, prove the in-place edits actually work:
 - Clean build (`llamafile:clean` then `llamafile:build`) and `llamafile:check`.
 - Run llamafile as expected — ideally the integration tests. Runtime / GPU /
   platform validation is your hardware's job (see handoff checklist).
+- **Capturing build output:** a full clean build takes minutes — run it
+  backgrounded. Never write logs or relevant artifacts under `o/`: the clean
+  step does `rm -rf o`, so a redirect to `o/build.log` fails *before* the build
+  starts and reads like a build failure (and any other artifact left there is
+  wiped). Keep them in a scratch dir outside `o/`.
 
 Only proceed past this gate once the build is green and llamafile runs. Patches
 generated from unproven edits bake in breakage.
