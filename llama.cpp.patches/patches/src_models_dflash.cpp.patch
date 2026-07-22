@@ -1,7 +1,7 @@
 diff --git a/src/models/dflash.cpp b/src/models/dflash.cpp
 --- a/llama.cpp/src/models/dflash.cpp
 +++ b/llama.cpp/src/models/dflash.cpp
-@@ -60,18 +60,6 @@ void llama_model_dflash::load_arch_tensors(llama_model_loader &) {
+@@ -61,18 +61,6 @@ void llama_model_dflash::load_arch_tensors(llama_model_loader &) {
      }
  }
  
@@ -20,7 +20,7 @@ diff --git a/src/models/dflash.cpp b/src/models/dflash.cpp
  template <>
  ggml_tensor * llama_model_dflash::graph<true>::build_inp_embd_enc() const {
      auto inp_target = std::make_unique<llm_graph_input_embd>(hparams.n_embd_inp_enc());
-@@ -274,3 +262,18 @@ llama_model_dflash::graph<false>::graph(const llama_model & model, const llm_gra
+@@ -291,3 +279,18 @@ llama_model_dflash::graph<false>::graph(const llama_model & model, const llm_gra
  
      ggml_build_forward_expand(gf, cur);
  }

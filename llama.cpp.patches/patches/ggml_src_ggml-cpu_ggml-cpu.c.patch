@@ -53,7 +53,7 @@ diff --git a/ggml/src/ggml-cpu/ggml-cpu.c b/ggml/src/ggml-cpu/ggml-cpu.c
          int chunk_size = 16;
          if (nr0 == 1 || nr1 == 1) {
              chunk_size = 64;
-@@ -2856,6 +2894,19 @@ struct ggml_cplan ggml_graph_plan(
+@@ -2871,6 +2909,19 @@ struct ggml_cplan ggml_graph_plan(
                          cur += n_as*ids->ne[0]*ids->ne[1]*sizeof(struct mmid_row_mapping) + sizeof(int64_t);
                          // atomic_current_chunk
                          cur += CACHE_LINE_SIZE*n_as + CACHE_LINE_SIZE;

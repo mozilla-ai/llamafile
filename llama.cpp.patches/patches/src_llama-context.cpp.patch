@@ -1,7 +1,7 @@
 diff --git a/src/llama-context.cpp b/src/llama-context.cpp
 --- a/llama.cpp/src/llama-context.cpp
 +++ b/llama.cpp/src/llama-context.cpp
-@@ -520,6 +520,16 @@ void llama_context::resolve_fused_ops(const llama_memory_context_i * mctx, uint3
+@@ -543,6 +543,16 @@ void llama_context::resolve_fused_ops(const llama_memory_context_i * mctx, uint3
          }
      };
  
