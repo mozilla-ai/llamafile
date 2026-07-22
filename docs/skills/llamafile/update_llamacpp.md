@@ -84,6 +84,22 @@ git add llama.cpp
 git commit -m "Update llama.cpp submodule to $COMMIT_ID"
 ```
 
+**To bump to a specific tag/release** (e.g. syncing to `b10083`) instead of the
+latest master, resolve the tag to a commit for `$COMMIT_ID` — replace the
+`fetch`/`checkout` lines above with:
+
+```bash
+git -C llama.cpp fetch origin --tags
+COMMIT_ID=`git -C llama.cpp rev-list -n1 b10083`   # <tag> -> commit sha
+git -C llama.cpp checkout $COMMIT_ID
+```
+
+Branch/commit naming: the repo convention is release-based, not raw-SHA — branch
+`llamacpp-bNNNN` and commit `Update llama.cpp to bNNNN (<short-sha>)` (e.g.
+`llamacpp-b10083`, `Update llama.cpp to b10083 (846e991)`). Use that in place of
+the `llamacpp_$COMMIT_ID` form above when bumping to a tagged release; the branch
+may already exist, in which case just switch to it instead of `checkout -b`.
+
 Keep `$OLD_ID` and `$COMMIT_ID` — you need them for drift recon below.
 
 ### Step 2 — Triage the existing patches
