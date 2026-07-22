@@ -114,6 +114,11 @@ patch, whether it still applies to the bumped submodule. This is *triage only*:
 it tells you which patches are free and which need reconciliation. A patch may
 be accepted despite line shifts — that fuzz is fine and welcome.
 
+`check_patches.sh` uses `git apply --check`, which tolerates line **offset** but
+not changed context — stricter than the actual apply (`patch -p1`, via `setup` or
+`--tolerant`, which applies with fuzz). So triage tends to *over*-report: a patch
+flagged here may still apply cleanly under `--tolerant` and leave no `.rej`.
+
 A patch that **fails** triage has three possible fates, not one — decide which
 before editing:
 - **Reconcile** — upstream moved the code; reproduce the patch's intent against
@@ -136,7 +141,9 @@ Make the submodule build and work against the new upstream, editing files
   `git apply --reject` to isolate just the drifted hunks — see DO/DON'T).
 - **BUILD.mk source lists:** add new upstream sources, drop deleted ones, fix
   renames. Drive this from drift recon:
-  `cd llama.cpp && git diff --stat --summary $OLD_ID..$COMMIT_ID -- src/ common/ ggml/ tools/`
+  `cd llama.cpp && git diff --stat --summary $OLD_ID..$COMMIT_ID -- src/ common/ ggml/ tools/ ':(exclude)tools/ui'`
+  (exclude `tools/ui` — the web UI ships via `fetch-ui-assets.sh`, not patches or
+  BUILD.mk, and its churn otherwise dominates the diff)
   and cross-check against `llama.cpp/CMakeLists.txt` (the `src/models/` and
   `tools/mtmd/models/` dirs are globbed there, so *every* new `.cpp` is a real
   TU). A new source usually has to be listed in **more than one place** — see the
