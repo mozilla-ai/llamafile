@@ -122,7 +122,7 @@ Llamafile uses TinyBLAS as a lightweight replacement for cuBLAS, enabling GPU su
 
 ### Optional IQ-Quant Exclusion (CUDA)
 
-The IQ ("importance") quantization formats (`IQ1_S`, `IQ2_XXS`/`XS`/`S`, `IQ3_S`/`XXS`, `IQ4_NL`/`XS`) pull in a large amount of CUDA template instantiation that inflates compile time and binary size. These patches gate every IQ code path behind `#ifndef GGML_CUDA_NO_IQ_QUANTS`, so a build can compile them out by defining `GGML_CUDA_NO_IQ_QUANTS`. When the macro is undefined (the default), behavior is unchanged.
+The IQ ("importance") quantization formats (`IQ1_S`, `IQ2_XXS`/`XS`/`S`, `IQ3_S`/`XXS`, `IQ4_NL`/`XS`) pull in a large amount of CUDA template instantiation that inflates compile time and binary size. These patches gate the IQ code paths behind `#ifndef GGML_CUDA_NO_IQ_QUANTS` — the MMQ/MMVQ matmul kernels, the `f32 → IQ4_NL` copy, and the IQ dequant cases in `ggml_get_to_bf16_cuda`/`ggml_get_to_fp16_cuda` — so a build can compile them out by defining `GGML_CUDA_NO_IQ_QUANTS`. (`ggml_get_to_fp32_cuda`'s IQ cases are not guarded, so the `float` dequant-template instantiations still compile — a minor size cost, harmless because `ggml_backend_cuda_device_supports_op` gates the same IQ ops, so those tensors fall back to CPU in a minimized build regardless.) When the macro is undefined (the default), behavior is unchanged.
 
 | Patch | Description |
 |-------|-------------|

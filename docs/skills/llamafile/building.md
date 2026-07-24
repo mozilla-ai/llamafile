@@ -217,9 +217,11 @@ list in sync with the CMakeLists (it must probe all seven feature tests).
 ### CUDA `--minimize-size` drops IQ-quant kernels (CPU fallback)
 
 The release CUDA dylib is built with `--minimize-size`, which (among the size
-options) passes `-DGGML_CUDA_NO_IQ_QUANTS`. That compiles out every IQ-quant
-CUDA path — the MMQ/MMVQ matmul kernels and the fp16/fp32 dequant converters
-in `convert.cu`, `mmq.cu`, `mmvq.cu`, and the `f32→iq4_nl` copy in `cpy.cu`.
+options) passes `-DGGML_CUDA_NO_IQ_QUANTS`. That compiles out most IQ-quant
+CUDA paths — the MMQ/MMVQ matmul kernels in `mmq.cu`/`mmvq.cu`, the bf16/fp16
+dequant converters in `convert.cu`, and the `f32→iq4_nl` copy in `cpy.cu`
+(`ggml_get_to_fp32_cuda`'s IQ cases stay unguarded, so the `float` dequant
+instantiations still compile — a minor size cost).
 The payoff is a much smaller `.so`; the cost is that it cannot run IQ-quantized
 tensors on the GPU.
 
