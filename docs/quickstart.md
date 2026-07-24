@@ -192,7 +192,7 @@ want to perform:
 | File | What it is |
 | --- | --- |
 | `llamafile` | Runs LLMs (chat/completions). This is the program referenced throughout these docs. |
-| `llamafile-thin` | The same `llamafile` program, but **without the pre-built GPU libraries bundled in** (see below). |
+| `llamafile-thin` | The same program, without the pre-built GPU libraries appended (see below). |
 | `whisperfile` | Speech-to-text, built on [whisper.cpp](https://github.com/ggml-org/whisper.cpp). See the [whisperfile docs](whisperfile/index.md). |
 | `transcribefile` | Speech-to-text, built on [transcribe.cpp](https://github.com/handy-computer/transcribe.cpp). |
 | `diffusionfile` | Image generation (Stable Diffusion). |
@@ -200,20 +200,26 @@ want to perform:
 
 #### `llamafile` vs `llamafile-thin`
 
-Both are the *same* executable — the only difference is whether the pre-built
-GPU support libraries are packaged inside:
+Both are the same executable. The difference is whether pre-built GPU backend
+libraries are appended to it:
 
-- **`llamafile`** has the pre-built CUDA and Vulkan libraries (for both Linux
-  `.so` and Windows `.dll`) appended into the file, so GPU acceleration works
-  out of the box without a local GPU toolchain. This makes the download larger.
-- **`llamafile-thin`** is a copy of the binary taken *before* those GPU
-  libraries were added, so it is a much smaller download. It still runs on the
-  CPU, and can still use your GPU when the matching GPU support libraries are
-  available on your system.
+- **`llamafile-thin`** is the base binary, so it is the smaller download. It
+  runs on the CPU, and uses a GPU only if a matching backend library is already
+  on your system. You produce those yourself with `llamafile/cuda.sh` (NVIDIA)
+  or `llamafile/rocm.sh` (AMD), which needs a local GPU toolchain (`nvcc` /
+  `hipcc`) at build time.
+- **`llamafile`** is that same binary with `ggml-cuda` and `ggml-vulkan`
+  appended, for both Linux (`.so`) and Windows (`.dll`). Those backends work
+  with no build step of your own — you only need a driver that provides the
+  corresponding runtime API. The bundled libraries are what makes this file
+  larger.
 
-As a rule of thumb: use **`llamafile`** if you want GPU acceleration to just
-work; use **`llamafile-thin`** if you want the smallest download, only need CPU
-inference, or already have your GPU libraries set up.
+Note that ROCm is not bundled in either file. AMD users who do not want to use
+the Vulkan backend have to build `ggml-rocm` with `llamafile/rocm.sh` either
+way.
+
+Use `llamafile` unless you want the smallest download, only need CPU inference,
+or have already set up your own GPU backend libraries.
 
 
 ## Running llamafile with models downloaded by third-party applications
