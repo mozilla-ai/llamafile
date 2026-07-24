@@ -119,6 +119,7 @@ LLAMA_SRCS_CPP := \
 	llama.cpp/src/models/jina-bert-v2.cpp \
 	llama.cpp/src/models/jina-bert-v3.cpp \
 	llama.cpp/src/models/kimi-linear.cpp \
+	llama.cpp/src/models/laguna.cpp \
 	llama.cpp/src/models/lfm2.cpp \
 	llama.cpp/src/models/lfm2moe.cpp \
 	llama.cpp/src/models/llada-moe.cpp \

@@ -126,7 +126,7 @@ The IQ ("importance") quantization formats (`IQ1_S`, `IQ2_XXS`/`XS`/`S`, `IQ3_S`
 
 | Patch | Description |
 |-------|-------------|
-| `ggml_src_ggml-cuda_convert.cu.patch` | Guards IQ dequantization cases in `ggml_get_to_fp16_cuda` and `ggml_get_to_fp32_cuda` |
+| `ggml_src_ggml-cuda_convert.cu.patch` | Guards IQ dequantization cases in `ggml_get_to_bf16_cuda` and `ggml_get_to_fp16_cuda` |
 | `ggml_src_ggml-cuda_cpy.cu.patch` | Guards the `f32 → IQ4_NL` copy helper and its dispatch case |
 | `ggml_src_ggml-cuda_mmq.cu.patch` | Guards IQ cases in `ggml_cuda_mul_mat_q_switch_type` and in the `ggml_cuda_should_use_mmq` support/heuristic switches |
 | `ggml_src_ggml-cuda_mmq.cuh.patch` | Guards the `extern DECL_MMQ_CASE(...)` declarations for IQ types |
