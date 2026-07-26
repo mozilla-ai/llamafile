@@ -41,11 +41,11 @@ There is no Intel oneAPI/SYCL backend, but Vulkan covers a lot of the
 hardware that CUDA and ROCm do not. On hardware outside the table below,
 llamafile runs on the CPU.
 
-Vulkan is loaded the same way as CUDA and ROCm: llamafile looks for a
-prebuilt `ggml-vulkan.so` / `ggml-vulkan.dll` (the full `llamafile` release
-bundles both) and otherwise falls back to a library you build yourself with
-`llamafile/vulkan.sh` (`vulkan.bat` on Windows) — see
-[Building the GPU libraries](building_dlls.md). On macOS, Vulkan runs
+Vulkan is loaded exactly like the CUDA and ROCm backends: llamafile looks
+for a prebuilt `ggml-vulkan.so` / `ggml-vulkan.dll`, first inside the
+bundle and then in `~/.llamafile/` — see
+[Building the GPU libraries](building_dlls.md) for where that library comes
+from on each platform. On macOS, Vulkan runs
 through MoltenVK; Apple Silicon users normally want the built-in Metal
 backend instead. If the Vulkan library loads but reports no usable device,
 llamafile skips it and continues with the next backend rather than failing.
@@ -56,7 +56,6 @@ llamafile skips it and continues with the next backend rather than failing.
 | NVIDIA | CUDA / cuBLAS | Linux, Windows, WSL | Supported | Pass `-ngl 999` to offload; Windows release binaries ship prebuilt DLLs |
 | AMD | HIP / rocBLAS | Linux, Windows | Supported | Pass `-ngl 999` to offload; multi-GPU may be broken on Radeon (see below) |
 | Any (incl. Intel) | Vulkan | Linux, Windows, macOS | Supported | Pass `-ngl 999` to offload; select with `--gpu vulkan`. Used in `--gpu auto` when no vendor backend is available |
-| Intel / other | oneAPI / SYCL | — | Not supported | No SYCL backend; use the Vulkan row above, or build llama.cpp directly |
 
 The 0.10.* series has not been tested on every GPU and platform yet, so
 treat the AMD and Windows paths in particular as best-effort.
