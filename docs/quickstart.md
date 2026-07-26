@@ -209,7 +209,8 @@ libraries are appended to it:
   or `llamafile/rocm.sh` (AMD), which needs a local GPU toolchain (`nvcc` /
   `hipcc`) at build time.
 - **`llamafile`** is that same binary with `ggml-cuda` and `ggml-vulkan`
-  appended, for both Linux (`.so`) and Windows (`.dll`). Those backends work
+  appended, as **`x86_64`** Linux (`.so`) and Windows (`.dll`) artifacts (a
+  single set of libraries, with no separate ARM build). Those backends work
   with no build step of your own — you only need a driver that provides the
   corresponding runtime API. The bundled libraries are what makes this file
   larger.
@@ -218,9 +219,11 @@ Note that ROCm is not bundled in either file. AMD users who do not want to use
 the Vulkan backend have to build `ggml-rocm` with `llamafile/rocm.sh` either
 way.
 
-The bundled libraries are also Linux and Windows artifacts only. On macOS
-neither file carries a pre-built backend, so the two downloads behave the same
-there and GPU support comes from the usual runtime path instead.
+The bundled libraries are `x86_64` Linux and Windows artifacts only. On any
+other platform (macOS, or a non-`x86_64` architecture such as an `aarch64`/ARM64
+Linux host, even one with an NVIDIA GPU) neither file carries an applicable
+pre-built backend, so the two downloads behave the same there and GPU support
+comes from the usual runtime path instead.
 
 Use `llamafile` unless you want the smallest download, only need CPU inference,
 or have already set up your own GPU backend libraries.
