@@ -43,6 +43,7 @@ install:	o/$(MODE)/llamafile/llamafile \
 	$(INSTALL) o/$(MODE)/llamafile/llamafile $(PREFIX)/bin/llamafile
 	$(INSTALL) o/$(MODE)/whisperfile/whisperfile $(PREFIX)/bin/whisperfile
 	$(INSTALL) o/$(MODE)/diffusionfile/diffusionfile $(PREFIX)/bin/diffusionfile
+	$(INSTALL) o/$(MODE)/transcribefile/transcribefile $(PREFIX)/bin/transcribefile
 	$(INSTALL) o/$(MODE)/third_party/zipalign/zipalign $(PREFIX)/bin/zipalign
 	mkdir -p $(PREFIX)/share/man/man1
 	$(INSTALL) -m 0644 whisperfile/whisperfile.1 $(PREFIX)/share/man/man1/whisperfile.1
