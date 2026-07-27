@@ -48,7 +48,9 @@ The zip is structured as follows.
 llamafile-<version>
 |-- README.md
 |-- bin
+|   |-- diffusionfile
 |   |-- llamafile
+|   |-- transcribefile
 |   |-- whisperfile
 |   `-- zipalign
 `-- share
@@ -73,8 +75,10 @@ After you have built the zip it is quite easy to create the release binaries.
 The following binaries are part of the release:
 
 - `llamafile`
-- `whisperfile`
 - `zipalign`
+- `whisperfile`
+- `diffusionfile`
+- `transcribefile`
 
 You can use the script to create the appropriately named binaries:
 
