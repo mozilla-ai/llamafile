@@ -88,6 +88,11 @@ static struct llamafile *llamafile_open_zip(const char *prog, const char *fname,
         goto Failure;
     file->size = rc;
 
+    // the true extent of the file on disk. file->size is overwritten below with
+    // the size the zip central directory *claims*, so keep the real one to
+    // validate that claim against.
+    const uint64_t zipsize = (uint64_t)rc;
+
     // read the last 64kb of file
     // the zip file format magic can be anywhere in there
     int amt;
@@ -118,7 +123,8 @@ static struct llamafile *llamafile_open_zip(const char *prog, const char *fname,
                 (long)kZipCdir64HdrMinSize &&
             ZIP_READ32(bufdata) == kZipCdir64HdrMagic &&
             ZIP_CDIR64_RECORDS(bufdata) == ZIP_CDIR64_RECORDSONDISK(bufdata) &&
-            ZIP_CDIR64_RECORDS(bufdata) && ZIP_CDIR64_SIZE(bufdata) <= INT_MAX) {
+            ZIP_CDIR64_RECORDS(bufdata) && ZIP_CDIR64_SIZE(bufdata) > 0 &&
+            ZIP_CDIR64_SIZE(bufdata) <= INT_MAX) {
             cnt = ZIP_CDIR64_RECORDS(bufdata);
             off = ZIP_CDIR64_OFFSET(bufdata);
             amt = ZIP_CDIR64_SIZE(bufdata);
@@ -126,7 +132,8 @@ static struct llamafile *llamafile_open_zip(const char *prog, const char *fname,
         }
         if (magic == kZipCdirHdrMagic && i + kZipCdirHdrMinSize <= amt &&
             ZIP_CDIR_RECORDS(bufdata + i) == ZIP_CDIR_RECORDSONDISK(bufdata + i) &&
-            ZIP_CDIR_RECORDS(bufdata + i) && ZIP_CDIR_SIZE(bufdata + i) <= INT_MAX &&
+            ZIP_CDIR_RECORDS(bufdata + i) && ZIP_CDIR_SIZE(bufdata + i) > 0 &&
+            ZIP_CDIR_SIZE(bufdata + i) <= INT_MAX &&
             ZIP_CDIR_OFFSET(bufdata + i) != 0xffffffffu) {
             cnt = ZIP_CDIR_RECORDS(bufdata + i);
             off = ZIP_CDIR_OFFSET(bufdata + i);
@@ -174,8 +181,25 @@ static struct llamafile *llamafile_open_zip(const char *prog, const char *fname,
                    : (entry_name_len > 5 &&
                       !memcasecmp(entry_name_bytes + entry_name_len - 5, ".gguf", 5)))) {
             zip_name = gc(strndup(entry_name_bytes, entry_name_len));
-            off = get_zip_cfile_offset(cdirdata + entry_offset);
-            file->size = get_zip_cfile_compressed_size(cdirdata + entry_offset);
+            // both accessors return int64_t and use -1 to signal failure, e.g. a
+            // zip64 sentinel size with no zip64 extra field to satisfy it.
+            // Assigning that straight into uint64_t/size_t yields UINT64_MAX and
+            // makes the mapsize arithmetic below wrap.
+            int64_t entry_off = get_zip_cfile_offset(cdirdata + entry_offset);
+            int64_t entry_size = get_zip_cfile_compressed_size(cdirdata + entry_offset);
+            if (entry_off < 0 || entry_size < 0) {
+                fprintf(stderr, "%s: warning: zip entry has an unreadable offset or size\n", prog);
+                goto Invalid;
+            }
+            // the declared window must lie inside the file. written as a
+            // subtraction so it cannot overflow.
+            if ((uint64_t)entry_size > zipsize ||
+                (uint64_t)entry_off > zipsize - (uint64_t)entry_size) {
+                fprintf(stderr, "%s: warning: zip entry extends past the end of the file\n", prog);
+                goto Invalid;
+            }
+            off = (uint64_t)entry_off;
+            file->size = (size_t)entry_size;
             cdir_offset = entry_offset;
             ++found;
         }
