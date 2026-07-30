@@ -116,7 +116,7 @@ comma-separated list enables only selected tools, such as
 `--tools read_file,file_glob_search,grep_search`. The exact tool names for a
 build are listed by `--server --help`.
 
-Built-in tools may read or modify files and run shell commands with the
+Built-in tools may access local files with the
 permissions of the llamafile process. Enable only the tools you need, do not
 enable them in an untrusted environment, and review the
 [sandbox limitations](security.md#when-the-sandbox-is-relaxed-or-skipped).
