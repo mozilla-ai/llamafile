@@ -41,14 +41,18 @@ There is no Intel oneAPI/SYCL backend, but Vulkan covers a lot of the
 hardware that CUDA and ROCm do not. On hardware outside the table below,
 llamafile runs on the CPU.
 
-Vulkan is loaded exactly like the CUDA and ROCm backends: llamafile looks
-for a prebuilt `ggml-vulkan.so` / `ggml-vulkan.dll`, first inside the
-bundle and then in `~/.llamafile/` — see
-[Building the GPU libraries](building_dlls.md) for where that library comes
-from on each platform. On macOS, Vulkan runs
-through MoltenVK; Apple Silicon users normally want the built-in Metal
-backend instead. If the Vulkan library loads but reports no usable device,
-llamafile skips it and continues with the next backend rather than failing.
+CUDA, ROCm, and Vulkan dynamic libraries are loaded as follows. The executable looks
+for prebuilt `ggml-(cuda|rocm|vulkan).(so|dll)` files in this order:
+
+- in the same directory (deliberately first, so a hand-built DSO overrides everything else)
+- in the llamafile bundle
+- in `~/.llamafile/v/LLAMAFILE_VERSION`
+- in `$HOME`
+
+Check out [Building the GPU libraries](building_dlls.md) for more info on how these libraries are built.
+On macOS, Vulkan runs through MoltenVK; Apple Silicon users normally want the built-in Metal
+backend instead. If any library loads but reports no usable device, llamafile skips it and continues
+with the next backend rather than failing.
 
 | Vendor | Backend | Platforms | Status | Notes |
 |--------|---------|-----------|--------|-------|
