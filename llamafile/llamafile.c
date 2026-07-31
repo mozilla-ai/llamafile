@@ -132,7 +132,7 @@ static struct llamafile *llamafile_open_zip(const char *prog, const char *fname,
         }
         if (magic == kZipCdirHdrMagic && i + kZipCdirHdrMinSize <= amt &&
             ZIP_CDIR_RECORDS(bufdata + i) == ZIP_CDIR_RECORDSONDISK(bufdata + i) &&
-            ZIP_CDIR_RECORDS(bufdata + i) && ZIP_CDIR_SIZE(bufdata + i) > 0 &&
+            ZIP_CDIR_RECORDS(bufdata + i) && ZIP_CDIR_SIZE(bufdata + i) >= kZipCfileHdrMinSize &&
             ZIP_CDIR_SIZE(bufdata + i) <= INT_MAX &&
             ZIP_CDIR_OFFSET(bufdata + i) != 0xffffffffu) {
             cnt = ZIP_CDIR_RECORDS(bufdata + i);
@@ -237,6 +237,15 @@ static struct llamafile *llamafile_open_zip(const char *prog, const char *fname,
         goto Invalid;
     }
     off += ZIP_LFILE_HDRSIZE(lfile);
+
+    // the local header's name and extra fields are attacker controlled (two
+    // uint16s, up to 131100 bytes total), so the window has to be revalidated
+    // after skipping them. written as a subtraction so it cannot overflow.
+    if (off > zipsize || (uint64_t)file->size > zipsize - off) {
+        fprintf(stderr, "%s: warning: zip entry data extends past the end of the file\n",
+                file->fname);
+        goto Invalid;
+    }
 
     // perform sanity check
     // mapping weights for apple metal gpu requires 16kb alignment
