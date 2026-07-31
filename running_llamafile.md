@@ -14,6 +14,9 @@ llamafile -m Apertus-8B-Instruct-2509.gguf --temp ...
 ./Apertus-8B-Instruct-2509.llamafile --temp ...
 ```
 
+For a full reference of wrapper flags and pass-through `llama.cpp` options, see
+[CLI Arguments and Flags](cli_arguments.md).
+
 
 ## Running llamafile in CLI mode
 
@@ -95,6 +98,31 @@ large enough (but still fits your memory). For instance:
   --ctx-size 64000
 ```
 
+### Built-in tools
+
+The server Web UI is inherited from llama.cpp, so some messages in the UI use
+the upstream executable name `llama-server`. When following those messages,
+replace `llama-server` with the standalone runtime or the filename of the
+model-bundled llamafile you are running. For example, these commands enable
+the same built-in tools:
+
+```sh
+llamafile -m model.gguf --server --tools all
+./ModelName.llamafile --server --tools all
+```
+
+`--tools all` enables every tool provided by the bundled server. A
+comma-separated list enables only selected tools, such as
+`--tools read_file,file_glob_search,grep_search`. The exact tool names for a
+build are listed by `--server --help`.
+
+Built-in tools may access local files with the
+permissions of the llamafile process. Enable only the tools you need, do not
+enable them in an untrusted environment, and review the
+[sandbox limitations](security.md#when-the-sandbox-is-relaxed-or-skipped).
+For security, the server restricts allowed browser origins to localhost by
+default when built-in tools are enabled.
+
 ## Running llamafile in combined mode
 
 Combined mode is the default for the last generation of llamafiles: when you
@@ -154,4 +182,3 @@ llamafile -ngl 9999 --temp 0 \
   sed -e's/ /_/g' -e's/$/.jpg/'
 a_baby_monkey_on_the_back_of_a_mother.jpg
 ```
-
