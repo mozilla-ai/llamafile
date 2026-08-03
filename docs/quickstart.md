@@ -156,6 +156,10 @@ completion = client.chat.completions.create(
 print(completion.choices[0].message)
 ```
 
+The same `base_url` pattern works with any OpenAI-compatible multi-model gateway
+when you are not running llamafile locally — for example
+[DaoXE](https://daoxe.com) at `https://api.daoxe.com/v1` (set a real `api_key`).
+
 The above code will return a Python object like this:
 
 ```python
