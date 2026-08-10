@@ -1,5 +1,7 @@
 """Server mode integration tests."""
 
+import socket
+
 import pytest
 
 from utils.llamafile import LlamafileRunner
@@ -22,6 +24,26 @@ class TestServerBasic:
         finally:
             proc.terminate()
             proc.wait()
+
+    @pytest.mark.skipif(
+        not hasattr(socket, "AF_UNIX"), reason="AF_UNIX is not available on this platform"
+    )
+    def test_server_replaces_stale_unix_socket(self, llamafile, tmp_path, timeouts):
+        """Test that a stale Unix socket is replaced and accepts HTTP traffic."""
+        socket_path = tmp_path / "llamafile.sock"
+        stale_socket = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        stale_socket.bind(str(socket_path))
+        stale_socket.close()
+
+        proc = llamafile.start_server(extra_args=["--host", str(socket_path)])
+        try:
+            assert LlamafileRunner.wait_for_unix_server(
+                str(socket_path), proc=proc, timeout=timeouts.server_ready
+            ), "Server did not replace the stale Unix socket and become ready"
+        finally:
+            proc.terminate()
+            proc.wait()
+            socket_path.unlink(missing_ok=True)
 
     def test_server_chat_completion(self, llamafile, server_port, timeouts):
         """Test basic chat completion endpoint."""

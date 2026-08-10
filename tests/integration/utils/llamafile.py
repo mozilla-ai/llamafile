@@ -6,6 +6,7 @@ import logging
 import os
 import platform
 import select
+import socket
 import subprocess
 import time
 from pathlib import Path
@@ -471,6 +472,39 @@ class LlamafileRunner:
             time.sleep(poll_interval)
 
         logger.warning("Server not ready after %.1fs", timeout)
+        return False
+
+    @staticmethod
+    def wait_for_unix_server(
+        socket_path: str,
+        proc: subprocess.Popen,
+        timeout: float = TIMEOUT_SERVER_READY,
+        poll_interval: float = POLL_INTERVAL,
+    ) -> bool:
+        """Wait for an HTTP health response over an AF_UNIX socket."""
+        start_time = time.time()
+        while time.time() - start_time < timeout:
+            if proc.poll() is not None:
+                logger.warning(
+                    "Server process exited before its Unix socket became ready (rc=%s)",
+                    proc.returncode,
+                )
+                return False
+            try:
+                with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as client:
+                    client.settimeout(2)
+                    client.connect(socket_path)
+                    client.sendall(
+                        b"GET /health HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n"
+                    )
+                    status_line = client.recv(256).split(b"\r\n", 1)[0]
+                    if b" 200 " in status_line:
+                        return True
+            except (OSError, TimeoutError):
+                pass
+            time.sleep(poll_interval)
+
+        logger.warning("Unix socket server not ready after %.1fs", timeout)
         return False
 
     @staticmethod
