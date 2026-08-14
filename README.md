@@ -91,4 +91,4 @@ should that be desired.
 The llamafile logo on this page was generated with the assistance of DALL·E 3.
 
 
-[![Star History Chart](https://api.star-history.com/svg?repos=Mozilla-Ocho/llamafile&type=Date)](https://star-history.com/#Mozilla-Ocho/llamafile&Date)
+[![Star History Chart](https://star-history.dera.page/svg?repos=Mozilla-Ocho/llamafile&type=Date)](https://star-history.dera.page/#Mozilla-Ocho/llamafile&Date)

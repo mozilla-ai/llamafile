@@ -92,4 +92,4 @@ should that be desired.
 The llamafile logo on this page was generated with the assistance of DALL·E 3.
 
 
-[![Star History Chart](https://api.star-history.com/svg?repos=mozilla-ai/llamafile&type=Date)](https://star-history.com/#mozilla-ai/llamafile&Date)
+[![Star History Chart](https://star-history.dera.page/svg?repos=mozilla-ai/llamafile&type=Date)](https://star-history.dera.page/#mozilla-ai/llamafile&Date)
