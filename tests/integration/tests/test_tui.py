@@ -2,6 +2,8 @@
 
 import pytest
 
+from utils.prompts import ADD_2_2
+
 
 @pytest.mark.tui
 class TestTUIBasic:
@@ -21,13 +23,14 @@ class TestTUIBasic:
     def test_tui_math_question(self, llamafile, tmp_path, timeouts):
         """Test TUI with a simple math question."""
         input_file = tmp_path / "input.txt"
-        input_file.write_text("What is 2+2?\n/exit\n")
+        input_file.write_text(f"{ADD_2_2.prompt}\n/exit\n")
 
         result = llamafile.run_tui(str(input_file), timeout=timeouts.tui)
 
         assert result.returncode == 0
-        # The response should contain "4" somewhere
-        assert "4" in result.stdout
+        assert ADD_2_2.check(result.stdout), (
+            f"Expected {ADD_2_2.describe()} in output: {result.stdout}"
+        )
 
     def test_tui_multi_turn(self, llamafile, tmp_path, timeouts):
         """Test TUI with multiple turns of conversation."""

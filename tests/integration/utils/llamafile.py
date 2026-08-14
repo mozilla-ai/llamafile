@@ -11,9 +11,26 @@ import time
 from pathlib import Path
 from typing import Any
 
+import pytest
 import requests
 
 logger = logging.getLogger(__name__)
+
+
+def skip_if_bundled(executable: str) -> None:
+    """Skip the current test when *executable* is a pre-built .llamafile bundle.
+
+    Call from an autouse fixture in any class marked ``bare_executable``::
+
+        @pytest.fixture(autouse=True)
+        def _require_bare_executable(self, executable):
+            skip_if_bundled(executable)
+    """
+    if executable.endswith(".llamafile"):
+        pytest.skip(
+            "bare_executable tests run once against the bare llamafile binary; "
+            "skip for bundled .llamafile models"
+        )
 
 
 def read_until_idle(fd, idle_timeout=1.0, max_timeout=60.0):
@@ -116,6 +133,7 @@ class LlamafileRunner:
         model: str | None = None,
         gpu: str | None = None,
         default_thinking: bool = False,
+        no_warmup: bool = False,
     ):
         """Initialize the runner.
 
@@ -127,11 +145,16 @@ class LlamafileRunner:
                               one. Set to True for tests that exercise thinking
                               behavior; False otherwise so small reasoning
                               models don't derail unrelated assertions.
+            no_warmup: Pass --no-warmup to every server/combined start.  Use
+                       for tests that care about the server being up, not about
+                       warmup speed -- prevents cold-cache timeouts for large
+                       models without affecting inference correctness.
         """
         self.executable = os.path.abspath(executable)
         self.model = os.path.abspath(model) if model else None
         self.gpu = gpu
         self.default_thinking = default_thinking
+        self.no_warmup = no_warmup
 
         if not os.path.exists(self.executable):
             raise FileNotFoundError(f"Executable not found: {executable}")
@@ -311,6 +334,9 @@ class LlamafileRunner:
         if log_file:
             args.extend(["--log-file", log_file])
 
+        if self.no_warmup:
+            args.append("--no-warmup")
+
         if extra_args:
             args.extend(extra_args)
 
@@ -337,8 +363,13 @@ class LlamafileRunner:
                       None, falls back to the runner's default_thinking.
                       When False, adds --reasoning off.
             extra_args: Additional command-line arguments
-            log_file: If provided, adds --log-file flag. Caller should read
-                      the file after terminating the process.
+            log_file: If provided, adds --log-file flag and redirects
+                      stdout/stderr to DEVNULL.  When a log file captures
+                      all diagnostics there is no need to pipe stdout/stderr,
+                      and leaving them as PIPE without a reader causes the
+                      OS pipe buffer (~64 KiB) to fill and the process to
+                      block indefinitely.  Omit log_file when you need to
+                      interact with the TUI via proc.stdout / proc.stdin.
 
         Returns:
             Popen process handle (caller must terminate)
@@ -352,15 +383,28 @@ class LlamafileRunner:
         if log_file:
             args.extend(["--log-file", log_file])
 
+        if self.no_warmup:
+            args.append("--no-warmup")
+
         if extra_args:
             args.extend(extra_args)
+
+        # When a log file is used, discard stdout/stderr via DEVNULL to avoid
+        # blocking when the pipe buffer fills up (nobody is reading the pipe).
+        # When no log file is set, use PIPE so callers can read TUI output.
+        if log_file:
+            stdout = subprocess.DEVNULL
+            stderr = subprocess.DEVNULL
+        else:
+            stdout = subprocess.PIPE
+            stderr = subprocess.PIPE
 
         logger.info("Starting combined mode: %s", " ".join(args))
         return subprocess.Popen(
             args,
             stdin=subprocess.PIPE,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
+            stdout=stdout,
+            stderr=stderr,
             text=True,
         )
 
@@ -384,6 +428,7 @@ class LlamafileRunner:
     @staticmethod
     def wait_for_server(
         port: int,
+        proc: subprocess.Popen,
         host: str = "127.0.0.1",
         timeout: float = TIMEOUT_SERVER_READY,
         poll_interval: float = POLL_INTERVAL,
@@ -392,18 +437,30 @@ class LlamafileRunner:
 
         Args:
             port: Server port
+            proc: The server process. When it exits before the server
+                  becomes ready (e.g. a bare build launched without
+                  --model errors out at startup), give up immediately
+                  instead of polling a dead port for the full timeout.
             host: Server host
             timeout: Maximum time to wait in seconds
             poll_interval: Time between health checks
 
         Returns:
-            True if server is ready, False if timeout
+            True if server is ready, False if it exited early or timed out
         """
         url = f"http://{host}:{port}/health"
         start_time = time.time()
 
         logger.info("Waiting for server at %s (timeout=%.1fs)", url, timeout)
         while time.time() - start_time < timeout:
+            if proc.poll() is not None:
+                logger.warning(
+                    "Server process exited before becoming ready (rc=%s). "
+                    "If this is a bare llamafile build, did you pass "
+                    "--model / LLAMAFILE_MODEL?",
+                    proc.returncode,
+                )
+                return False
             try:
                 response = requests.get(url, timeout=2)
                 if response.status_code == 200:

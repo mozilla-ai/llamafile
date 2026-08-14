@@ -1,12 +1,12 @@
 diff --git a/tools/server/server-http.cpp b/tools/server/server-http.cpp
 --- a/llama.cpp/tools/server/server-http.cpp
 +++ b/llama.cpp/tools/server/server-http.cpp
-@@ -93,7 +93,7 @@ bool server_http_context::init(const common_params & params) {
+@@ -104,7 +104,7 @@ bool server_http_context::init(const common_params & params) {
  
      auto & srv = pimpl->srv;
  
 -#ifdef CPPHTTPLIB_OPENSSL_SUPPORT
 +#ifdef CPPHTTPLIB_SSL_ENABLED
      if (!params.ssl_file_key.empty() && !params.ssl_file_cert.empty()) {
-         SRV_INF("running with SSL: key = %s, cert = %s\n", params.ssl_file_key.c_str(), params.ssl_file_cert.c_str());
+         SRV_TRC("running with SSL: key = %s, cert = %s\n", params.ssl_file_key.c_str(), params.ssl_file_cert.c_str());
          srv = std::make_unique<httplib::SSLServer>(

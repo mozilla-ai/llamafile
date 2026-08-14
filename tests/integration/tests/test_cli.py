@@ -2,6 +2,8 @@
 
 import pytest
 
+from utils.prompts import ADD_2_2, GREETING_PROMPT
+
 
 @pytest.mark.cli
 class TestCLIBasic:
@@ -9,19 +11,19 @@ class TestCLIBasic:
 
     def test_cli_responds(self, llamafile, timeouts):
         """Test that CLI mode starts and generates a response."""
-        result = llamafile.run_cli("Say hello in exactly one word.", timeout=timeouts.cli)
+        result = llamafile.run_cli(GREETING_PROMPT, timeout=timeouts.cli)
 
         assert result.returncode == 0, f"CLI failed: {result.stderr}"
         assert len(result.stdout.strip()) > 0, "No output generated"
 
     def test_cli_math_question(self, llamafile, timeouts):
         """Test that CLI can answer a simple math question."""
-        result = llamafile.run_cli(
-            "What is 2+2? Answer with just the number.", timeout=timeouts.cli
-        )
+        result = llamafile.run_cli(ADD_2_2.prompt, timeout=timeouts.cli)
 
         assert result.returncode == 0, f"CLI failed: {result.stderr}"
-        assert "4" in result.stdout, f"Expected '4' in output: {result.stdout}"
+        assert ADD_2_2.check(result.stdout), (
+            f"Expected {ADD_2_2.describe()} in output: {result.stdout}"
+        )
 
     def test_cli_exits_cleanly(self, llamafile, timeouts):
         """Test that CLI exits with code 0 after completion."""

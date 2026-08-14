@@ -36,19 +36,45 @@ llamafile supports the following CPUs:
 
 ## GPU support
 
-llamafile ships GPU acceleration for Apple Metal, NVIDIA, and AMD. There is
-no Vulkan or Intel oneAPI/SYCL backend, so on hardware outside the table
-below llamafile runs on the CPU.
+llamafile ships GPU acceleration for Apple Metal, NVIDIA, AMD, and Vulkan.
+There is no Intel oneAPI/SYCL backend, but Vulkan covers a lot of the
+hardware that CUDA and ROCm do not. On hardware outside the table below,
+llamafile runs on the CPU.
+
+CUDA, ROCm, and Vulkan dynamic libraries are loaded as follows. The executable looks
+for prebuilt `ggml-(cuda|rocm|vulkan).(so|dll)` files in this order:
+
+- in the same directory (deliberately first, so a hand-built DSO overrides everything else)
+- in the llamafile bundle
+- in `~/.llamafile/v/LLAMAFILE_VERSION`
+- in `$HOME`
+
+Check out [Building the GPU libraries](building_dlls.md) for more info on how these libraries are built.
+On macOS, Vulkan runs through MoltenVK; Apple Silicon users normally want the built-in Metal
+backend instead. If any library loads but reports no usable device, llamafile skips it and continues
+with the next backend rather than failing.
 
 | Vendor | Backend | Platforms | Status | Notes |
 |--------|---------|-----------|--------|-------|
 | Apple | Metal (built-in) | macOS ARM64 | Supported | Offload is enabled by default; disable with `-ngl 0` or `--gpu disable` |
 | NVIDIA | CUDA / cuBLAS | Linux, Windows, WSL | Supported | Pass `-ngl 999` to offload; Windows release binaries ship prebuilt DLLs |
 | AMD | HIP / rocBLAS | Linux, Windows | Supported | Pass `-ngl 999` to offload; multi-GPU may be broken on Radeon (see below) |
-| Intel / other | — | — | Not supported | No Vulkan or SYCL backend; runs on CPU. For these, build llama.cpp directly |
+| Any (incl. Intel) | Vulkan | Linux, Windows, macOS | Supported | Pass `-ngl 999` to offload; select with `--gpu vulkan`. Used in `--gpu auto` when no vendor backend is available |
 
 The 0.10.* series has not been tested on every GPU and platform yet, so
 treat the AMD and Windows paths in particular as best-effort.
+
+### IQ-quantized models on NVIDIA GPUs
+
+The CUDA library bundled in our releases is size-optimized and leaves out
+the IQ-quant kernels (the `IQ1_*`, `IQ2_*`, `IQ3_*`, `IQ4_*` quantizations).
+When you offload an IQ-quantized model to an NVIDIA GPU, llamafile keeps just
+those layers on the CPU automatically — the output is correct, those specific
+layers simply don't get GPU acceleration. Every other quantization (`Q*_*`,
+`MXFP4`, `NVFP4`, `F16`, `BF16`, …) runs fully on the GPU. The Apple Metal and
+AMD (ROCm) builds are not size-optimized and include full IQ-quant GPU support.
+For full IQ acceleration on NVIDIA, build or supply a full (non-minimized) CUDA
+library — see [Building the GPU libraries](building_dlls.md).
 
 GPU on MacOS ARM64 is supported by compiling a small module using the
 Xcode Command Line Tools, which need to be installed. This is a one time
@@ -104,9 +130,10 @@ To check:
 
 - Pass `-ngl 999` on NVIDIA and AMD to request maximum offloading (Metal
   offloads by default).
-- Force a specific backend with `--gpu nvidia` or `--gpu amd`. This turns
-  an otherwise quiet CPU fallback into an explicit startup error, which
-  makes a missing or misconfigured CUDA/ROCm toolchain easy to spot.
+- Force a specific backend with `--gpu nvidia`, `--gpu amd`, or
+  `--gpu vulkan`. This turns an otherwise quiet CPU fallback into an
+  explicit startup error, which makes a missing or misconfigured
+  CUDA/ROCm/Vulkan installation easy to spot.
 - Watch the startup logs for the messages about building and loading the
   GPU module. If you don't see them, llamafile is running on the CPU.
 

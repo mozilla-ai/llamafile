@@ -35,6 +35,7 @@ extern bool FLAG_nologo;        // Suppresses logo display (chatbot_main.cpp)
 extern bool FLAG_nothink;       // Filters thinking/reasoning content (chatbot_cli.cpp)
 extern bool FLAG_precise;       // Forces precise math in tinyblas (tinyblas_cpu.h)
 extern bool FLAG_recompile;     // Forces GPU library recompilation (metal.c)
+extern bool FLAG_unsecure;      // Disables pledge() sandboxing (sandbox.c)
 extern int FLAG_gpu;            // GPU backend selection (llamafile.c, metal.c, cuda.c)
 extern int FLAG_verbose;        // Verbose output (chatbot_main.cpp, metal.c, cuda.c)
 
@@ -113,6 +114,62 @@ bool llamafile_has_vulkan(void);          // Defined in vulkan.c (dynamic loader
 int llamafile_gpu_parse(const char *);    // Defined in llamafile.c
 const char *llamafile_describe_gpu(void); // Defined in llamafile.c
 void llamafile_early_gpu_init(char **);   // Defined in llamafile.c
+
+// =============================================================================
+// Sandboxing - pledge()/SECCOMP + unveil()/Landlock (defined in sandbox.c)
+// =============================================================================
+
+// The pledge() syscall sandbox (no outbound network, no writes, no exec) is
+// applied by default. unveil() path confinement is opt-in (--confine-reads),
+// because locking the readable paths at startup is incompatible with files a
+// server opens by path at request time (multimodal media, etc.).
+
+#define LLAMAFILE_SANDBOX_FAILED -1          // pledge() failed, errno is set
+#define LLAMAFILE_SANDBOX_ACTIVE 0           // pledge() active
+#define LLAMAFILE_SANDBOX_UNSECURE 1         // skipped: --unsecure flag
+#define LLAMAFILE_SANDBOX_GPU 2              // skipped: GPU backend loaded
+#define LLAMAFILE_SANDBOX_UNSUPPORTED 3      // skipped: OS can't enforce pledge()
+#define LLAMAFILE_SANDBOX_ACTIVE_CONFINED 4  // pledge() active + unveil() applied
+#define LLAMAFILE_SANDBOX_ACTIVE_UNCONFINED 5 // pledge() active; unveil() asked
+                                             // for but filesystem can't enforce it
+
+extern bool FLAG_confine_reads;  // opt-in unveil() path confinement (sandbox.c)
+
+bool llamafile_sandbox_supported(void);         // Probe only, installs nothing
+int llamafile_sandbox_apply(const char *);      // Unconditional pledge()
+int llamafile_sandbox(const char *);            // Honors --unsecure and GPU mode
+int llamafile_sandbox_enter(const char *, bool);// sandbox() + perror/verbose report
+const char *llamafile_sandbox_describe(int);    // Status code -> human string
+bool llamafile_sandbox_is_active(int);          // true for the ACTIVE* statuses
+
+// Inputs to the server sandbox. read_paths are opened read-only (model,
+// mmproj, LoRA, draft model, control vectors, media dir, static web root);
+// rw_paths get write+create (slot-save dir, prompt cache). confine requests
+// unveil() path confinement; needs_outbound relaxes accept()-only networking
+// to full sockets when the server must dial out (--rpc, tools, MCP proxy).
+struct llamafile_sandbox_spec {
+    const char *const *read_paths;
+    int n_read;
+    const char *const *rw_paths;
+    int n_rw;
+    bool confine;
+    bool needs_outbound;
+};
+
+// Applies the server sandbox: pledge() always, plus unveil() when
+// spec->confine. Fills promises_out with the pledge string for logging.
+// Returns an ACTIVE* status (see describe()) or a skip/FAILED code.
+int llamafile_sandbox_server(const struct llamafile_sandbox_spec *spec,
+                             char *promises_out, size_t promises_len);
+
+// Pure promise-string derivation, exposed for unit testing.
+void llamafile_sandbox_server_promises(char *out, size_t len, bool is_openbsd,
+                                       bool has_rw, bool needs_outbound);
+
+// Removes every occurrence of flag from argv in place, updating *argc, and
+// returns true if it was present. Used to consume llamafile-only flags
+// (e.g. --unsecure) before handing argv to llama.cpp's parser. In llamafile.c.
+bool llamafile_consume_flag(int *argc, char **argv, const char *flag);
 
 // Log callback type for Metal backend (matches ggml_log_callback)
 typedef void (*llamafile_log_callback)(int level, const char *text, void *user_data);

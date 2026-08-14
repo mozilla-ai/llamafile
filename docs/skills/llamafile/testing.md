@@ -71,6 +71,36 @@ Corollary: a CPU-only smoke test (`--gpu disable`) does **not** exercise this
 path. Always run at least one default/GPU invocation when verifying a build on
 GPU-capable hardware.
 
+#### Validating a prebuilt GPU dylib — verify by observation, never infer
+
+A clean *compile* does not prove the dylib loads or runs on the GPU. Confirm it
+with observed runtime behavior, and never conclude "it won't use the GPU" from
+indirect signals (an `ldconfig` grep, an ICD filename) — enumerate/observe the
+real thing.
+
+1. **Deploy** the dylib where llamafile loads it: `~/.llamafile/v/<VERSION>/`
+   (keyed by `version.h`; the same dir as the stale-cache note above), e.g.
+   `cp ggml-vulkan.so ~/.llamafile/v/0.10.5/`.
+2. **Force the backend** so you test the dylib you mean to (not a fallback):
+   `--gpu cuda` / `--gpu vulkan` / `--gpu amd`. Run with `-ngl 99 --verbose`.
+3. **Read the device line** — this is the proof the backend loaded and bound the
+   GPU. For Vulkan: `ggml_vulkan: Found 1 Vulkan devices:` /
+   `0 = NVIDIA L40S (...) | fp16: 1 | bf16: 0 | int dot: 0 | matrix cores: KHR_coopmat`
+   / `register_device: registered device Vulkan0` / `load_tensors: layer N
+   assigned to device Vulkan0`. That capability line also tells you which speed
+   paths are live (`bf16: 0` / `int dot: 0` / `KHR_coopmat` vs coopmat2 = the
+   build's glslc lacked them — see building.md).
+4. **Cross-check VRAM**: `nvidia-smi --query-compute-apps=process_name,used_memory
+   --format=csv,noheader` should show the llamafile/`.ape` process holding memory.
+5. **Confirm output**: one chat/completion returns sane text.
+6. To check whether a device is even visible to a backend, run the real probe —
+   `vulkaninfo --summary` (Vulkan), `nvidia-smi` (CUDA) — not a library-file grep.
+
+Gotcha: the llamafile process's `comm` is `.ape-*`, not `llamafile`, so
+`pkill -x llamafile` misses it — kill by PID (from `nvidia-smi
+--query-compute-apps=pid`), and never `pkill -f <model-or-cmd-substring>` from a
+shell whose own command line contains that substring (it matches itself).
+
 #### Where can I find GGUF model weights files?
 
 Look for available gguf files in `~/ggufs/`. If you don't find any or the

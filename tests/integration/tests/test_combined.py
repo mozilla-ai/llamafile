@@ -3,6 +3,7 @@
 import pytest
 
 from utils.llamafile import LlamafileRunner, read_until_idle, stop_tui
+from utils.prompts import ADD_1_1, ADD_2_2, ADD_3_3, GREETING_PROMPT
 
 
 @pytest.mark.tui
@@ -17,13 +18,13 @@ class TestCombinedMode:
 
         try:
             ready = LlamafileRunner.wait_for_server(
-                server_port, timeout=timeouts.server_ready
+                server_port, timeout=timeouts.server_ready, proc=proc
             )
             assert ready, "Server did not become ready in combined mode"
 
             response = LlamafileRunner.chat_completion(
                 port=server_port,
-                messages=[{"role": "user", "content": "Say hello"}],
+                messages=[{"role": "user", "content": GREETING_PROMPT}],
                 timeout=timeouts.http_request,
             )
 
@@ -39,7 +40,7 @@ class TestCombinedMode:
 
         try:
             ready = LlamafileRunner.wait_for_server(
-                server_port, timeout=timeouts.server_ready
+                server_port, timeout=timeouts.server_ready, proc=proc
             )
             assert ready, "Server did not become ready"
 
@@ -49,13 +50,14 @@ class TestCombinedMode:
             # Test 1: Send a request via server API
             response1 = LlamafileRunner.chat_completion(
                 port=server_port,
-                messages=[{"role": "user", "content": "What is 1+1?"}],
+                messages=[{"role": "user", "content": ADD_1_1.prompt}],
                 timeout=timeouts.http_request,
             )
-            assert "2" in response1["choices"][0]["message"]["content"]
+            content1 = response1["choices"][0]["message"]["content"]
+            assert ADD_1_1.check(content1), f"Expected {ADD_1_1.describe()} in content: {content1}"
 
             # Test 2: Send TUI input and verify response
-            proc.stdin.write("What is 2+2?\n")
+            proc.stdin.write(f"{ADD_2_2.prompt}\n")
             proc.stdin.flush()
 
             # Read TUI output until model stops generating
@@ -65,15 +67,18 @@ class TestCombinedMode:
                 max_timeout=timeouts.cli,
             )
             assert len(tui_output) > 0, "TUI produced no output"
-            assert "4" in tui_output, f"Expected '4' in TUI output: {tui_output}"
+            assert ADD_2_2.check(tui_output), (
+                f"Expected {ADD_2_2.describe()} in TUI output: {tui_output}"
+            )
 
             # Test 3: Server should still work after TUI interaction
             response2 = LlamafileRunner.chat_completion(
                 port=server_port,
-                messages=[{"role": "user", "content": "What is 3+3?"}],
+                messages=[{"role": "user", "content": ADD_3_3.prompt}],
                 timeout=timeouts.http_request,
             )
-            assert "6" in response2["choices"][0]["message"]["content"]
+            content2 = response2["choices"][0]["message"]["content"]
+            assert ADD_3_3.check(content2), f"Expected {ADD_3_3.describe()} in content: {content2}"
 
         finally:
             stop_tui(proc)

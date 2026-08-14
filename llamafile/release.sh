@@ -1,5 +1,5 @@
 # update LLAMAFILE_VERSION for a new release
-LLAMAFILE_VERSION="0.10.3"
+LLAMAFILE_VERSION="0.10.4"
 
 # this is where the precompiled GPU libraries are stored
 GPU_LIBS_DIR="/home/mala/gpulibs/${LLAMAFILE_VERSION}"
@@ -36,7 +36,7 @@ DEST_DIR="${RELEASE_DIR}/release"
 mkdir "${DEST_DIR}"
 
 # list of binaries to copy and rename
-BINARIES="llamafile zipalign whisperfile diffusionfile"
+BINARIES="llamafile zipalign whisperfile diffusionfile transcribefile"
 
 for binary in $BINARIES; do
   if [ -f "${ZIP_DIR}/bin/${binary}" ]; then
@@ -55,7 +55,8 @@ ZIP_FILE="${DEST_DIR}/llamafile-${LLAMAFILE_VERSION}.zip"
 echo "Zipping ${ZIP_DIR} into ${ZIP_FILE}"
 
 # now zip the release directory
-zip -r "${ZIP_FILE}" "${ZIP_DIR}"
+cd "${RELEASE_DIR}"
+zip -r "${ZIP_FILE}" "llamafile-${LLAMAFILE_VERSION}"
 
 if [ -f "${ZIP_FILE}" ]; then
   echo "${ZIP_FILE} ready."

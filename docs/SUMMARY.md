@@ -16,7 +16,9 @@
 
 ## Reference
 
+* [CLI Arguments and Flags](cli_arguments.md)
 * [Technical details](technical_details.md)
+* [Security](security.md)
 * [Supported Systems](support.md)
 * [Troubleshooting](troubleshooting.md)
 

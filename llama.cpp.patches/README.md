@@ -44,7 +44,7 @@ The `GGML_CALL` macro (defined as `__attribute__((__ms_abi__))` when `GGML_MULTI
 |-------|-------------|
 | `ggml_include_ggml-backend.h.patch` | Defines the `GGML_CALL` macro; adds it to the five `get_proc_address` return typedefs (`ggml_backend_split_buffer_type_t`, `ggml_backend_set_n_threads_t`, `ggml_backend_dev_get_extra_bufts_t`, `ggml_backend_set_abort_callback_t`, `ggml_backend_get_features_t`) |
 | `ggml_include_ggml-cpu.h.patch` | Adds `GGML_CALL` to declarations of `ggml_backend_cpu_set_n_threads` and `ggml_backend_cpu_set_abort_callback` (returned via `get_proc_address`) |
-| `ggml_include_ggml-cuda.h.patch` | Adds `GGML_CALL` to declarations of `ggml_backend_cuda_split_buffer_type`, `ggml_backend_cuda_register_host_buffer`, and `ggml_backend_cuda_unregister_host_buffer` |
+| `ggml_include_ggml-cuda.h.patch` | Adds `GGML_CALL` to the declaration of `ggml_backend_cuda_register_host_buffer` (upstream removed the row-split multi-GPU buffer in b10052, so the former `ggml_backend_cuda_split_buffer_type` annotation is gone) |
 | `ggml_src_ggml-backend-impl.h.patch` | Adds `GGML_CALL` to all 49+ function pointers across the five interface structs (`ggml_backend_buffer_type_i`, `ggml_backend_buffer_i`, `ggml_backend_i`, `ggml_backend_device_i`, `ggml_backend_reg_i`); also adds `free_struct` callback (see Cross-Module Memory below) |
 | `ggml_src_ggml-backend.cpp.patch` | Adds `GGML_CALL` to CPU buffer, buffer type, and multi-buffer callback implementations; also adds `free_struct` support (see Cross-Module Memory below) |
 | `ggml_src_ggml-cpu_ggml-cpu.cpp.patch` | Adds `GGML_CALL` to all CPU backend, device, and registry callback implementations, plus `get_proc_address`-returned functions (`set_n_threads`, `set_abort_callback`, `get_extra_buffers_type`, `get_features`) |
@@ -63,7 +63,7 @@ When GPU backends (CUDA, Vulkan, Metal) are loaded as dynamic libraries, memory 
 |-------|-------------|
 | `ggml_src_ggml-backend-impl.h.patch` | Adds `free_struct` callback to `ggml_backend_buffer_i` interface for cross-module buffer cleanup |
 | `ggml_src_ggml-backend.cpp.patch` | Implements `free_struct` callback support in `ggml_backend_buffer_free()` — calls DSO's `free_struct` instead of `delete` when set |
-| `ggml_src_ggml-cuda_ggml-cuda.cu.patch` | Adds `free_struct` implementation for CUDA buffers (regular, split, and host); sets it on fallback CPU buffers allocated within the DSO |
+| `ggml_src_ggml-cuda_ggml-cuda.cu.patch` | Adds `free_struct` implementation for CUDA buffers (regular and host; upstream removed the split buffer in b10052); sets it on fallback CPU buffers allocated within the DSO |
 | `ggml_src_ggml-metal_ggml-metal.cpp.patch` | Adds `free_struct` implementation for Metal shared and private buffers |
 | `ggml_src_ggml-vulkan_ggml-vulkan.cpp.patch` | Adds `free_struct` implementation for Vulkan buffers and host buffer fallback path |
 
@@ -122,11 +122,11 @@ Llamafile uses TinyBLAS as a lightweight replacement for cuBLAS, enabling GPU su
 
 ### Optional IQ-Quant Exclusion (CUDA)
 
-The IQ ("importance") quantization formats (`IQ1_S`, `IQ2_XXS`/`XS`/`S`, `IQ3_S`/`XXS`, `IQ4_NL`/`XS`) pull in a large amount of CUDA template instantiation that inflates compile time and binary size. These patches gate every IQ code path behind `#ifndef GGML_CUDA_NO_IQ_QUANTS`, so a build can compile them out by defining `GGML_CUDA_NO_IQ_QUANTS`. When the macro is undefined (the default), behavior is unchanged.
+The IQ ("importance") quantization formats (`IQ1_S`, `IQ2_XXS`/`XS`/`S`, `IQ3_S`/`XXS`, `IQ4_NL`/`XS`) pull in a large amount of CUDA template instantiation that inflates compile time and binary size. These patches gate the IQ code paths behind `#ifndef GGML_CUDA_NO_IQ_QUANTS` — the MMQ/MMVQ matmul kernels, the `f32 → IQ4_NL` copy, and the IQ dequant cases in `ggml_get_to_bf16_cuda`/`ggml_get_to_fp16_cuda` — so a build can compile them out by defining `GGML_CUDA_NO_IQ_QUANTS`. (`ggml_get_to_fp32_cuda`'s IQ cases are not guarded, so the `float` dequant-template instantiations still compile — a minor size cost, harmless because `ggml_backend_cuda_device_supports_op` gates the same IQ ops, so those tensors fall back to CPU in a minimized build regardless.) When the macro is undefined (the default), behavior is unchanged.
 
 | Patch | Description |
 |-------|-------------|
-| `ggml_src_ggml-cuda_convert.cu.patch` | Guards IQ dequantization cases in `ggml_get_to_fp16_cuda` and `ggml_get_to_fp32_cuda` |
+| `ggml_src_ggml-cuda_convert.cu.patch` | Guards IQ dequantization cases in `ggml_get_to_bf16_cuda` and `ggml_get_to_fp16_cuda` |
 | `ggml_src_ggml-cuda_cpy.cu.patch` | Guards the `f32 → IQ4_NL` copy helper and its dispatch case |
 | `ggml_src_ggml-cuda_mmq.cu.patch` | Guards IQ cases in `ggml_cuda_mul_mat_q_switch_type` and in the `ggml_cuda_should_use_mmq` support/heuristic switches |
 | `ggml_src_ggml-cuda_mmq.cuh.patch` | Guards the `extern DECL_MMQ_CASE(...)` declarations for IQ types |
@@ -156,7 +156,7 @@ These patches integrate llamafile's file handling APIs for loading models from b
 
 | Patch | Description |
 |-------|-------------|
-| `tools_server_server.cpp.patch` | Renames upstream's `llama_server()` to `server_main()` and adds `on_ready`/`on_shutdown_available` callbacks for combined TUI+server mode; adds Metal/GPU backend trigger before `common_init()`; adds Cosmopolitan-specific standalone `main()` with `cosmo_args`, verbose flag handling, and GPU pre-initialization; handles `LLAMAFILE_TUI` exit to avoid Metal cleanup crashes |
+| `tools_server_server.cpp.patch` | Renames upstream's `llama_server()` to `server_main()` and adds `on_ready`/`on_shutdown_available` callbacks for combined TUI+server mode; adds Metal/GPU backend trigger before `common_init()`; installs the sandbox (`llamafile_sandbox_server()`, issue #930) — the mechanism lives in `llamafile/sandbox.c`; the patch fills a `llamafile_sandbox_spec` with the on-disk paths the loader opens after the lock (model, mmproj, media dir, LoRA, draft model, control vectors, public path as read; slot-save and prompt cache as read-write), detects outbound-needing features (`--rpc` via argv/env, MCP proxy, server tools) to relax `anet`→`inet`, passes `FLAG_confine_reads` for opt-in unveil(), quiesces the log worker (`common_log_pause`/`resume`, so no thread escapes the per-thread filter) around the call, before the HTTP listener spawns and before model load, and skips it in combined/GPU modes; adds Cosmopolitan-specific standalone `main()` with `cosmo_args`, verbose flag handling, `--unsecure` consumption (`llamafile_consume_flag`), and GPU pre-initialization; handles `LLAMAFILE_TUI` exit to avoid Metal cleanup crashes |
 
 The web UI moved upstream from prebuilt `tools/server/public/*` assets to
 a Svelte/PWA project under `tools/ui/`, embedded at CMake time via
@@ -205,6 +205,7 @@ can change on a llama.cpp bump — when it does, the asset list in
 | `ggml_src_ggml-vulkan_ggml-vulkan.cpp.patch` | Fixes unsigned integer underflow in `ggml_backend_vk_get_device_memory` where Vulkan's `heapUsage` can exceed `heapBudget` (clamps to zero instead of wrapping) |
 | `src_models_t5.cpp.patch` | Forward-declares the `graph<false>`/`graph<true>` explicit specializations before `build_arch_graph` so clang's `-std=gnu++23` doesn't reject them as specializations after implicit instantiation |
 | `src_models_eagle3.cpp.patch` | Moves `build_arch_graph` to the end of the file, after the `graph<true>`/`graph<false>` constructor specializations, so clang's `-std=gnu++23` doesn't reject them as explicit specializations appearing after the `make_unique<graph<...>>` implicit instantiation point |
+| `src_models_dflash.cpp.patch` | Same fix as `eagle3` for the DFlash model (new in b10052): moves `build_arch_graph` to the end of the file, after the `graph<true>`/`graph<false>` specializations, so clang's `-std=gnu++23` doesn't reject them as explicit specializations after the `make_unique<graph<...>>` implicit instantiation point |
 
 ## Creating New Patches
 
@@ -212,8 +213,8 @@ Files in `llama.cpp` are usually modified in-place for development and testing.
 Once they are ready to be committed, you can update all files in the `llama.cpp.patches` directory by running the following:
 
 ```sh
-cd llama.cpp
-../tools/generate-patches.sh --output-dir ../llama.cpp.patches
+# echo y answers the prompt; the subshell restores the cwd even on failure
+( cd llama.cpp && echo y | ../tools/generate_patches.sh --output-dir ../llama.cpp.patches )
 ```
 
 Patch filenames will automatically reflect the file path with underscores replacing slashes (e.g., `common_arg.cpp.patch` for `common/arg.cpp`).

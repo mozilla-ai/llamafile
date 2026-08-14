@@ -9,6 +9,8 @@ Integration tests for llamafile covering CLI, TUI, and server modes.
 
 ## Running Tests
 
+### Single model
+
 ```bash
 cd tests/integration
 
@@ -21,6 +23,22 @@ cd tests/integration
 # Run with verbose output
 ./run_tests.sh --executable ~/model.llamafile -v
 ```
+
+### Full suite across all models
+
+`tests/run_integration_tests.sh` runs the full suite across a configurable list
+of models, then runs the `help` and `ssl` tests once against the bare executable.
+Edit the `TESTS` array and path variables at the top of the script to match your
+local model collection.
+
+```bash
+# From the repo root — runs every model in the TESTS list, then help + ssl
+./tests/run_integration_tests.sh
+```
+
+> **Network access**: the script includes the `ssl online` tests, which download
+> a small model from Hugging Face. Make sure you have internet access before
+> running it, or remove the `ssl and online` invocation from the script.
 
 ## Test Categories
 
@@ -37,8 +55,11 @@ Use `-m` to select test categories:
 | `thinking` | Thinking model tests (QwQ, DeepSeek-R1, etc.) |
 | `gpu` | GPU acceleration tests |
 | `cpu` | CPU-only tests |
-| `ssl` | HTTPS/TLS tests: serving with `--ssl-cert-file`, model download over HTTPS, untrusted-cert rejection. Needs `openssl` in PATH to generate a test certificate |
-| `online` | Tests that need network access (currently the HTTPS model download). Skip with `-m "not online"` |
+| `help` | `--help` output tests; no model needed |
+| `bare_executable` | Tests that run once against the bare binary (no embedded model); automatically skipped when the executable is a `.llamafile` bundle. Includes `help` and `ssl`. |
+| `ssl` | HTTPS/TLS tests: serving with `--ssl-cert-file` and model download over HTTPS. Needs `openssl` in PATH. Run against the bare executable with `--model`. |
+| `determinism` | Tests requiring reproducible output at temperature=0. Unreliable on gpt-oss models (see `tests/run_integration_tests.sh`); deselect with `-m "not determinism"`. |
+| `online` | Tests that need network access (the HTTPS model download from Hugging Face). Skip with `-m "not online"` if offline. |
 
 Examples:
 
@@ -52,11 +73,9 @@ Examples:
 # Skip multimodal and tool_calling tests
 ./run_tests.sh --executable ~/model.llamafile -m "not multimodal and not tool_calling"
 
-# Run only the HTTPS/TLS tests (or skip them with -m "not ssl")
-./run_tests.sh --executable ./o/llamafile/llamafile --model model.gguf -m ssl
-
-# Run the HTTPS/TLS tests without the network-dependent ones
+# Run the ssl tests (bare executable required; --model for the serving tests)
 ./run_tests.sh --executable ./o/llamafile/llamafile --model model.gguf -m "ssl and not online"
+./run_tests.sh --executable ./o/llamafile/llamafile -m "ssl and online"
 ```
 
 ## Options
@@ -91,20 +110,25 @@ Use `--log-cli-level` to see what the model returns:
 ## Test Structure
 
 ```
-tests/integration/
-├── run_tests.sh          # Test runner script
-├── conftest.py           # Pytest fixtures
-├── pyproject.toml        # Dependencies and pytest config
-├── utils/
-│   └── llamafile.py      # LlamafileRunner utility class
-├── fixtures/
-│   └── test_image.png    # Test image for multimodal tests
-└── tests/
-    ├── test_cli.py       # CLI mode tests
-    ├── test_tui.py       # TUI mode tests
-    ├── test_server.py    # Server mode tests
-    ├── test_combined.py  # TUI+Server simultaneous mode
-    ├── test_multimodal.py    # Image description tests
-    ├── test_tool_calling.py  # Tool use tests
-    └── test_gpu.py       # GPU/CPU execution tests
+tests/
+├── run_integration_tests.sh  # Full-suite runner across all models (edit to customise)
+└── integration/
+    ├── run_tests.sh          # Single-model test runner
+    ├── conftest.py           # Pytest fixtures
+    ├── pyproject.toml        # Dependencies and pytest config
+    ├── utils/
+    │   └── llamafile.py      # LlamafileRunner utility class and shared helpers
+    ├── fixtures/
+    │   └── test_image.png    # Test image for multimodal tests
+    └── tests/
+        ├── test_cli.py           # CLI mode tests
+        ├── test_tui.py           # TUI/chat mode tests
+        ├── test_server.py        # Server mode tests
+        ├── test_combined.py      # TUI+Server simultaneous mode
+        ├── test_multimodal.py    # Image description tests
+        ├── test_tool_calling.py  # Tool use tests
+        ├── test_gpu.py           # GPU/CPU execution tests
+        ├── test_help.py          # --help output tests (bare executable, no model)
+        ├── test_ssl.py           # HTTPS/TLS serving and model download tests
+        └── test_sandbox.py       # pledge/SECCOMP sandboxing tests
 ```

@@ -1,7 +1,7 @@
 diff --git a/common/http.h b/common/http.h
 --- a/llama.cpp/common/http.h
 +++ b/llama.cpp/common/http.h
-@@ -72,7 +72,7 @@ static std::pair<httplib::Client, common_http_url> common_http_client(const std:
+@@ -104,7 +104,7 @@ static std::pair<httplib::Client, common_http_url> common_http_client(const std:
          throw std::runtime_error("error: invalid URL format");
      }
  

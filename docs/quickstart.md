@@ -182,6 +182,58 @@ curl -L -o gpt-oss.gguf https://huggingface.co/unsloth/gpt-oss-20b-GGUF/resolve/
 
 Windows users may need to change `./llamafile.exe` to `.\llamafile.exe` when running the above command.
 
+### Which release file do I download?
+
+On the [releases page](https://github.com/mozilla-ai/llamafile/releases) each
+release ships several *independent* single-file programs. They are **not**
+bundled together inside the `llamafile` executable: if you want to download all of them
+at once, choose the zip download; otherwise, pick the one that matches the task you
+want to perform:
+
+| File | What it is |
+| --- | --- |
+| `llamafile` | Runs LLMs (chat/completions). This is the program referenced throughout these docs. |
+| `llamafile-thin` | The same program, without the pre-built GPU libraries appended (see below). |
+| `whisperfile` | Speech-to-text, built on [whisper.cpp](https://github.com/ggml-org/whisper.cpp). See the [whisperfile docs](whisperfile/index.md). |
+| `transcribefile` | Speech-to-text, built on [transcribe.cpp](https://github.com/handy-computer/transcribe.cpp). |
+| `diffusionfile` | Image generation (Stable Diffusion). |
+| `zipalign` | A small utility for embedding weights or other assets into a llamafile. |
+
+#### `llamafile` vs `llamafile-thin`
+
+Both files contain the same executable code. The difference is whether pre-built GPU backend
+libraries are bundled together with it:
+
+- **`llamafile-thin`** is the base binary, so it is the smaller download. It
+  seamlessly runs on different operating systems and CPU architectures. To run on GPU,
+  it requires a matching backend library to be available on your system. On Apple Silicon this
+  is fully transparent: if the system does not have the required library, llamafile compiles
+  one on the fly. On the other systems, you can build GPU libraries yourself with `llamafile/cuda.sh`
+  (NVIDIA), `llamafile/rocm.sh` (AMD), or `llamafile/vulkan.sh` (NVIDIA + AMD + others). 
+  Each library requires the respective GPU toolchain to be installed before you run a build.
+  As an alternative, you can find libraries for the latest release on our
+  [HuggingFace repo](https://huggingface.co/mozilla-ai/llamafile_0.10).
+- **`llamafile`** is that same binary with `ggml-cuda` and `ggml-vulkan`
+  bundled, as **`x86_64`** Linux (`.so`) and Windows (`.dll`) artifacts (a
+  single set of libraries, with no separate ARM build). Those backends work
+  with no build step of your own — you only need a driver that provides the
+  corresponding runtime API. The bundled libraries are what makes this file
+  larger.
+
+Note that ROCm support is still experimental and thus not automatically bundled in either file.
+AMD users who do not want to use the Vulkan backend have to build `ggml-rocm` with 
+`llamafile/rocm.sh`, or download the pre-built `ggml-rocm` dylibs from llamafile's HuggingFace
+repo, regardless of which llamafile executable they are running.
+
+The bundled libraries are `x86_64` Linux and Windows artifacts only. On any
+other platform (macOS, or a non-`x86_64` architecture such as an `aarch64`/ARM64
+Linux host, even one with an NVIDIA GPU) neither file carries an applicable
+pre-built backend, so the two downloads behave the same there and GPU support
+comes from the usual runtime path instead.
+
+Use `llamafile` unless you want the smallest download and only need CPU inference,
+you have an Apple Silicon Mac, or have already set up your own GPU backend libraries.
+
 
 ## Running llamafile with models downloaded by third-party applications
 

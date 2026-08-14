@@ -15,6 +15,8 @@ import subprocess
 
 import pytest
 
+from utils.llamafile import skip_if_bundled
+
 
 HELP_TIMEOUT = 30.0
 
@@ -135,9 +137,23 @@ class TestHelpListsLlamaCppArgs:
 
 
 @pytest.mark.help
+@pytest.mark.bare_executable
 class TestHelpMissingModel:
     """The missing-model error path should still print a helpful intro and
-    point the user at --help, without requiring the full option list."""
+    point the user at --help, without requiring the full option list.
+
+    These tests require a bare llamafile binary (no embedded model).  When run
+    against a pre-built .llamafile that already contains a model the binary
+    starts normally instead of printing an error, so the tests are skipped
+    automatically in that case.  To exercise this code path, run against the
+    build output directly, e.g.::
+
+        ./run_tests.sh --executable ~/llamafile/o/llamafile/llamafile
+    """
+
+    @pytest.fixture(autouse=True)
+    def _require_bare_executable(self, executable):
+        skip_if_bundled(executable)
 
     def _run_no_model(self, executable):
         if platform.system() == "Windows":

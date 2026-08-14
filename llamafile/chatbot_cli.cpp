@@ -168,6 +168,17 @@ int cli_main(int argc, char **argv) {
         params.n_gpu_layers = INT_MAX;
     }
 
+    // Drop network and filesystem-write access before the untrusted GGUF
+    // file is parsed. Must happen after common_params_parse() (-hf model
+    // downloads need the network) and before threads/weights come up.
+    // Quiesce the log worker across the pledge so it doesn't outlive the
+    // per-thread filter unsandboxed (see llamafile/sandbox.c rule 1).
+    common_log_pause(common_log_main());
+    int sandbox = llamafile_sandbox_enter("stdio rpath tty", FLAG_verbose);
+    common_log_resume(common_log_main());
+    if (sandbox == LLAMAFILE_SANDBOX_FAILED)
+        return 1;
+
     // Load model
     llama_model_params model_params = common_model_params_to_llama(params);
     llama_model *model = llama_model_load_from_file(params.model.path.c_str(), model_params);
@@ -304,6 +315,7 @@ int cli_main(int argc, char **argv) {
         // Use mtmd pipeline for multimodal prompt evaluation
         mtmd_input_text text;
         text.text = formatted_prompt.c_str();
+        text.text_len = formatted_prompt.size();
         text.add_special = true;
         text.parse_special = true;
 

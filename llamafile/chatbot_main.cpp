@@ -161,6 +161,18 @@ int main(int argc, char **argv) {
     }
     clear_ephemeral();
 
+    // Drop network access before the untrusted GGUF file is parsed. Must
+    // happen after common_params_parse() (-hf model downloads need the
+    // network) and before threads/weights come up. Unlike --cli, the chat
+    // TUI keeps wpath+cpath so /dump and /push can still write files.
+    // Quiesce the log worker across the pledge so it doesn't outlive the
+    // per-thread filter unsandboxed (see llamafile/sandbox.c rule 1).
+    common_log_pause(common_log_main());
+    int sandbox = llamafile_sandbox_enter("stdio rpath wpath cpath tty", verbose);
+    common_log_resume(common_log_main());
+    if (sandbox == LLAMAFILE_SANDBOX_FAILED)
+        exit(1);
+
     // Suppress logging for model loading unless --verbose was specified
     // We must set this AFTER common_init() since it overwrites the log callback
     // and BEFORE model loading to suppress those logs

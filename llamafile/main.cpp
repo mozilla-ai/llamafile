@@ -172,6 +172,8 @@ static void print_general_help(bool show_full_list_hint) {
            "  --gpu MODE       GPU backend (auto, nvidia, amd, apple, disable)\n"
            "  --nologo         suppress the startup logo\n"
            "  --ascii          use ASCII art instead of Unicode for logo\n"
+           "  --unsecure       disable pledge() sandboxing (Linux/OpenBSD)\n"
+           "  --confine-reads  restrict server file reads to the weights dirs\n"
            "  --verbose        enable verbose logging\n"
            "  --version        show version information\n"
            "  --help           show this help\n"
@@ -205,6 +207,8 @@ static void print_server_help(bool show_full_list_hint) {
            "  --host ADDR      ip address to listen on (default 127.0.0.1)\n"
            "  --port N         tcp port to listen on (default 8080)\n"
            "  --api-key KEY    require this API key for authentication\n"
+           "  --confine-reads  restrict file reads to the weights directories\n"
+           "  --unsecure       disable pledge() sandboxing (Linux/OpenBSD)\n"
            "\n");
     if (show_full_list_hint) {
         printf("all other llama.cpp options are also accepted.\n"
@@ -395,7 +399,11 @@ int main(int argc, char **argv) {
     if (llamafile_has(argv, "--help") || llamafile_has(argv, "-h")) {
         switch (args.mode) {
             case lf::ProgramMode::SERVER:
-                break; // fall through to llama.cpp's server help
+                // Show llamafile's own server flags (which are stripped before
+                // llama.cpp sees them, so its parser can't list them) before
+                // falling through to llama.cpp's server help.
+                print_server_help(false);
+                break;
             case lf::ProgramMode::AUTO:
                 // Combined mode: args go to the HTTP server, so show the
                 // llamafile intro followed by llama.cpp's server option list.
@@ -466,6 +474,12 @@ int main(int argc, char **argv) {
         args.llama_argc = static_cast<int>(quiet_argv.size()) - 1;
         args.llama_argv = quiet_argv.data();
     }
+
+    // --confine-reads only affects the --server sandbox. In the other modes
+    // (including the default combined mode, whose sandbox is skipped) it does
+    // nothing, so say so rather than silently ignoring it.
+    if (FLAG_confine_reads && args.mode != lf::ProgramMode::SERVER)
+        fprintf(stderr, "warning: --confine-reads only applies to --server mode; ignoring\n");
 
     // Initialize GPU support (triggers dynamic loading of GPU backends)
     llamafile_has_gpu();

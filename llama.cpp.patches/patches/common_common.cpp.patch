@@ -12,11 +12,11 @@ diff --git a/common/common.cpp b/common/common.cpp
  #if defined(_WIN32)
  #define WIN32_LEAN_AND_MEAN
  #ifndef NOMINMAX
-@@ -72,7 +76,38 @@ common_time_meas::~common_time_meas() {
+@@ -76,7 +80,38 @@ common_time_meas::~common_time_meas() {
  //
  
  int32_t common_cpu_get_num_physical_cores() {
--#ifdef __linux__
+-#if defined(_AIX)
 +#if defined(COSMOCC)
 +    // cosmocc cross-compiles for both Linux and macOS at once, so neither
 +    // __linux__ nor __APPLE__ is defined here; detect the host OS at runtime.
@@ -48,11 +48,11 @@ diff --git a/common/common.cpp b/common/common.cpp
 +            return num_physical_cores;
 +        }
 +    }
-+#elif defined(__linux__)
-     // enumerate the set of thread siblings, num entries is num cores
-     std::unordered_set<std::string> siblings;
-     for (uint32_t cpu=0; cpu < UINT32_MAX; ++cpu) {
-@@ -1012,6 +1047,16 @@ std::string fs_get_cache_directory() {
++#elif defined(_AIX)
+     int32_t logical_cpus = _system_configuration.ncpus;
+     int32_t smt_threads = _system_configuration.smt_threads;
+     if (smt_threads > 0) {
+@@ -1033,6 +1068,16 @@ std::string fs_get_cache_directory() {
          cache_directory = std::getenv("HOME") + std::string("/Library/Caches/");
  #elif defined(_WIN32)
          cache_directory = std::getenv("LOCALAPPDATA");
@@ -69,10 +69,10 @@ diff --git a/common/common.cpp b/common/common.cpp
  #elif defined(__EMSCRIPTEN__)
          GGML_ABORT("not implemented on this platform");
  #else
-@@ -1201,10 +1246,31 @@ common_init_result::common_init_result(common_params & params, bool model_only)
+@@ -1222,10 +1267,31 @@ common_init_result::common_init_result(common_params & params, bool model_only)
      if (params.fit_params) {
-         LOG_INF("%s: fitting params to device memory ...\n", __func__);
-         LOG_INF("%s: (for bugs during this step try to reproduce them with -fit off, or provide --verbose logs if the bug only occurs with -fit on)\n", __func__);
+         COM_TRC("%s", "fitting params to device memory ...\n");
+         COM_TRC("%s", "(for bugs during this step try to reproduce them with -fit off, or provide --verbose logs if the bug only occurs with -fit on)\n");
 +
 +        // if a multimodal projection model is specified and will be loaded on GPU,
 +        // add its estimated size to the fit margins so the fit leaves enough room for it

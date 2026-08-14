@@ -181,6 +181,7 @@ bool eval_string(std::string_view s, bool add_special, bool parse_special) {
     // Use mtmd_tokenize to process text with images
     mtmd_input_text text;
     text.text = extraction.modified_text.c_str();
+    text.text_len = extraction.modified_text.size();
     text.add_special = add_special;
     text.parse_special = parse_special;
 

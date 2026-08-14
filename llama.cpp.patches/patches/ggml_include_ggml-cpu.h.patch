@@ -1,7 +1,7 @@
 diff --git a/ggml/include/ggml-cpu.h b/ggml/include/ggml-cpu.h
 --- a/llama.cpp/ggml/include/ggml-cpu.h
 +++ b/llama.cpp/ggml/include/ggml-cpu.h
-@@ -131,9 +131,9 @@ extern "C" {
+@@ -132,9 +132,9 @@ extern "C" {
      GGML_BACKEND_API ggml_backend_t ggml_backend_cpu_init(void);
  
      GGML_BACKEND_API bool ggml_backend_is_cpu                (ggml_backend_t backend);

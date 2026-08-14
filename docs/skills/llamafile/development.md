@@ -72,12 +72,13 @@ vim src/llama.cpp
 #### Step 2: Generate Patches
 
 Patches are usually generated after the code has been thoroughly tested and is
-ready to commit. To avoid manual errors, use the script `tools/generate-patches.sh`
-which automatically saves all new files and patches in the specified output directory.
+ready to commit. To avoid manual errors, use the script `tools/generate_patches.sh`
+(or the `llamafile:generate-patches` skill that wraps it), which automatically
+saves all new files and patches in the specified output directory.
 
 ```sh
-cd llama.cpp
-../tools/generate-patches.sh --output-dir ../llama.cpp.patches
+# echo y answers the prompt; the subshell restores the cwd even on failure
+( cd llama.cpp && echo y | ../tools/generate_patches.sh --output-dir ../llama.cpp.patches )
 ```
 
 After this operation, one can double check which files have been modified / added

@@ -35,7 +35,7 @@ UI_DIST="$LLAMA_DIR/tools/ui/dist"
 # with a `Link: <...>; rel="next"` header for the following page.
 pick_ui_tag() {
     local cur="$1"
-    local url="${HF_TREE_API}?limit=100&recursive=false"
+    local url="${HF_TREE_API}?limit=1000&recursive=false"
     local hdrs best="" n saw_newer guard=0 body
     hdrs="$(mktemp)"
     while [ -n "$url" ] && [ "$guard" -lt 100 ]; do
@@ -101,7 +101,6 @@ ui_missing_assets() {
         return 1
     }
     _have 'index.html'           || echo 'index.html'
-    _have 'loading.html'         || echo 'loading.html'
     _have 'manifest.webmanifest' || echo 'manifest.webmanifest'
     _have 'sw.js'                || echo 'sw.js'
     _have 'build.json'           || echo 'build.json'

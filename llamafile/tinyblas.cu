@@ -492,6 +492,23 @@ tinyblasStatus_t tinyblasSgemmStridedBatched(tinyblasHandle_t handle, tinyblasOp
     return TINYBLAS_STATUS_SUCCESS;
 }
 
+// Pointer-array batched SGEMM. Unlike the strided variant, cublasSgemmBatched
+// takes device-resident arrays of per-matrix pointers, so it cannot loop on the
+// host; delegate to the typed batched-Ex path, which reads the pointer arrays
+// on-device. F32 in/out with F32 compute. New caller: the out_prod broadcast
+// path in ggml-cuda/out-prod.cu (upstream #24426).
+tinyblasStatus_t tinyblasSgemmBatched(tinyblasHandle_t handle, tinyblasOperation_t transa,
+                                      tinyblasOperation_t transb, int m, int n, int k,
+                                      const float *alpha, const float *const Aarray[], int lda,
+                                      const float *const Barray[], int ldb, const float *beta,
+                                      float *const Carray[], int ldc, int batchCount) {
+    return tinyblasGemmBatchedEx(handle, transa, transb, m, n, k, alpha,
+                                 (const void *const *)Aarray, TINYBLAS_R_32F, lda,
+                                 (const void *const *)Barray, TINYBLAS_R_32F, ldb, beta,
+                                 (void *const *)Carray, TINYBLAS_R_32F, ldc, batchCount,
+                                 TINYBLAS_COMPUTE_32F, TINYBLAS_GEMM_DEFAULT);
+}
+
 template <int CONFIG, int BM, int BN, int BK, int VE, int WM, int WN, int WNI, int TM, int TN,
           int TT, typename WORD, typename SRC, typename DST>
 static __global__ void __launch_bounds__(TT) tinyblasGE_entry(tinyblasOperation_t aT, //

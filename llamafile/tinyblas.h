@@ -66,6 +66,11 @@ tinyblasStatus_t tinyblasSgemmStridedBatched(tinyblasHandle_t, tinyblasOperation
                                              long long, const float *, float *, int, long long,
                                              int);
 
+tinyblasStatus_t tinyblasSgemmBatched(tinyblasHandle_t, tinyblasOperation_t, tinyblasOperation_t,
+                                      int, int, int, const float *, const float *const[], int,
+                                      const float *const[], int, const float *, float *const[], int,
+                                      int);
+
 tinyblasStatus_t tinyblasStrsmBatched(tinyblasHandle_t, tinyblasSideMode_t, tinyblasFillMode_t,
                                        tinyblasOperation_t, tinyblasDiagType_t, int, int,
                                        const float *, const float *const[], int,

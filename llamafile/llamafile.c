@@ -285,9 +285,17 @@ struct llamafile *llamafile_open_gguf(const char *fname, const char *mode) {
     // open from file or from our own executable if it doesn't exist
     struct llamafile *file;
     if (!(file = llamafile_open_file(fname, mode))) {
-        if (errno == ENOENT) {
+        // ENOENT: the path isn't a real file (e.g. a bare basename
+        // embedded by llamafile-convert). EACCES/EPERM: the sandbox
+        // (unveil/pledge) denies opening it directly; the embedded copy
+        // in our own /zip/ store is still reachable via the executable.
+        int open_errno = errno;
+        if (open_errno == ENOENT || open_errno == EACCES || open_errno == EPERM) {
             if (!(file = llamafile_open_zip(GetProgramExecutableName(), fname, mode))) {
-                errno = ENOENT;
+                // no embedded copy either: report why the real open failed
+                // (e.g. "Permission denied" for a sandbox/mode denial, not a
+                // misleading "No such file or directory")
+                errno = open_errno;
                 return 0;
             }
             return file;
@@ -449,6 +457,21 @@ bool llamafile_has(char **a, const char *x) {
         if (!strcmp(a[i], x))
             return true;
     return false;
+}
+
+bool llamafile_consume_flag(int *argc, char **argv, const char *flag) {
+    bool found = false;
+    int w = 1;
+    for (int r = 1; r < *argc; ++r) {
+        if (!strcmp(argv[r], flag)) {
+            found = true;
+        } else {
+            argv[w++] = argv[r];
+        }
+    }
+    argv[w] = 0;
+    *argc = w;
+    return found;
 }
 
 static const char *llamafile_get_home_dir(void) {
