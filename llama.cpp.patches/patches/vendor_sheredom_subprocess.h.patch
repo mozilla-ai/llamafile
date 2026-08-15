@@ -1,0 +1,37 @@
+diff --git a/vendor/sheredom/subprocess.h b/vendor/sheredom/subprocess.h
+--- a/llama.cpp/vendor/sheredom/subprocess.h
++++ b/llama.cpp/vendor/sheredom/subprocess.h
+@@ -562,6 +562,25 @@ int subprocess_error_from_windows_error(unsigned long error) {
+ #else
+ subprocess_weak int subprocess_error_from_errno(int error);
+ int subprocess_error_from_errno(int error) {
++#if defined(__COSMOPOLITAN__)
++  /* Cosmopolitan builds one binary for every host OS, so the E* values are
++     runtime symbols rather than compile-time constants and cannot be used as
++     case labels ("case value is not a constant expression"). Same mapping,
++     expressed as comparisons. */
++  if (error == ENOENT || error == ENOTDIR) {
++    return subprocess_error_not_found;
++  }
++  if (error == EACCES || error == EPERM) {
++    return subprocess_error_permission_denied;
++  }
++  if (error == EMFILE || error == ENFILE || error == ENOMEM) {
++    return subprocess_error_no_memory;
++  }
++  if (error == ENOSYS) {
++    return subprocess_error_not_supported;
++  }
++  return subprocess_error_unknown;
++#else
+   switch (error) {
+   case ENOENT:
+   case ENOTDIR:
+@@ -578,6 +597,7 @@ int subprocess_error_from_errno(int error) {
+   default:
+     return subprocess_error_unknown;
+   }
++#endif
+ }
+ #endif
+ 

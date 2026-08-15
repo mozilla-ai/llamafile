@@ -18,7 +18,7 @@ diff --git a/ggml/include/ggml-backend.h b/ggml/include/ggml-backend.h
  #ifdef  __cplusplus
  extern "C" {
  #endif
-@@ -208,19 +218,19 @@ extern "C" {
+@@ -210,19 +220,19 @@ extern "C" {
      typedef bool   (*ggml_backend_comm_allreduce_tensor_t)(void * comm_ctx, struct ggml_tensor ** tensors);
  
      // Split buffer type for tensor parallelism (old)

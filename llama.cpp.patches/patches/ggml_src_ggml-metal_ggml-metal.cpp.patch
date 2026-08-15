@@ -393,7 +393,7 @@ diff --git a/ggml/src/ggml-metal/ggml-metal.cpp b/ggml/src/ggml-metal/ggml-metal
      props->name        = ggml_backend_metal_device_get_name(dev);
      props->description = ggml_backend_metal_device_get_description(dev);
      props->type        = ggml_backend_metal_device_get_type(dev);
-@@ -684,7 +694,7 @@ static void ggml_backend_metal_device_get_props(ggml_backend_dev_t dev, ggml_bac
+@@ -685,7 +695,7 @@ static void ggml_backend_metal_device_get_props(ggml_backend_dev_t dev, ggml_bac
      };
  }
  
@@ -402,7 +402,7 @@ diff --git a/ggml/src/ggml-metal/ggml-metal.cpp b/ggml/src/ggml-metal/ggml-metal
      ggml_metal_device_t ctx_dev = (ggml_metal_device_t)dev->context;
  
      ggml_metal_t ctx = ggml_metal_init(ctx_dev);
-@@ -709,7 +719,7 @@ static ggml_backend_t ggml_backend_metal_device_init_backend(ggml_backend_dev_t
+@@ -710,7 +720,7 @@ static ggml_backend_t ggml_backend_metal_device_init_backend(ggml_backend_dev_t
      GGML_UNUSED(params);
  }
  
@@ -411,7 +411,7 @@ diff --git a/ggml/src/ggml-metal/ggml-metal.cpp b/ggml/src/ggml-metal/ggml-metal
      ggml_metal_device_t ctx_dev = (ggml_metal_device_t)dev->context;
  
      const ggml_metal_device_props * props_dev = ggml_metal_device_get_props(ctx_dev);
-@@ -717,7 +727,7 @@ static ggml_backend_buffer_type_t ggml_backend_metal_device_get_buffer_type(ggml
+@@ -718,7 +728,7 @@ static ggml_backend_buffer_type_t ggml_backend_metal_device_get_buffer_type(ggml
      return props_dev->use_shared_buffers ? ggml_backend_metal_buffer_type_shared(props_dev->device) : ggml_backend_metal_buffer_type_private(props_dev->device);
  }
  
@@ -420,7 +420,7 @@ diff --git a/ggml/src/ggml-metal/ggml-metal.cpp b/ggml/src/ggml-metal/ggml-metal
      ggml_metal_device_t ctx_dev = (ggml_metal_device_t)dev->context;
  
      ggml_metal_buffer_t res = ggml_metal_buffer_map(ctx_dev, ptr, size, max_tensor_size);
-@@ -727,13 +737,13 @@ static ggml_backend_buffer_t ggml_backend_metal_device_buffer_mapped(ggml_backen
+@@ -728,13 +738,13 @@ static ggml_backend_buffer_t ggml_backend_metal_device_buffer_mapped(ggml_backen
      return ggml_backend_buffer_init(ggml_backend_metal_buffer_type_mapped(props_dev->device), ggml_backend_metal_buffer_shared_i, res, size);
  }
  
@@ -436,7 +436,7 @@ diff --git a/ggml/src/ggml-metal/ggml-metal.cpp b/ggml/src/ggml-metal/ggml-metal
      return
          buft->device == dev && (
          buft->iface.get_name == ggml_backend_metal_buffer_type_shared_get_name ||
-@@ -754,7 +764,7 @@ static int64_t get_op_batch_size(const ggml_tensor * op) {
+@@ -755,7 +765,7 @@ static int64_t get_op_batch_size(const ggml_tensor * op) {
      }
  }
  
@@ -445,7 +445,7 @@ diff --git a/ggml/src/ggml-metal/ggml-metal.cpp b/ggml/src/ggml-metal/ggml-metal
      ggml_metal_device_t ctx_dev = (ggml_metal_device_t)dev->context;
  
      return (op->op == GGML_OP_MUL_MAT ||
-@@ -762,7 +772,7 @@ static bool ggml_backend_metal_device_offload_op(ggml_backend_dev_t dev, const g
+@@ -763,7 +773,7 @@ static bool ggml_backend_metal_device_offload_op(ggml_backend_dev_t dev, const g
              get_op_batch_size(op) >= ggml_metal_device_get_props(ctx_dev)->op_offload_min_batch_size;
  }
  
@@ -454,7 +454,7 @@ diff --git a/ggml/src/ggml-metal/ggml-metal.cpp b/ggml/src/ggml-metal/ggml-metal
      ggml_metal_device_t ctx_dev = (ggml_metal_device_t)dev->context;
  
      ggml_metal_event_t event = ggml_metal_device_event_init(ctx_dev);
-@@ -776,7 +786,7 @@ static ggml_backend_event_t ggml_backend_metal_device_event_new(ggml_backend_dev
+@@ -777,7 +787,7 @@ static ggml_backend_event_t ggml_backend_metal_device_event_new(ggml_backend_dev
      return ev;
  }
  
@@ -463,7 +463,7 @@ diff --git a/ggml/src/ggml-metal/ggml-metal.cpp b/ggml/src/ggml-metal/ggml-metal
      ggml_metal_device_t ctx_dev = (ggml_metal_device_t)dev->context;
  
      ggml_metal_event_t ev = (ggml_metal_event_t)event->context;
-@@ -786,7 +796,7 @@ static void ggml_backend_metal_device_event_free(ggml_backend_dev_t dev, ggml_ba
+@@ -787,7 +797,7 @@ static void ggml_backend_metal_device_event_free(ggml_backend_dev_t dev, ggml_ba
      delete event;
  }
  
@@ -472,7 +472,7 @@ diff --git a/ggml/src/ggml-metal/ggml-metal.cpp b/ggml/src/ggml-metal/ggml-metal
      ggml_metal_device_t ctx_dev = (ggml_metal_device_t)dev->context;
  
      ggml_metal_event_t evt = (ggml_metal_event_t)event->context;
-@@ -838,18 +848,18 @@ struct ggml_backend_metal_reg_deleter {
+@@ -839,18 +849,18 @@ struct ggml_backend_metal_reg_deleter {
  
  typedef std::unique_ptr<struct ggml_backend_metal_reg, ggml_backend_metal_reg_deleter> ggml_backend_metal_reg_ptr;
  
@@ -494,7 +494,7 @@ diff --git a/ggml/src/ggml-metal/ggml-metal.cpp b/ggml/src/ggml-metal/ggml-metal
      ggml_backend_metal_reg_t ctx = (ggml_backend_metal_reg_t)reg->context;
      GGML_ASSERT(index < ctx->devices.size());
      return ctx->devices[index];
-@@ -862,13 +872,13 @@ static ggml_backend_feature g_ggml_backend_metal_features[] = {
+@@ -863,13 +873,13 @@ static ggml_backend_feature g_ggml_backend_metal_features[] = {
      { NULL, NULL },
  };
  

@@ -1,7 +1,7 @@
 diff --git a/ggml/src/ggml-cuda/convert.cu b/ggml/src/ggml-cuda/convert.cu
 --- a/llama.cpp/ggml/src/ggml-cuda/convert.cu
 +++ b/llama.cpp/ggml/src/ggml-cuda/convert.cu
-@@ -479,6 +479,7 @@ to_bf16_cuda_t ggml_get_to_bf16_cuda(ggml_type type) {
+@@ -481,6 +481,7 @@ to_bf16_cuda_t ggml_get_to_bf16_cuda(ggml_type type) {
              return dequantize_row_q5_K_cuda;
          case GGML_TYPE_Q6_K:
              return dequantize_row_q6_K_cuda;
@@ -9,7 +9,7 @@ diff --git a/ggml/src/ggml-cuda/convert.cu b/ggml/src/ggml-cuda/convert.cu
          case GGML_TYPE_IQ2_XXS:
              return dequantize_row_iq2_xxs_cuda;
          case GGML_TYPE_IQ2_XS:
-@@ -497,6 +498,7 @@ to_bf16_cuda_t ggml_get_to_bf16_cuda(ggml_type type) {
+@@ -499,6 +500,7 @@ to_bf16_cuda_t ggml_get_to_bf16_cuda(ggml_type type) {
              return dequantize_row_iq4_xs_cuda;
          case GGML_TYPE_IQ3_S:
              return dequantize_row_iq3_s_cuda;
@@ -17,7 +17,7 @@ diff --git a/ggml/src/ggml-cuda/convert.cu b/ggml/src/ggml-cuda/convert.cu
          case GGML_TYPE_MXFP4:
              return dequantize_row_mxfp4_cuda;
          case GGML_TYPE_NVFP4:
-@@ -537,6 +539,7 @@ to_fp16_cuda_t ggml_get_to_fp16_cuda(ggml_type type) {
+@@ -541,6 +543,7 @@ to_fp16_cuda_t ggml_get_to_fp16_cuda(ggml_type type) {
              return dequantize_row_q5_K_cuda;
          case GGML_TYPE_Q6_K:
              return dequantize_row_q6_K_cuda;
@@ -25,7 +25,7 @@ diff --git a/ggml/src/ggml-cuda/convert.cu b/ggml/src/ggml-cuda/convert.cu
          case GGML_TYPE_IQ2_XXS:
              return dequantize_row_iq2_xxs_cuda;
          case GGML_TYPE_IQ2_XS:
-@@ -555,6 +558,7 @@ to_fp16_cuda_t ggml_get_to_fp16_cuda(ggml_type type) {
+@@ -559,6 +562,7 @@ to_fp16_cuda_t ggml_get_to_fp16_cuda(ggml_type type) {
              return dequantize_row_iq4_xs_cuda;
          case GGML_TYPE_IQ3_S:
              return dequantize_row_iq3_s_cuda;
