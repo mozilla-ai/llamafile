@@ -86,7 +86,7 @@ Cosmopolitan libc has specific behaviors with condition variables and signals th
 |-------|-------------|
 | `common_log.cpp.patch` | Adds `#include <csignal>`; blocks `SIGINT`/`SIGTERM` on logger thread via `pthread_sigmask` to prevent `EINTR` exceptions; replaces `cv.wait()` with `wait_for(30s)` loop to work around XNU futex timeout bug (~72 minute expiry) |
 | `tools_server_server-models.cpp.patch` | Adds `#include <csignal>`; blocks signals on the stopping thread via `pthread_sigmask`; replaces untimed `cv.wait()` with `wait_for(30s)` loops on every model-lifecycle wait (`unload_lru`, the reload-drain wait, `stopping_thread`, the `is_reloading` guard in `load`, and the generic `wait()` predicate helper) to work around the XNU futex timeout bug |
-| `tools_server_server-queue.cpp.patch` | Adds missing includes (`<cerrno>`, `<system_error>`, `<csignal>`); blocks `SIGINT`/`SIGTERM` on queue thread (the `yield_to_queue` worker thread is spawned after this, so it inherits the mask); replaces `wait()` with `wait_for(30s)` loops in five locations (`wait_until_no_sleep`, main loop, `recv`, plus `worker_loop` and `yield_to_queue`, both new upstream in b10441) |
+| `tools_server_server-queue.cpp.patch` | Adds missing includes (`<cerrno>`, `<system_error>`, `<csignal>`); blocks `SIGINT`/`SIGTERM` on queue thread (the `yield_to_queue` worker thread is spawned after this, so it inherits the mask); replaces `wait()` with `wait_for(30s)` loops in five locations (`wait_until_no_sleep`, main loop, `recv`, plus `worker_loop` and `yield_to_queue`, both new upstream in b10441); runs `yield_to_queue()` inline when a GPU backend is loaded (see "GPU decode must stay on the main thread" below) |
 | `vendor_cpp-httplib_httplib.cpp.patch` | Fixes httplib thread pool with `wait_for()` instead of `wait()` for XNU futex compatibility; also see HTTPS / TLS Support below |
 
 ### HTTPS / TLS Support
@@ -166,6 +166,35 @@ These patches integrate llamafile's file handling APIs for loading models from b
 | Patch | Description |
 |-------|-------------|
 | `tools_server_server.cpp.patch` | Renames upstream's `llama_server()` to `server_main()` and adds `on_ready`/`on_shutdown_available` callbacks for combined TUI+server mode; adds Metal/GPU backend trigger before `common_init()`; installs the sandbox (`llamafile_sandbox_server()`, issue #930) — the mechanism lives in `llamafile/sandbox.c`; the patch fills a `llamafile_sandbox_spec` with the on-disk paths the loader opens after the lock (model, mmproj, media dir, LoRA, draft model, control vectors, public path as read; slot-save and prompt cache as read-write), detects outbound-needing features (`--rpc` via argv/env, MCP proxy, server tools) to relax `anet`→`inet`, passes `FLAG_confine_reads` for opt-in unveil(), quiesces the log worker (`common_log_pause`/`resume`, so no thread escapes the per-thread filter) around the call, before the HTTP listener spawns and before model load, and skips it in combined/GPU modes; adds Cosmopolitan-specific standalone `main()` with `cosmo_args`, verbose flag handling, `--unsecure` consumption (`llamafile_consume_flag`), and GPU pre-initialization; handles `LLAMAFILE_TUI` exit to avoid Metal cleanup crashes |
+
+**GPU decode must stay on the main thread** (`tools_server_server-queue.cpp.patch`).
+b10441 moved `llama_decode()` off the main thread: `update_slots()` now hands
+each batch to `queue_tasks.yield_to_queue()`, which runs it on a worker thread
+created in `start_loop()`. Under Cosmopolitan that is fatal for every GPU
+backend, because they are host ELFs loaded with `cosmo_dlopen()` and their libc
+reaches thread-local state through `%fs`:
+
+| thread | `fs_base` | `gs_base` | `*(fs+0x10)` (glibc TCB `self`) |
+|--------|-----------|-----------|-------------------------------|
+| main (created by the host) | `0x7ffff7e54740` | `0x7ffff7ff8000` | valid, points to itself |
+| cosmo-spawned worker | `0x7fffe83ca880` | *same as fs* | `0` |
+
+Cosmo gives its own threads cosmo TLS in **both** `%fs` and `%gs`; there is no
+glibc TCB. `cosmo_dlopen`'s `foreign_tramp` does swap in a host TLS block
+(`__foreign`, set up once via `cosmo_once`), but only for pointers obtained
+through `cosmo_dlsym` — ggml's `ggml_backend_i` vtable holds raw DSO pointers
+that ggml core calls directly. So the first CUDA decode on the worker lands in
+host `pthread_getspecific`, which reads `%fs:0x10` as the TCB self-pointer, gets
+`0`, and segfaults at `0x328` (verified on an L40S: deterministic, any model
+size, `dmesg` shows `segfault at 328 ... in libc.so.6`).
+
+The patch therefore runs the work inline on the calling thread whenever
+`llamafile_has_gpu()` — restoring exactly where decode ran before b10441.
+CPU-only runs keep upstream's worker. The cost is narrow: the yield wraps a
+single `llama_decode(batch_view)`, and only `SERVER_TASK_TYPE_METRICS` is
+serviced during it, so the sole effect is that `/metrics` and `/slots` wait for
+the in-flight batch (~29 ms while generating; up to a few seconds for a full
+prompt batch). This will recur whenever upstream moves work onto a new thread.
 
 **Subprocess support needs `-DLLAMA_SUBPROCESS`** (set in `BUILD.mk`, not a
 patch). b10441 moved child-process spawning into `common_subproc`
