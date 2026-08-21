@@ -65,6 +65,7 @@ LLAMA_SRCS_CPP := \
 	llama.cpp/src/models/bloom.cpp \
 	llama.cpp/src/models/chameleon.cpp \
 	llama.cpp/src/models/chatglm.cpp \
+	llama.cpp/src/models/clip.cpp \
 	llama.cpp/src/models/codeshell.cpp \
 	llama.cpp/src/models/cogvlm.cpp \
 	llama.cpp/src/models/cohere2.cpp \
@@ -104,6 +105,7 @@ LLAMA_SRCS_CPP := \
 	llama.cpp/src/models/gptneox.cpp \
 	llama.cpp/src/models/granite-hybrid.cpp \
 	llama.cpp/src/models/granite-moe.cpp \
+	llama.cpp/src/models/granite-switch.cpp \
 	llama.cpp/src/models/granite.cpp \
 	llama.cpp/src/models/mamba-base.cpp \
 	llama.cpp/src/models/grok.cpp \
@@ -134,11 +136,15 @@ LLAMA_SRCS_CPP := \
 	llama.cpp/src/models/mimo2.cpp \
 	llama.cpp/src/models/minicpm.cpp \
 	llama.cpp/src/models/minicpm3.cpp \
+	llama.cpp/src/models/minimax-01.cpp \
 	llama.cpp/src/models/minimax-m2.cpp \
+	llama.cpp/src/models/minimax-m3.cpp \
 	llama.cpp/src/models/mistral3.cpp \
 	llama.cpp/src/models/mistral4.cpp \
 	llama.cpp/src/models/modern-bert.cpp \
 	llama.cpp/src/models/mpt.cpp \
+	llama.cpp/src/models/muse-glimmer.cpp \
+	llama.cpp/src/models/nanbeige.cpp \
 	llama.cpp/src/models/nemotron-h-moe.cpp \
 	llama.cpp/src/models/nemotron-h.cpp \
 	llama.cpp/src/models/nemotron.cpp \
@@ -160,6 +166,7 @@ LLAMA_SRCS_CPP := \
 	llama.cpp/src/models/plamo2.cpp \
 	llama.cpp/src/models/plamo3.cpp \
 	llama.cpp/src/models/plm.cpp \
+	llama.cpp/src/models/pockettts.cpp \
 	llama.cpp/src/models/qwen.cpp \
 	llama.cpp/src/models/qwen2.cpp \
 	llama.cpp/src/models/qwen2moe.cpp \
@@ -167,6 +174,7 @@ LLAMA_SRCS_CPP := \
 	llama.cpp/src/models/qwen3.cpp \
 	llama.cpp/src/models/qwen3moe.cpp \
 	llama.cpp/src/models/qwen3next.cpp \
+	llama.cpp/src/models/qwen3tts.cpp \
 	llama.cpp/src/models/qwen35.cpp \
 	llama.cpp/src/models/qwen35moe.cpp \
 	llama.cpp/src/models/qwen3vl.cpp \
@@ -204,6 +212,7 @@ LLAMA_SRCS_CPP := \
 	llama.cpp/src/llama-kv-cache-dsa.cpp \
 	llama.cpp/src/llama-kv-cache-dsv4.cpp \
 	llama.cpp/src/llama-kv-cache-iswa.cpp \
+	llama.cpp/src/llama-kv-cache-msa.cpp \
 	llama.cpp/src/llama-kv-cache.cpp \
 	llama.cpp/src/llama-memory-hybrid.cpp \
 	llama.cpp/src/llama-memory-hybrid-iswa.cpp \
@@ -257,6 +266,8 @@ COMMON_SRCS_CPP := \
 	llama.cpp/common/reasoning-budget.cpp \
 	llama.cpp/common/sampling.cpp \
 	llama.cpp/common/speculative.cpp \
+	llama.cpp/common/subproc.cpp \
+	llama.cpp/common/trie.cpp \
 	llama.cpp/common/unicode.cpp
 
 # Build info generation
@@ -308,6 +319,7 @@ MTMD_SRCS_CPP := \
 	llama.cpp/tools/mtmd/clip.cpp \
 	llama.cpp/tools/mtmd/mtmd.cpp \
 	llama.cpp/tools/mtmd/mtmd-helper.cpp \
+	llama.cpp/tools/mtmd/mtmd-helper-gen.cpp \
 	llama.cpp/tools/mtmd/mtmd-audio.cpp \
 	llama.cpp/tools/mtmd/mtmd-image.cpp \
 	llama.cpp/tools/mtmd/models/cogvlm.cpp \
@@ -329,14 +341,23 @@ MTMD_SRCS_CPP := \
 	llama.cpp/tools/mtmd/models/kimivl.cpp \
 	llama.cpp/tools/mtmd/models/llama4.cpp \
 	llama.cpp/tools/mtmd/models/llava.cpp \
+	llama.cpp/tools/mtmd/models/mimo-audio.cpp \
 	llama.cpp/tools/mtmd/models/mimovl.cpp \
 	llama.cpp/tools/mtmd/models/minicpmv.cpp \
+	llama.cpp/tools/mtmd/models/minimax-m3.cpp \
 	llama.cpp/tools/mtmd/models/mobilenetv5.cpp \
+	llama.cpp/tools/mtmd/models/muse-glimmer.cpp \
 	llama.cpp/tools/mtmd/models/nemotron-v2-vl.cpp \
 	llama.cpp/tools/mtmd/models/paddleocr.cpp \
+	llama.cpp/tools/mtmd/models/parakeet.cpp \
 	llama.cpp/tools/mtmd/models/pixtral.cpp \
+	llama.cpp/tools/mtmd/models/pockettts-gen.cpp \
+	llama.cpp/tools/mtmd/models/pockettts-seanet.cpp \
+	llama.cpp/tools/mtmd/models/pockettts-spkenc.cpp \
 	llama.cpp/tools/mtmd/models/qwen2vl.cpp \
 	llama.cpp/tools/mtmd/models/qwen3a.cpp \
+	llama.cpp/tools/mtmd/models/qwen3tts-gen.cpp \
+	llama.cpp/tools/mtmd/models/qwen3tts-spkenc.cpp \
 	llama.cpp/tools/mtmd/models/qwen3vl.cpp \
 	llama.cpp/tools/mtmd/models/siglip.cpp \
 	llama.cpp/tools/mtmd/models/step3vl.cpp \
@@ -420,6 +441,7 @@ TOOL_SERVER_SRCS := \
 	llama.cpp/tools/server/server-common.cpp \
 	llama.cpp/tools/server/server-context.cpp \
 	llama.cpp/tools/server/server-http.cpp \
+	llama.cpp/tools/server/server-mcp.cpp \
 	llama.cpp/tools/server/server-models.cpp \
 	llama.cpp/tools/server/server-queue.cpp \
 	llama.cpp/tools/server/server-schema.cpp \
@@ -511,6 +533,15 @@ $(LLAMA_CPP_OBJS) $(TOOL_SERVER_OBJS): private CCFLAGS += \
 
 # Common library needs httplib support
 $(COMMON_OBJS): private CCFLAGS += -DLLAMA_USE_HTTPLIB
+
+# Subprocess spawning (common/subproc.*, wrapping vendored
+# sheredom/subprocess.h). Gates MCP stdio servers, --server-tools, and router
+# mode; b10441 added the gate, before which server-models.cpp used
+# subprocess.h unconditionally. Upstream's CMake defaults it ON except on
+# iOS/Android/WASM. The macro switches subprocess_s between its real and dummy
+# definition in common/subproc.h, so every object reaching that header must
+# agree on it.
+$(LLAMA_CPP_OBJS) $(TOOL_SERVER_OBJS): private CPPFLAGS += -DLLAMA_SUBPROCESS
 
 # Optimization flags for specific components
 $(LLAMA_OBJS) $(COMMON_OBJS): private CCFLAGS += -DNDEBUG

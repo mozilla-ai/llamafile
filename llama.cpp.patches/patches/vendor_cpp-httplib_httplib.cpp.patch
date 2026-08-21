@@ -1,7 +1,7 @@
 diff --git a/vendor/cpp-httplib/httplib.cpp b/vendor/cpp-httplib/httplib.cpp
 --- a/llama.cpp/vendor/cpp-httplib/httplib.cpp
 +++ b/llama.cpp/vendor/cpp-httplib/httplib.cpp
-@@ -6416,6 +6416,22 @@ void ThreadPool::cleanup_finished_threads() {
+@@ -6847,6 +6847,22 @@ void ThreadPool::cleanup_finished_threads() {
  }
  
  void ThreadPool::worker(bool is_dynamic) {
@@ -24,7 +24,7 @@ diff --git a/vendor/cpp-httplib/httplib.cpp b/vendor/cpp-httplib/httplib.cpp
    for (;;) {
      std::function<void()> fn;
      {
-@@ -6433,7 +6449,13 @@ void ThreadPool::worker(bool is_dynamic) {
+@@ -6864,7 +6880,13 @@ void ThreadPool::worker(bool is_dynamic) {
            break;
          }
        } else {
@@ -39,7 +39,7 @@ diff --git a/vendor/cpp-httplib/httplib.cpp b/vendor/cpp-httplib/httplib.cpp
        }
  
        idle_thread_count_--;
-@@ -12733,6 +12755,13 @@ bool enumerate_macos_keychain_certs(Callback cb) {
+@@ -13151,6 +13173,13 @@ bool enumerate_macos_keychain_certs(Callback cb) {
  
  #if !defined(_WIN32) && !(defined(__APPLE__) &&                                \
                            defined(CPPHTTPLIB_USE_CERTS_FROM_MACOSX_KEYCHAIN))
@@ -53,7 +53,7 @@ diff --git a/vendor/cpp-httplib/httplib.cpp b/vendor/cpp-httplib/httplib.cpp
  // Common CA certificate file paths on Linux/Unix
  const char **system_ca_paths() {
    static const char *paths[] = {
-@@ -12750,6 +12779,10 @@ const char **system_ca_dirs() {
+@@ -13168,6 +13197,10 @@ const char **system_ca_dirs() {
    static const char *dirs[] = {"/etc/ssl/certs",             // Debian/Ubuntu
                                 "/etc/pki/tls/certs",         // RHEL/CentOS
                                 "/usr/share/ca-certificates", // Other

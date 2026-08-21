@@ -7,7 +7,6 @@ TESTS=(
     "Bonsai-1.7B.llamafile;not thinking and not multimodal"
     "Bonsai-4B.llamafile;not thinking and not multimodal and not tool_calling"  # upstream llama.cpp peg-native parser fails to convert <tool_call> output to tool_calls for this model
     "Bonsai-8B.llamafile;not thinking and not multimodal"
-    "LFM2-24B-A2B-Q5_K_M.llamafile;not thinking and not multimodal"
     "Ministral-3-3B-Instruct-2512-BF16.llamafile;not thinking"
     "Ministral-3-3B-Instruct-2512-Q4_K_M.llamafile;not thinking"
     "Qwen3.5-0.8B-Q8_0.llamafile;not thinking"
@@ -15,6 +14,7 @@ TESTS=(
     "Qwen3.5-4B-Q5_K_S.llamafile;not thinking"
     "Qwen3.5-9B-Q5_K_S.llamafile;"
     "Qwen3.6-27B-Q4_K_M.llamafile;not cpu"
+    "Qwen3.8-27B-UD-Q4_K_XL.llamafile;not cpu"
     "gemma-4-E2B-it-Q5_K_M.llamafile;"
     "gemma-4-E4B-it-Q5_K_M.llamafile;"
     "gemma-4-26B-A4B-it-MXFP4_MOE.llamafile;not cpu"
@@ -27,15 +27,18 @@ TESTS=(
     "gpt-oss-20b-mxfp4.llamafile;not cpu and not multimodal and not thinking and not determinism"
     "llava-v1.6-mistral-7b-Q4_K_M.llamafile;not thinking and not tool_calling"
     "llava-v1.6-mistral-7b-Q8_0.llamafile;not thinking and not tool_calling"
+    "Laguna-S-2.1-UD-Q2_K_XL.llamafile;not thinking and not multimodal and not cpu"
+    "Muse-Glimmer-30B-UD-Q4_K_XL.llamafile;not cpu"
 )
 
 LLAMAFILE_EXE=~/llamafile/o/llamafile/llamafile
 RUNNER=~/llamafile/tests/integration/run_tests.sh
 MODELS_DIR=~/llamafiles
+GGUFS_DIR=~/ggufs
 
 # Model used for the ssl serving tests (any small .gguf works; content is irrelevant).
 # Override via SSL_TEST_MODEL env var if you have a different one available.
-SSL_TEST_MODEL="${SSL_TEST_MODEL:-${MODELS_DIR}/Qwen3.5-0.8B-Q8_0.gguf}"
+SSL_TEST_MODEL="${SSL_TEST_MODEL:-${GGUFS_DIR}/Qwen3.5-0.8B-Q8_0.gguf}"
 
 for entry in "${TESTS[@]}"; do
     model="${entry%%;*}"

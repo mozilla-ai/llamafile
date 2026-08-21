@@ -44,7 +44,7 @@ diff --git a/tools/server/server.cpp b/tools/server/server.cpp
  void llama_server_terminate();
  void llama_server_terminate() {
      if (shutdown_handler) {
-@@ -86,11 +106,23 @@ static server_http_context::handler_t ex_wrapper(server_http_context::handler_t
+@@ -86,6 +106,14 @@ static server_http_context::handler_t ex_wrapper(server_http_context::handler_t
  }
  
  int llama_server(int argc, char ** argv) {
@@ -58,6 +58,8 @@ diff --git a/tools/server/server.cpp b/tools/server/server.cpp
 +                std::function<void(std::function<void()>)> on_shutdown_available) {
      std::setlocale(LC_NUMERIC, "C");
  
+ #ifndef _WIN32
+@@ -96,6 +124,10 @@ int llama_server(int argc, char ** argv) {
      // own arguments required by this example
      common_params params;
  
@@ -68,7 +70,7 @@ diff --git a/tools/server/server.cpp b/tools/server/server.cpp
      common_init();
  
      // start the stream session manager GC right after common init, before any HTTP route can
-@@ -104,10 +136,12 @@ int llama_server(int argc, char ** argv) {
+@@ -109,10 +141,12 @@ int llama_server(int argc, char ** argv) {
      llama_backend_init();
      llama_numa_init(params.numa);
  
@@ -83,7 +85,7 @@ diff --git a/tools/server/server.cpp b/tools/server/server.cpp
      bool is_run_by_cli = (argv == nullptr);
  
      common_models_handler models_handler;
-@@ -415,6 +449,92 @@ int llama_server(common_params & params, int argc, char ** argv) {
+@@ -435,6 +469,92 @@ int llama_server(common_params & params, int argc, char ** argv) {
              llama_backend_free();
          };
  
@@ -176,7 +178,7 @@ diff --git a/tools/server/server.cpp b/tools/server/server.cpp
          // start the HTTP server before loading the model to be able to serve /health requests
          if (!ctx_http.start()) {
              clean_up();
-@@ -447,6 +567,13 @@ int llama_server(common_params & params, int argc, char ** argv) {
+@@ -468,6 +588,13 @@ int llama_server(common_params & params, int argc, char ** argv) {
              // this will unblock start_loop()
              ctx_server.terminate();
          };
@@ -190,7 +192,7 @@ diff --git a/tools/server/server.cpp b/tools/server/server.cpp
      }
  
      // register signal handler if not running by CLI
-@@ -481,6 +608,11 @@ int llama_server(common_params & params, int argc, char ** argv) {
+@@ -509,6 +636,11 @@ int llama_server(common_params & params, int argc, char ** argv) {
          // when the HTTP server stops, clean up and exit
          clean_up();
      } else {
@@ -202,7 +204,7 @@ diff --git a/tools/server/server.cpp b/tools/server/server.cpp
          // optionally, notify router server that this instance is ready
          std::thread monitor_thread;
          if (child.is_child()) {
-@@ -505,5 +637,56 @@ int llama_server(common_params & params, int argc, char ** argv) {
+@@ -533,5 +665,56 @@ int llama_server(common_params & params, int argc, char ** argv) {
          }
      }
  
