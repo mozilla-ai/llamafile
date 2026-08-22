@@ -123,7 +123,8 @@ static struct llamafile *llamafile_open_zip(const char *prog, const char *fname,
                 (long)kZipCdir64HdrMinSize &&
             ZIP_READ32(bufdata) == kZipCdir64HdrMagic &&
             ZIP_CDIR64_RECORDS(bufdata) == ZIP_CDIR64_RECORDSONDISK(bufdata) &&
-            ZIP_CDIR64_RECORDS(bufdata) && ZIP_CDIR64_SIZE(bufdata) > 0 &&
+            ZIP_CDIR64_RECORDS(bufdata) &&
+            ZIP_CDIR64_SIZE(bufdata) >= kZipCfileHdrMinSize &&
             ZIP_CDIR64_SIZE(bufdata) <= INT_MAX) {
             cnt = ZIP_CDIR64_RECORDS(bufdata);
             off = ZIP_CDIR64_OFFSET(bufdata);
