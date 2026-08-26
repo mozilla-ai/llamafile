@@ -176,6 +176,10 @@ wrapper.
 
 `-np, --parallel` in server mode controls the number of server slots rather than the number of parallel decode sequences.
 
+See [Built-in local tools](built-in-tools.md) for the tools enabled by
+`--tools`, their parameters and limits, and their interaction with llamafile's
+sandbox.
+
 The Web UI is inherited from llama.cpp and may refer to its upstream server
 executable as `llama-server`. In those instructions, use the name of the
 llamafile executable instead. For example, `llama-server --tools all` becomes
