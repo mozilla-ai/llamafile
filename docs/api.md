@@ -1,18 +1,8 @@
 # API server
 
-When llamafile runs in server mode, it exposes the HTTP APIs inherited from
+When llamafile runs in [server mode](running_llamafile#running-llamafile-in-server-mode), it exposes the HTTP APIs inherited from
 `llama-server`, llama.cpp's server component. The default base address is
 `http://127.0.0.1:8080`.
-
-```sh
-llamafile -m model.gguf --server
-```
-
-A model-bundled llamafile can be started directly:
-
-```sh
-./ModelName.llamafile --server
-```
 
 The server provides:
 
