@@ -18,7 +18,7 @@ release and can change between releases.
 
 ## Address and authentication
 
-Use `--host` and `--port` to change the listening address. `--api-prefix`
+Use `--host` and `--port` to change the listening address and port. `--api-prefix`
 prepends a path to every endpoint. For example, `--api-prefix /llama` changes
 `/v1/chat/completions` to `/llama/v1/chat/completions`.
 
