@@ -12,7 +12,7 @@ The server provides:
 - An experimental internal endpoint for the bundled Web UI's
   [built-in tools](built-in-tools.md).
 
-Compatibility is practical rather than exact. The supported fields and
+Note that the supported fields and
 behavior come from the llama.cpp version bundled into a particular llamafile
 release and can change between releases.
 
