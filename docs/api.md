@@ -46,8 +46,7 @@ configured, omit the header.
 
 ### Chat Completions
 
-`POST /v1/chat/completions` accepts OpenAI-style chat messages and supports
-streaming with `"stream": true`:
+`POST /v1/chat/completions` accepts OpenAI-style chat messages, e.g.:
 
 ```sh
 curl http://127.0.0.1:8080/v1/chat/completions \
