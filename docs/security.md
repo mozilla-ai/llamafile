@@ -71,10 +71,10 @@ Two things to know before relying on it:
 
 llamafile logs a notice in each case:
 
-- **Outbound features** (`--rpc` for distributed inference, server-side
-  tools, the MCP proxy) legitimately need to `connect()` out, so the
-  networking promise is relaxed from `anet` to `inet` for them. Writes and
-  exec stay blocked.
+- **Outbound features** (`--rpc` for distributed inference,
+  [server-side tools](built-in-tools.md), the MCP proxy) legitimately need to
+  `connect()` out, so the networking promise is relaxed from `anet` to `inet`
+  for them. Writes and exec stay blocked.
 - **GPU mode gets no sandbox.** GPU backends are loaded dynamically and their
   drivers need device access (`ioctl`, `/dev/*`) that no promise set covers,
   so the sandbox is skipped whenever a GPU backend is loaded. **This is the
