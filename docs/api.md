@@ -1,6 +1,6 @@
 # API server
 
-When llamafile runs in [server mode](running_llamafile#running-llamafile-in-server-mode), it exposes the HTTP APIs inherited from
+When llamafile runs in [server mode](running_llamafile.md#running-llamafile-in-server-mode), it exposes the HTTP APIs inherited from
 `llama-server`, llama.cpp's server component. The default base address is
 `http://127.0.0.1:8080`.
 
@@ -12,15 +12,15 @@ The server provides:
 - An experimental internal endpoint for the bundled Web UI's
   [built-in tools](built-in-tools.md).
 
-Note that the supported fields and
-behavior come from the llama.cpp version bundled into a particular llamafile
-release and can change between releases.
+Note that the supported fields and behavior come from the llama.cpp version
+bundled into a particular llamafile release and can change between releases.
 
 ## Address and authentication
 
-Use `--host` and `--port` to change the listening address and port. `--api-prefix`
-prepends a path to every endpoint. For example, `--api-prefix /llama` changes
-`/v1/chat/completions` to `/llama/v1/chat/completions`.
+Use `--host` and `--port` to change the listening address and port.
+`--api-prefix` prepends a path to every endpoint. For example,
+`--api-prefix /llama` changes `/v1/chat/completions` to
+`/llama/v1/chat/completions`.
 
 Configure authentication with `--api-key` or `--api-key-file`. Protected
 requests accept either header:
@@ -38,9 +38,14 @@ The second form is also compatible with clients that send Anthropic's
 configured, omit the header.
 
 > [!WARNING]
-> CORS controls which browser origins can read responses. It is not
-> authentication. Keep the default loopback binding or configure an API key
-> before making the server reachable from another machine.
+> As a general rule, avoid making your server accessible to more clients than
+> you actually need. Start with the default host binding, which listens on
+> localhost only, and change it only if you need to access the server from
+> another machine. When you do this, configure `--api-key` or
+> `--api-key-file` so reachable clients still need authentication.
+>
+> CORS only affects which browser origins can read responses. It is not
+> authentication.
 
 ## OpenAI-compatible APIs
 
@@ -60,9 +65,9 @@ curl http://127.0.0.1:8080/v1/chat/completions \
   }'
 ```
 
-The `model` value selects a model in router mode. With a single loaded model,
-clients commonly use a placeholder such as `local-model`. Set a stable model
-name with `--alias` when an application depends on it.
+The `model` field is required by the OpenAI-style schema even when only one
+model is loaded. Clients commonly use a placeholder such as `local-model`. Set
+`--alias` if you want a stable model name in requests and responses.
 
 OpenAI SDKs read their base URL and API key from environment variables:
 
@@ -85,9 +90,9 @@ print(response.choices[0].message.content)
 ```
 
 The SDK reads both variables automatically. It requires a non-empty API key
-value even when the llamafile server does not require authentication. Replace
-`no-key-required` with the configured llamafile API key when authentication is
-enabled.
+value even when the llamafile server does not require authentication. If you
+set an API key via the `--api-key` argument as described above, set it as your
+`OPENAI_API_KEY`.
 
 ### Responses
 
@@ -179,254 +184,23 @@ but they do not execute those functions. A client must run the agent loop:
 5. Return each result in the selected API's tool-result format.
 6. Call the model again and repeat until it returns a normal answer.
 
-Model-side tool calling requires Jinja and works best with a model whose chat
-template supports tools. Do not start the server with `--no-jinja`.
-`--tools` is needed only when the client will execute llama.cpp's
+`--tools` is needed only when the client will execute llama.cpp's enabled
 [built-in tools](built-in-tools.md) through `/tools`; client-defined functions
 do not require it.
 
-### Convert built-in tool definitions
+The three compatible APIs use different tool-call shapes:
 
-Each item returned by `GET /tools` contains an OpenAI Chat Completions
-`definition`. Convert it as follows:
+| API | Send tool definitions as | Requested call appears as | Return the result as |
+| --- | --- | --- | --- |
+| OpenAI Chat Completions | `tools` array with nested `function` objects | assistant `message.tool_calls[]` | next request message with `role: "tool"` and the matching `tool_call_id` |
+| OpenAI Responses | `tools` array of function objects | `output[]` item with `type: "function_call"` | next request `input[]` item with `type: "function_call_output"` |
+| Anthropic Messages | `tools` array with `input_schema` | assistant content block with `type: "tool_use"` | next user message content block with `type: "tool_result"` |
 
-| API | Tool definition to send |
-| --- | --- |
-| Chat Completions | Use the complete `definition` object. |
-| Responses | Flatten `definition.function` into `{ "type": "function", "name": ..., "description": ..., "parameters": ... }`. |
-| Anthropic Messages | Use `{ "name": ..., "description": ..., "input_schema": definition.function.parameters }`. |
-
-The application's tool descriptions do not have to come from `/tools`.
-Client-side functions use the same schemas.
-
-### OpenAI Chat Completions format
-
-Send function definitions in the request's `tools` array:
-
-```json
-{
-  "model": "local-model",
-  "messages": [
-    {"role": "user", "content": "What is today in UTC?"}
-  ],
-  "tools": [
-    {
-      "type": "function",
-      "function": {
-        "name": "get_datetime",
-        "description": "Returns the current date and time in UTC",
-        "parameters": {
-          "type": "object",
-          "properties": {
-            "format": {"type": "string"}
-          }
-        }
-      }
-    }
-  ],
-  "tool_choice": "auto"
-}
-```
-
-A requested function appears in the assistant message:
-
-```json
-{
-  "finish_reason": "tool_calls",
-  "message": {
-    "role": "assistant",
-    "content": null,
-    "tool_calls": [
-      {
-        "id": "call_123",
-        "type": "function",
-        "function": {
-          "name": "get_datetime",
-          "arguments": "{\"format\":\"%Y-%m-%d\"}"
-        }
-      }
-    ]
-  }
-}
-```
-
-`function.arguments` is a JSON-encoded string. Parse and validate it before
-execution. Send the model another request containing the original messages,
-the complete assistant tool-call message, and the result with the matching ID:
-
-```json
-{
-  "role": "tool",
-  "tool_call_id": "call_123",
-  "content": "{\"result\":\"2026-08-26\"}"
-}
-```
-
-Supported `tool_choice` strings are `auto`, `none`, and `required`.
-`parallel_tool_calls` controls whether a compatible template can request more
-than one function at once. With `"stream": true`, call fragments arrive in
-`choices[].delta.tool_calls`; join the argument fragments before parsing them.
-
-### OpenAI Responses format
-
-Responses-style function definitions are not nested:
-
-```json
-{
-  "model": "local-model",
-  "input": "What is today in UTC?",
-  "tools": [
-    {
-      "type": "function",
-      "name": "get_datetime",
-      "description": "Returns the current date and time in UTC",
-      "parameters": {
-        "type": "object",
-        "properties": {
-          "format": {"type": "string"}
-        }
-      }
-    }
-  ],
-  "tool_choice": "auto"
-}
-```
-
-The response places a requested function in `output`:
-
-```json
-{
-  "type": "function_call",
-  "call_id": "call_123",
-  "name": "get_datetime",
-  "arguments": "{\"format\":\"%Y-%m-%d\"}",
-  "status": "completed"
-}
-```
-
-After execution, call `/v1/responses` again with the relevant history,
-function call, and output:
-
-```json
-{
-  "model": "local-model",
-  "input": [
-    {"role": "user", "content": "What is today in UTC?"},
-    {
-      "type": "function_call",
-      "call_id": "call_123",
-      "name": "get_datetime",
-      "arguments": "{\"format\":\"%Y-%m-%d\"}"
-    },
-    {
-      "type": "function_call_output",
-      "call_id": "call_123",
-      "output": "{\"result\":\"2026-08-26\"}"
-    }
-  ],
-  "tools": [
-    {
-      "type": "function",
-      "name": "get_datetime",
-      "description": "Returns the current date and time in UTC",
-      "parameters": {
-        "type": "object",
-        "properties": {"format": {"type": "string"}}
-      }
-    }
-  ]
-}
-```
-
-Only function tools are translated to Chat Completions. Unsupported
-non-function tool types are skipped.
-
-### Anthropic Messages format
-
-Anthropic-style definitions use `input_schema`:
-
-```json
-{
-  "model": "local-model",
-  "max_tokens": 512,
-  "messages": [
-    {"role": "user", "content": "What is today in UTC?"}
-  ],
-  "tools": [
-    {
-      "name": "get_datetime",
-      "description": "Returns the current date and time in UTC",
-      "input_schema": {
-        "type": "object",
-        "properties": {
-          "format": {"type": "string"}
-        }
-      }
-    }
-  ],
-  "tool_choice": {"type": "auto"}
-}
-```
-
-A requested function is a `tool_use` content block:
-
-```json
-{
-  "role": "assistant",
-  "content": [
-    {
-      "type": "tool_use",
-      "id": "call_123",
-      "name": "get_datetime",
-      "input": {"format": "%Y-%m-%d"}
-    }
-  ],
-  "stop_reason": "tool_use"
-}
-```
-
-Preserve that assistant message and append a user message containing the
-result with the matching ID:
-
-```json
-{
-  "role": "user",
-  "content": [
-    {
-      "type": "tool_result",
-      "tool_use_id": "call_123",
-      "content": "{\"result\":\"2026-08-26\"}"
-    }
-  ]
-}
-```
-
-Accepted tool-choice object types are `auto`, `any`, and `tool`. The current
-compatibility conversion treats both `any` and a named `tool` choice as
-requiring a tool call; it does not preserve a named-tool restriction.
-
-With `"stream": true`, tool use arrives through `content_block_start`,
-`content_block_delta` events containing `input_json_delta`, and
-`content_block_stop`. The following `message_delta` has a `stop_reason` of
-`tool_use`.
-
-### Execute a built-in tool
-
-To execute one of llama.cpp's enabled built-in tools, parse the model's call
-into this internal request:
-
-```sh
-curl http://127.0.0.1:8080/tools \
-  -H 'Content-Type: application/json' \
-  -d '{
-    "tool": "get_datetime",
-    "params": {"format": "%Y-%m-%d"}
-  }'
-```
-
-`POST /tools` is experimental and does not display the Web UI's permission
-prompt. See [Built-in local tools](built-in-tools.md#internal-tools-api) for
-its request, response, streaming, and security details.
+To execute one of llama.cpp's enabled built-in tools, call `POST /tools` with
+the tool name and arguments selected by the model. This internal endpoint is
+experimental and does not display the Web UI's permission prompt. See
+[Built-in local tools](built-in-tools.md) for tool discovery, security notes,
+and the current `/tools` interface.
 
 ## Native llama.cpp endpoints
 
@@ -449,10 +223,9 @@ or Anthropic schemas:
 | `GET /metrics` | Return Prometheus metrics when enabled with `--metrics`. |
 | `GET /tools`, `POST /tools` | List and invoke experimental built-in or MCP tools. |
 
-Router mode adds model loading, unloading, download, and event endpoints under
-`/models`. Consult the bundled server help and upstream server documentation
-before building automation around native or router APIs, which change more
-frequently than compatibility endpoints.
+Consult the bundled server help and upstream server documentation before
+building automation around native endpoints, which change more frequently than
+the compatibility endpoints.
 
 ## Errors
 
