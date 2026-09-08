@@ -430,10 +430,20 @@ $(UI_CPP_GEN) $(UI_H_GEN) &: $(UI_EMBED_TOOL) $(UI_ASSETS_INDEX_HTML)
 # ==============================================================================
 
 # Tool source files
-TOOL_QUANTIZE_SRCS := llama.cpp/tools/quantize/quantize.cpp
+# quantize, perplexity and llama-bench keep main() in a separate main.cpp
+# (upstream builds the rest of each tool as a reusable *-impl library), so that
+# file has to be listed too or the tool won't link. imatrix defines main() in
+# imatrix.cpp.
+TOOL_QUANTIZE_SRCS := \
+	llama.cpp/tools/quantize/quantize.cpp \
+	llama.cpp/tools/quantize/main.cpp
 TOOL_IMATRIX_SRCS := llama.cpp/tools/imatrix/imatrix.cpp
-TOOL_PERPLEXITY_SRCS := llama.cpp/tools/perplexity/perplexity.cpp
-TOOL_BENCH_SRCS := llama.cpp/tools/llama-bench/llama-bench.cpp
+TOOL_PERPLEXITY_SRCS := \
+	llama.cpp/tools/perplexity/perplexity.cpp \
+	llama.cpp/tools/perplexity/main.cpp
+TOOL_BENCH_SRCS := \
+	llama.cpp/tools/llama-bench/llama-bench.cpp \
+	llama.cpp/tools/llama-bench/main.cpp
 
 TOOL_SERVER_SRCS := \
 	llama.cpp/tools/server/server.cpp \
@@ -598,25 +608,59 @@ o/$(MODE)/llama.cpp/llama-bench/llama-bench \
 o/$(MODE)/llama.cpp/server/llama-server: \
 	private LDLIBS += -lpthread
 
+# Each tool needs an explicit link recipe. The generic `o/$(MODE)/%:
+# o/$(MODE)/%.o` rule in build/rules.mk cannot link them, because the object
+# lives at o/$(MODE)/llama.cpp/tools/<tool>/<tool>.cpp.o while the executable is
+# o/$(MODE)/llama.cpp/<tool>/<tool>, so the pattern never matches. Without a
+# recipe make treats the target as satisfied and reports "Nothing to be done",
+# which makes a missing binary look like a successful build.
+#
+# They link against the same support objects as llama-server, minus the
+# server-only ones, because llama.cpp.a itself pulls them in:
+#   - TOOL_LLAMAFILE_OBJS: src/llama-mmap.cpp and ggml/src/gguf.cpp call
+#     llamafile_open_gguf(), llamafile_read(), llamafile_ref(), ...
+#   - HTTPLIB_OBJS + mbedtls.a: common/download.cpp, common/hf-cache.cpp and
+#     common/license.cpp are built with -DLLAMA_USE_HTTPLIB.
+
 o/$(MODE)/llama.cpp/quantize/quantize: \
 	$(TOOL_QUANTIZE_OBJS) \
+	$(HTTPLIB_OBJS) \
+	$(TOOL_LLAMAFILE_OBJS) \
 	$$(TINYBLAS_CPU_OBJS) \
-	o/$(MODE)/llama.cpp/llama.cpp.a
+	o/$(MODE)/llama.cpp/llama.cpp.a \
+	o/$(MODE)/third_party/mbedtls/mbedtls.a
+	@mkdir -p $(dir $@)
+	$(LINK.o) $^ $(LOADLIBES) $(LDLIBS) -o $@
 
 o/$(MODE)/llama.cpp/imatrix/imatrix: \
 	$(TOOL_IMATRIX_OBJS) \
+	$(HTTPLIB_OBJS) \
+	$(TOOL_LLAMAFILE_OBJS) \
 	$$(TINYBLAS_CPU_OBJS) \
-	o/$(MODE)/llama.cpp/llama.cpp.a
+	o/$(MODE)/llama.cpp/llama.cpp.a \
+	o/$(MODE)/third_party/mbedtls/mbedtls.a
+	@mkdir -p $(dir $@)
+	$(LINK.o) $^ $(LOADLIBES) $(LDLIBS) -o $@
 
 o/$(MODE)/llama.cpp/perplexity/perplexity: \
 	$(TOOL_PERPLEXITY_OBJS) \
+	$(HTTPLIB_OBJS) \
+	$(TOOL_LLAMAFILE_OBJS) \
 	$$(TINYBLAS_CPU_OBJS) \
-	o/$(MODE)/llama.cpp/llama.cpp.a
+	o/$(MODE)/llama.cpp/llama.cpp.a \
+	o/$(MODE)/third_party/mbedtls/mbedtls.a
+	@mkdir -p $(dir $@)
+	$(LINK.o) $^ $(LOADLIBES) $(LDLIBS) -o $@
 
 o/$(MODE)/llama.cpp/llama-bench/llama-bench: \
 	$(TOOL_BENCH_OBJS) \
+	$(HTTPLIB_OBJS) \
+	$(TOOL_LLAMAFILE_OBJS) \
 	$$(TINYBLAS_CPU_OBJS) \
-	o/$(MODE)/llama.cpp/llama.cpp.a
+	o/$(MODE)/llama.cpp/llama.cpp.a \
+	o/$(MODE)/third_party/mbedtls/mbedtls.a
+	@mkdir -p $(dir $@)
+	$(LINK.o) $^ $(LOADLIBES) $(LDLIBS) -o $@
 
 o/$(MODE)/llama.cpp/server/llama-server: \
 	$(TOOL_SERVER_OBJS) \
