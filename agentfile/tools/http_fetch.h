@@ -45,10 +45,8 @@ struct HttpFetchTool : server_tool {
                 {"parameters", {
                     {"type", "object"},
                     {"properties", {
-                        {"url",     {{"type", "string"},
-                                     {"description", "HTTP or HTTPS URL to fetch"}}},
-                        {"headers", {{"type", "object"},
-                                     {"description", "Optional request headers as name->value map"}}},
+                        {"url", {{"type", "string"},
+                                 {"description", "HTTP or HTTPS URL to fetch"}}},
                     }},
                     {"required", json::array({"url"})},
                 }},
@@ -67,16 +65,7 @@ struct HttpFetchTool : server_tool {
             cli.set_read_timeout(kTimeoutSeconds, 0);
             cli.set_connection_timeout(kTimeoutSeconds, 0);
 
-            httplib::Headers req_headers;
-            if (params.contains("headers") && params.at("headers").is_object()) {
-                for (const auto &[k, v] : params.at("headers").items()) {
-                    if (v.is_string()) {
-                        req_headers.emplace(k, v.get<std::string>());
-                    }
-                }
-            }
-
-            auto res = cli.Get(parts.path, req_headers);
+            auto res = cli.Get(parts.path);
             if (!res) {
                 return {{"error", "request failed: " +
                                       httplib::to_string(res.error())}};
