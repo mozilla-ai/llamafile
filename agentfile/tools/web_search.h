@@ -25,7 +25,6 @@
 #include <cpp-httplib/httplib.h>
 #include "http.h"   // common_http_client, common_http_parse_url
 
-#include <cctype>
 #include <string>
 
 namespace agentfile {
@@ -33,8 +32,9 @@ namespace tools {
 
 struct WebSearchTool : server_tool {
     static constexpr int    kTimeoutSeconds = 30;
-    static constexpr size_t kMaxResults = 8;
-    static constexpr size_t kMaxSnippet = 400; // chars per result snippet
+    // Snippet clip is input sanitation only: SearXNG engines send ~160
+    // chars today, so this triggers only on unusual engines/instances.
+    static constexpr size_t kMaxSnippet = 512;
 
     std::string base_url; // e.g. "http://localhost:8888", no trailing slash
 
@@ -53,10 +53,10 @@ struct WebSearchTool : server_tool {
             {"function", {
                 {"name", name},
                 {"description",
-                 "Search the web via a SearXNG instance and return the top "
-                 "results as JSON (title, url, snippet). Use precise "
-                 "queries; fetch promising URLs with other tools if more "
-                 "detail is needed."},
+                 "Search the web via a SearXNG instance and return one page "
+                 "of results as JSON (title, url, snippet). Use precise "
+                 "queries; ask for the next page if the answer isn't there; "
+                 "fetch promising URLs with other tools for more detail."},
                 {"parameters", {
                     {"type", "object"},
                     {"properties", {
@@ -83,8 +83,8 @@ struct WebSearchTool : server_tool {
         }
         std::string query = params.at("query").get<std::string>();
 
-        std::string url =
-            base_url + "/search?format=json&q=" + url_encode(query);
+        std::string url = base_url + "/search?format=json&q=" +
+                          httplib::encode_query_component(query);
         int page = json_value(params, "page", 1);
         if (page > 1) url += "&pageno=" + std::to_string(page);
         std::string time_range = json_value(params, "time_range", std::string{});
@@ -93,7 +93,8 @@ struct WebSearchTool : server_tool {
             url += "&time_range=" + time_range;
         }
         std::string categories = json_value(params, "categories", std::string{});
-        if (!categories.empty()) url += "&categories=" + url_encode(categories);
+        if (!categories.empty())
+            url += "&categories=" + httplib::encode_query_component(categories);
 
         try {
             auto [cli, parts] = common_http_client(url);
@@ -122,9 +123,7 @@ struct WebSearchTool : server_tool {
 
             json body = json::parse(res->body);
             json results = json::array();
-            size_t total = 0;
             if (body.contains("results") && body["results"].is_array()) {
-                total = body["results"].size();
                 for (const auto &r : body["results"]) {
                     std::string snippet = r.value("content", "");
                     if (snippet.size() > kMaxSnippet) {
@@ -137,13 +136,11 @@ struct WebSearchTool : server_tool {
                         {"snippet", snippet},
                         {"engine", r.value("engine", "")},
                     });
-                    if (results.size() >= kMaxResults) break;
                 }
             }
             return {
                 {"query", query},
                 {"results", results},
-                {"total_available", total},
             };
         } catch (const json::exception &e) {
             return {{"error",
@@ -152,23 +149,6 @@ struct WebSearchTool : server_tool {
         } catch (const std::exception &e) {
             return {{"error", std::string("web_search failed: ") + e.what()}};
         }
-    }
-
-  private:
-    static std::string url_encode(const std::string &s) {
-        static const char hex[] = "0123456789ABCDEF";
-        std::string out;
-        out.reserve(s.size() * 3);
-        for (unsigned char c : s) {
-            if (isalnum(c) || c == '-' || c == '_' || c == '.' || c == '~') {
-                out += (char)c;
-            } else {
-                out += '%';
-                out += hex[c >> 4];
-                out += hex[c & 0xf];
-            }
-        }
-        return out;
     }
 };
 
