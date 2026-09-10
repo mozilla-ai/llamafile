@@ -1,0 +1,12 @@
+diff --git a/src/model.h b/src/model.h
+--- a/agent.cpp/src/model.h
++++ b/agent.cpp/src/model.h
+@@ -183,7 +183,7 @@ class Model
+ 
+     std::shared_ptr<ModelWeights> weights_;
+     llama_context* ctx_ = nullptr;
+-    llama_sampler* sampler_ = nullptr;
++    struct common_sampler* sampler_ = nullptr; // grammar-aware sampler
+     std::vector<llama_token> processed_tokens_; // Track tokens in KV cache
+     int n_past_ = 0;                            // Track position in KV cache
+     ModelConfig config_;
