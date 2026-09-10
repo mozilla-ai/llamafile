@@ -110,7 +110,25 @@ diff --git a/src/model.cpp b/src/model.cpp
  }
  
  std::vector<llama_token>
-@@ -266,6 +252,65 @@ Model::generate(const std::vector<common_chat_msg>& messages,
+@@ -234,6 +220,9 @@ parse_with_parser(const common_peg_arena& parser,
+     // (ggml-org/llama.cpp#18675). Without them tool calls stay as raw text.
+     syntax.generation_prompt = params.generation_prompt;
+     syntax.parse_tool_calls = true;
++    // llamafile: extract <think>...</think> into reasoning_content instead
++    // of leaving it inline in content (callers decide how to show it).
++    syntax.reasoning_format = COMMON_REASONING_FORMAT_AUTO;
+ 
+     try {
+         auto parsed_msg =
+@@ -262,10 +251,73 @@ Model::generate(const std::vector<common_chat_msg>& messages,
+     inputs.tool_choice = COMMON_CHAT_TOOL_CHOICE_AUTO;
+     inputs.add_generation_prompt = true;
+     inputs.enable_thinking = false;
++    // llamafile: build the template's parser with reasoning rules so any
++    // <think>...</think> the model emits anyway is extracted into
++    // reasoning_content (matching syntax.reasoning_format in the parse).
++    inputs.reasoning_format = COMMON_REASONING_FORMAT_AUTO;
+ 
      auto params =
        common_chat_templates_apply(weights_->get_templates(), inputs);
  
@@ -176,7 +194,7 @@ diff --git a/src/model.cpp b/src/model.cpp
      // Tokenize the prompt
      std::vector<llama_token> prompt_tokens = tokenize(params.prompt);
      if (prompt_tokens.empty()) {
-@@ -281,8 +326,66 @@ Model::generate(const std::vector<common_chat_msg>& messages,
+@@ -281,8 +333,66 @@ Model::generate(const std::vector<common_chat_msg>& messages,
          parser_source_ = params.parser;
      }
  
@@ -245,7 +263,7 @@ diff --git a/src/model.cpp b/src/model.cpp
  }
  
  common_chat_msg
-@@ -311,10 +414,16 @@ Model::generate_from_tokens(const std::vector<llama_token>& all_tokens,
+@@ -311,10 +421,16 @@ Model::generate_from_tokens(const std::vector<llama_token>& all_tokens,
          common_prefix++;
      }
  
@@ -264,7 +282,7 @@ diff --git a/src/model.cpp b/src/model.cpp
          processed_tokens_.resize(common_prefix);
          n_past_ = common_prefix;
      }
-@@ -343,15 +452,15 @@ Model::generate_from_tokens(const std::vector<llama_token>& all_tokens,
+@@ -343,15 +459,15 @@ Model::generate_from_tokens(const std::vector<llama_token>& all_tokens,
          i += batch_size;
      }
  
