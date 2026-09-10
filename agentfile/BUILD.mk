@@ -37,9 +37,19 @@ AGENTFILE_HDRS := $(wildcard agentfile/*.h) $(wildcard agentfile/tools/*.h)
 # container type changed).
 AGENTFILE_EXT_HDRS := \
 	$(wildcard agent.cpp/src/*.h) \
+	$(wildcard llama.cpp/tools/server/server-*.h) \
 	llama.cpp/vendor/cpp-httplib/httplib.h \
 	llama.cpp/common/http.h \
 	llama.cpp/common/chat.h
+
+# llama.cpp server-tools objects the adapter needs (tool implementations
+# plus the TUs providing their symbols; no server.cpp — that has main()).
+AGENTFILE_SERVER_OBJS := \
+	o/$(MODE)/llama.cpp/tools/server/server-tools.cpp.o \
+	o/$(MODE)/llama.cpp/tools/server/server-common.cpp.o \
+	o/$(MODE)/llama.cpp/tools/server/server-queue.cpp.o \
+	o/$(MODE)/llama.cpp/tools/server/server-mcp.cpp.o \
+	o/$(MODE)/llama.cpp/tools/server/server-http.cpp.o
 
 AGENTFILE_OBJS := $(AGENTFILE_SRCS_CPP:%.cpp=o/$(MODE)/%.o)
 
@@ -55,6 +65,8 @@ AGENTFILE_INCLUDES := \
 	-iquote llama.cpp/common \
 	-iquote llama.cpp/include \
 	-iquote llama.cpp/ggml/include \
+	-iquote llama.cpp/tools/server \
+	-iquote llama.cpp/tools/mtmd \
 	-isystem llama.cpp/vendor
 
 # ==============================================================================
@@ -93,12 +105,13 @@ o/$(MODE)/agentfile/agentfile: \
 		o/$(MODE)/agent.cpp/agent.cpp.a \
 		o/$(MODE)/llama.cpp/llama.cpp.a \
 		o/$(MODE)/third_party/mbedtls/mbedtls.a \
+		$(AGENTFILE_SERVER_OBJS) \
 		$(TOOL_LLAMAFILE_OBJS) \
 		$(LLAMAFILE_METAL_SOURCES) \
 		$(TINYBLAS_CPU_OBJS) \
 		$(HTTPLIB_OBJS)
 	@mkdir -p $(@D)
-	$(LINK.o) $(AGENTFILE_OBJS) o/$(MODE)/agent.cpp/agent.cpp.a $(TOOL_LLAMAFILE_OBJS) $(LLAMAFILE_METAL_SOURCES) $(TINYBLAS_CPU_OBJS) $(HTTPLIB_OBJS) o/$(MODE)/llama.cpp/llama.cpp.a o/$(MODE)/third_party/mbedtls/mbedtls.a $(LOADLIBES) $(LDLIBS) -fopenmp -lpthread -o $@
+	$(LINK.o) $(AGENTFILE_OBJS) o/$(MODE)/agent.cpp/agent.cpp.a $(AGENTFILE_SERVER_OBJS) $(TOOL_LLAMAFILE_OBJS) $(LLAMAFILE_METAL_SOURCES) $(TINYBLAS_CPU_OBJS) $(HTTPLIB_OBJS) o/$(MODE)/llama.cpp/llama.cpp.a o/$(MODE)/third_party/mbedtls/mbedtls.a $(LOADLIBES) $(LDLIBS) -fopenmp -lpthread -o $@
 
 # ==============================================================================
 # Dependencies

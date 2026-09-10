@@ -226,10 +226,22 @@ o//llamafile/zipalign -j0 my-agent model.gguf system.md
    to `llama_memory_clear` + full re-decode). All three are upstream PR
    candidates. Verified: tool-call grammar path, hybrid interactive,
    web_search live, session/trace, patch round-trip.
-7. **server-tools adapter**: `server_tool → agent_cpp::Tool` bridge;
-   migrate vendored tools to upstream implementations; rewrite web_search
-   as a `server_tool` subclass; wire `permission_write` into the
-   confirmation callback; evaluate `--tools-runtime` isolation.
+7. **server-tools adapter**: done (2026-09-10). `server_tools_adapter.h`
+   bridges llama.cpp's `server_tool` into `agent_cpp::Tool`
+   (`ServerToolAdapter` per tool + owning `ServerToolbox`); all eight
+   vendored tool copies deleted — implementations now come from
+   `llama.cpp/tools/server/server-tools.cpp` (gaining `get_info`,
+   losing `apply_diff`, which upstream doesn't have). http_fetch and
+   web_search rewritten as `server_tool` subclasses (upstream-shaped,
+   foldable into llama.cpp by file move). Confirmations now driven by
+   the tools' own `permission_write` metadata instead of a hardcoded
+   list. `--tools-runtime SPEC` plumbs the isolation spec in as
+   `params["runtime"]` — the same mechanism llama-server's handler uses
+   (flag wired; not yet tested against a live podman/docker isolate).
+   json boundary note: server tools speak `nlohmann::ordered_json`,
+   agent.cpp speaks `nlohmann::json`; the adapter converts via
+   dump/parse. Links five extra server TUs (tools, common, queue, mcp,
+   http); an empty `server_mcp` keeps MCP inert.
 8. **Ownership exercise** (pre-packaging, gates any push; decided
    2026-09-10). Four phases, each gating the next:
    - *Simplify with approved cuts*: full-tree pass (structure, naming,

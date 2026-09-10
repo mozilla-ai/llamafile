@@ -52,10 +52,10 @@
 #include "llamafile.h"
 
 #include "confirmation_callback.h"
+#include "server_tools_adapter.h"
 #include "session_recorder.h"
 #include "stdout_callback.h"
 #include "trace_callback.h"
-#include "tools/tools.h"
 
 #include <sstream>
 
@@ -84,11 +84,14 @@ void print_usage(const char *prog) {
             "  --tools LIST         Comma-separated tool list, or \"all\" (default),\n"
             "                       or \"read_only\". Available tools:\n"
             "                       read_file, file_glob_search, grep_search,\n"
-            "                       get_datetime, write_file, edit_file,\n"
-            "                       apply_diff, exec_shell_command, http_fetch,\n"
+            "                       get_datetime, get_info, write_file, edit_file,\n"
+            "                       exec_shell_command, http_fetch,\n"
             "                       web_search (needs --searxng-url)\n"
             "  --searxng-url URL    SearXNG instance for web_search; also read\n"
             "                       from the SEARXNG_URL environment variable\n"
+            "  --tools-runtime SPEC Run tools inside an isolate (llama.cpp\n"
+            "                       server-tools runtimes, e.g.\n"
+            "                       \"docker-container:ID\"); default: none\n"
             "  --session FILE       Record the conversation as a pi session\n"
             "                       (https://pi.dev, session-format v3 JSONL;\n"
             "                       overwrites FILE)\n"
@@ -147,22 +150,11 @@ std::string read_followup() {
     return line;
 }
 
-// Filter a tool vector by name list. Tools whose name is NOT in `keep` are
-// dropped. If `keep` is empty, all tools are kept.
-void filter_tools(std::vector<std::unique_ptr<agent_cpp::Tool>> &tools,
-                  const std::set<std::string> &keep) {
-    if (keep.empty()) return;
-    tools.erase(std::remove_if(tools.begin(), tools.end(),
-                               [&](const std::unique_ptr<agent_cpp::Tool> &t) {
-                                   return !keep.count(t->get_name());
-                               }),
-                tools.end());
-}
-
 std::set<std::string> parse_tools_flag(const std::string &spec) {
     if (spec == "all" || spec.empty()) return {};
     if (spec == "read_only") {
-        return {"read_file", "file_glob_search", "grep_search", "get_datetime"};
+        return {"read_file", "file_glob_search", "grep_search",
+                "get_datetime", "get_info"};
     }
     std::set<std::string> out;
     std::stringstream ss(spec);
@@ -198,6 +190,7 @@ int main(int argc, char **argv) {
     std::string session_path;
     std::string trace_path;
     std::string searxng_url;
+    std::string tools_runtime;
     if (const char *env = std::getenv("SEARXNG_URL")) searxng_url = env;
 
     // Parsing is strictly last-wins and every mode flag has an inverse, so
@@ -240,6 +233,8 @@ int main(int argc, char **argv) {
             tools_spec = need_value(i);
         } else if (std::strcmp(argv[i], "--searxng-url") == 0) {
             searxng_url = need_value(i);
+        } else if (std::strcmp(argv[i], "--tools-runtime") == 0) {
+            tools_runtime = need_value(i);
         } else if (std::strcmp(argv[i], "--session") == 0) {
             session_path = need_value(i);
         } else if (std::strcmp(argv[i], "--trace") == 0) {
@@ -306,11 +301,14 @@ int main(int argc, char **argv) {
         // --tools value fails fast. A requested tool that isn't registered
         // is an error, not a silently smaller toolset — the model would
         // otherwise improvise with whatever tools remain.
-        auto tools = agentfile::tools::build_default_tools(searxng_url);
+        //
+        // Tools come from llama.cpp's server-tools registry via
+        // ServerToolbox (plus agentfile's own http_fetch/web_search); the
+        // toolbox owns them and must outlive the Agent below.
+        agentfile::ServerToolbox toolbox(searxng_url, tools_runtime);
         auto keep = parse_tools_flag(tools_spec);
-        if (!keep.empty()) {
-            std::set<std::string> known;
-            for (const auto &t : tools) known.insert(t->get_name());
+        {
+            auto known = toolbox.tool_names();
             for (const auto &name : keep) {
                 if (known.count(name)) continue;
                 if (name == "web_search") {
@@ -325,7 +323,7 @@ int main(int argc, char **argv) {
                 return 1;
             }
         }
-        filter_tools(tools, keep);
+        auto tools = toolbox.make_adapters(keep);
 
         auto weights = agent_cpp::ModelWeights::create(model_path);
 
@@ -351,7 +349,7 @@ int main(int argc, char **argv) {
         }
         callbacks.emplace_back(
             std::make_unique<agentfile::DestructiveOpsConfirmationCallback>(
-                always_yes));
+                always_yes, toolbox.write_tool_names()));
         if (verbosity > 0) {
             callbacks.emplace_back(
                 std::make_unique<agentfile::ProgressCallback>(verbosity > 1));

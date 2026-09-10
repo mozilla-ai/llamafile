@@ -26,29 +26,18 @@ namespace agentfile {
 
 class DestructiveOpsConfirmationCallback : public agent_cpp::Callback {
     bool always_yes_;
-
-    static const std::set<std::string> &destructive() {
-        static const std::set<std::string> s{
-            "write_file",
-            "edit_file",
-            "apply_diff",
-            "exec_shell_command",
-            // Network tools grant the model network access (DNS leaks, can
-            // hit internal endpoints, may leak data in URLs). Confirmation
-            // by default; --yes bypasses.
-            "http_fetch",
-            "web_search",
-        };
-        return s;
-    }
+    // Tool names requiring confirmation. Comes from the tools' own
+    // permission_write metadata (writes, shell, network access).
+    std::set<std::string> destructive_;
 
   public:
-    explicit DestructiveOpsConfirmationCallback(bool always_yes)
-        : always_yes_(always_yes) {}
+    DestructiveOpsConfirmationCallback(bool always_yes,
+                                       std::set<std::string> destructive)
+        : always_yes_(always_yes), destructive_(std::move(destructive)) {}
 
     void before_tool_execution(std::string &tool_name,
                                std::string &arguments) override {
-        if (!destructive().count(tool_name)) return;
+        if (!destructive_.count(tool_name)) return;
         if (always_yes_) {
             std::fprintf(stderr, "[%s --yes] %s\n", tool_name.c_str(),
                          arguments.c_str());
