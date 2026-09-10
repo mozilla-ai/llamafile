@@ -213,15 +213,19 @@ o//llamafile/zipalign -j0 my-agent model.gguf system.md
    `.args`-friendly inverse. `--max-iterations` is now a per-turn budget
    (reset each run_loop). Verified under a pty: two turns, KV prefix
    reused, both turns in the session file.
-6. **agent.cpp sync to v0.4.0** + patch rebase (drop upstreamed half of
-   old 0001; keep fallback extractor + grammar sampler). Note: the patch
-   set was regenerated 2026-09-10 as per-file cumulative patches
-   (`src_model.{cpp,h}.patch`), now also containing the hybrid-model
-   rewind fix: `llama_memory_seq_rm` returns false on recurrent/hybrid
-   models (Qwen3.5 etc.), which agent.cpp ignored — interactive
-   follow-ups then decoded on inconsistent state ("failed to decode
-   batch"/crash). Fix falls back to `llama_memory_clear` + full
-   re-decode. Third upstream PR candidate.
+6. **agent.cpp sync to v0.4.0**: done (2026-09-10). Pin 7b75852 →
+   63d23da; upstream #22's PEG-parser work replaced the old patch-0001
+   loading half. Remaining local patches (per-file,
+   `src_model.{cpp,h}.patch`, ~300 lines): (a) common_sampler switch +
+   chat-template tool-call grammar (user GBNF rides along via
+   `COMMON_GRAMMAR_TYPE_USER`; caveat: `ModelConfig::grammar_root` is
+   ignored — grammars must use "root"); (b) parse-failure fallback +
+   heuristic `<tool_call>` recovery (upstream now throws ModelError,
+   which would kill the loop); (c) hybrid-model rewind fix
+   (`llama_memory_seq_rm` returns false on recurrent state → fall back
+   to `llama_memory_clear` + full re-decode). All three are upstream PR
+   candidates. Verified: tool-call grammar path, hybrid interactive,
+   web_search live, session/trace, patch round-trip.
 7. **server-tools adapter**: `server_tool → agent_cpp::Tool` bridge;
    migrate vendored tools to upstream implementations; rewrite web_search
    as a `server_tool` subclass; wire `permission_write` into the

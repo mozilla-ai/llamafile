@@ -1,16 +1,15 @@
 diff --git a/src/model.cpp b/src/model.cpp
 --- a/agent.cpp/src/model.cpp
 +++ b/agent.cpp/src/model.cpp
-@@ -1,6 +1,8 @@
+@@ -1,5 +1,7 @@
  #include "model.h"
  #include "chat.h"
++#include "sampling.h" // common_sampler (llamafile)
++#include <nlohmann/json.hpp> // heuristic tool-call recovery (llamafile)
  #include "error.h"
-+#include "sampling.h"  // common_sampler, common_sampler_*
-+#include <nlohmann/json.hpp>
  #include <algorithm>
  #include <cstdio>
- 
-@@ -58,7 +60,7 @@ Model::create_with_weights(std::shared_ptr<ModelWeights> weights,
+@@ -78,7 +80,7 @@ Model::create_with_weights(std::shared_ptr<ModelWeights> weights,
  Model::~Model()
  {
      if (sampler_ != nullptr) {
@@ -19,7 +18,22 @@ diff --git a/src/model.cpp b/src/model.cpp
      }
      if (ctx_ != nullptr) {
          llama_free(ctx_);
-@@ -84,7 +86,7 @@ Model::operator=(Model&& other) noexcept
+@@ -90,14 +92,12 @@ Model::Model(Model&& other) noexcept
+   : weights_(std::move(other.weights_))
+   , ctx_(other.ctx_)
+   , sampler_(other.sampler_)
+-  , grammar_sampler_(other.grammar_sampler_)
+   , processed_tokens_(std::move(other.processed_tokens_))
+   , n_past_(other.n_past_)
+   , config_(other.config_)
+ {
+     other.ctx_ = nullptr;
+     other.sampler_ = nullptr;
+-    other.grammar_sampler_ = nullptr;
+     other.n_past_ = 0;
+ }
+ 
+@@ -106,7 +106,7 @@ Model::operator=(Model&& other) noexcept
  {
      if (this != &other) {
          if (sampler_ != nullptr) {
@@ -28,11 +42,61 @@ diff --git a/src/model.cpp b/src/model.cpp
          }
          if (ctx_ != nullptr) {
              llama_free(ctx_);
-@@ -122,17 +124,19 @@ Model::initialize_context(const ModelConfig& model_config)
+@@ -115,14 +115,12 @@ Model::operator=(Model&& other) noexcept
+         weights_ = std::move(other.weights_);
+         ctx_ = other.ctx_;
+         sampler_ = other.sampler_;
+-        grammar_sampler_ = other.grammar_sampler_;
+         processed_tokens_ = std::move(other.processed_tokens_);
+         n_past_ = other.n_past_;
+         config_ = other.config_;
+ 
+         other.ctx_ = nullptr;
+         other.sampler_ = nullptr;
+-        other.grammar_sampler_ = nullptr;
+         other.n_past_ = 0;
+     }
+     return *this;
+@@ -146,36 +144,24 @@ Model::initialize_context(const ModelConfig& model_config)
          throw ModelError("failed to create llama context");
      }
  
 -    sampler_ = llama_sampler_chain_init(llama_sampler_chain_default_params());
+-
++    // llamafile: grammar-aware common_sampler instead of a raw chain. The
++    // user's GBNF grammar (if any) rides along; chat-template tool-call
++    // grammars re-init the sampler per generate() call. Note: common_grammar
++    // has no root-rule field, so the grammar's start rule must be "root"
++    // (ModelConfig::grammar_root is ignored).
++    common_params_sampling sp;
++    sp.temp  = model_config.temp;
++    sp.top_k = model_config.top_k;
++    sp.top_p = model_config.top_p;
++    sp.min_p = model_config.min_p;
++    sp.seed  = model_config.seed;
+     if (!model_config.grammar.empty()) {
+-        llama_sampler* grammar_sampler =
+-          llama_sampler_init_grammar(weights_->get_vocab(),
+-                                     model_config.grammar.c_str(),
+-                                     model_config.grammar_root.c_str());
+-        if (grammar_sampler == nullptr) {
+-            llama_sampler_free(sampler_);
+-            sampler_ = nullptr;
+-            throw ModelError("failed to parse GBNF grammar (root rule '" +
+-                             model_config.grammar_root + "')");
+-        }
+-        // Add grammar before the rest of the sampler chain
+-        llama_sampler_chain_add(sampler_, grammar_sampler);
+-        // Keep a non-owning reference so we can reset this sampler between
+-        // turns
+-        grammar_sampler_ = grammar_sampler;
++        sp.grammar = { COMMON_GRAMMAR_TYPE_USER, model_config.grammar };
++    }
++    sampler_ = common_sampler_init(weights_->get_model(), sp);
++    if (sampler_ == nullptr) {
++        throw ModelError("failed to initialize sampler (bad GBNF grammar?)");
+     }
+-
 -    llama_sampler_chain_add(sampler_,
 -                            llama_sampler_init_top_k(model_config.top_k));
 -    llama_sampler_chain_add(sampler_,
@@ -43,33 +107,21 @@ diff --git a/src/model.cpp b/src/model.cpp
 -                            llama_sampler_init_temp(model_config.temp));
 -    llama_sampler_chain_add(sampler_,
 -                            llama_sampler_init_dist(model_config.seed));
-+    // Build a grammar-aware common_sampler. No grammar at this stage — if
-+    // generate() is called with tools whose chat template provides a grammar,
-+    // the sampler is re-initialized there with the grammar wired in.
-+    common_params_sampling sp;
-+    sp.temp  = model_config.temp;
-+    sp.top_k = model_config.top_k;
-+    sp.top_p = model_config.top_p;
-+    sp.min_p = model_config.min_p;
-+    sp.seed  = model_config.seed;
-+    sampler_ = common_sampler_init(weights_->get_model(), sp);
-+    if (sampler_ == nullptr) {
-+        throw ModelError("failed to initialize common_sampler");
-+    }
  }
  
  std::vector<llama_token>
-@@ -175,6 +179,65 @@ Model::generate(const std::vector<common_chat_msg>& messages,
+@@ -266,6 +252,65 @@ Model::generate(const std::vector<common_chat_msg>& messages,
      auto params =
        common_chat_templates_apply(weights_->get_templates(), inputs);
  
-+    // Re-init the sampler when the chat template provides a tool-calling
-+    // grammar (or preserved tokens / triggers). This constrains generation
-+    // to syntactically valid tool calls so common_chat_parse can extract
-+    // them. Mirrors what llama-server does in server-task.cpp:379-476.
-+    if (!params.grammar.empty() ||
-+        !params.grammar_triggers.empty() ||
-+        !params.preserved_tokens.empty()) {
++    // llamafile: when the chat template provides a tool-calling grammar
++    // (or preserved tokens / triggers), re-init the sampler with it so
++    // generation is constrained to syntactically valid tool calls. Mirrors
++    // llama-server's wiring. An explicit user grammar in ModelConfig takes
++    // precedence and is left untouched.
++    if (config_.grammar.empty() &&
++        (!params.grammar.empty() || !params.grammar_triggers.empty() ||
++         !params.preserved_tokens.empty())) {
 +        common_params_sampling sp;
 +        sp.temp  = config_.temp;
 +        sp.top_k = config_.top_k;
@@ -92,9 +144,8 @@ diff --git a/src/model.cpp b/src/model.cpp
 +            }
 +        }
 +
-+        // Resolve WORD-type triggers: convert to TOKEN-type when the word
-+        // is a single preserved token, else keep as WORD. Mirrors
-+        // server-task.cpp:443-471.
++        // WORD-type triggers become TOKEN-type when the word is a single
++        // preserved token. Mirrors server-task.cpp.
 +        for (const auto& t : params.grammar_triggers) {
 +            if (t.type == COMMON_GRAMMAR_TRIGGER_TYPE_WORD) {
 +                auto ids = common_tokenize(vocab, t.value,
@@ -118,55 +169,33 @@ diff --git a/src/model.cpp b/src/model.cpp
 +        common_sampler_free(sampler_);
 +        sampler_ = common_sampler_init(weights_->get_model(), sp);
 +        if (sampler_ == nullptr) {
-+            throw ModelError("failed to re-init common_sampler with grammar");
++            throw ModelError("failed to initialize tool-call sampler");
 +        }
 +    }
 +
      // Tokenize the prompt
      std::vector<llama_token> prompt_tokens = tokenize(params.prompt);
      if (prompt_tokens.empty()) {
-@@ -183,12 +246,85 @@ Model::generate(const std::vector<common_chat_msg>& messages,
+@@ -281,8 +326,66 @@ Model::generate(const std::vector<common_chat_msg>& messages,
+         parser_source_ = params.parser;
+     }
  
-     std::string response = generate_from_tokens(prompt_tokens, callback);
- 
--    common_chat_parser_params syntax;
--    // Use explicitly configured format, or fall back to auto-detected format
--    syntax.format = config_.chat_format.value_or(params.format);
-+    // Build parser params from the chat template's outputs.
-+    // common_chat_parser_params(chat_params) copies format + generation_prompt;
-+    // we additionally need to load the PEG arena from chat_params.parser, as
-+    // llama.cpp/tools/cli/cli.cpp:94-98 and server-task.cpp:420-422 do.
-+    common_chat_parser_params syntax(params);
-+    if (config_.chat_format.has_value()) {
-+        syntax.format = *config_.chat_format;
-+    }
-+    if (!params.parser.empty()) {
-+        syntax.parser.load(params.parser);
-+    }
-     syntax.parse_tool_calls = true;
- 
--    auto parsed_msg = common_chat_parse(response, false, syntax);
+-    return parse_with_parser(
+-      parser_arena_, params, response, config_.chat_format);
 +    common_chat_msg parsed_msg;
 +    try {
-+        parsed_msg = common_chat_parse(response, /*is_partial=*/false, syntax);
-+    } catch (const std::exception &e) {
-+        // PEG parser refused the input. Fall back to content-only with a
-+        // best-effort heuristic extractor for <tool_call>{...}</tool_call> JSON
-+        // blocks that the underlying llama.cpp grammar didn't anchor to. The
-+        // heuristic mirrors what llama-server does after `common_chat_parse`
-+        // returns no tool_calls but the model clearly emitted a structured
-+        // call; it lets the agent loop continue rather than terminating early.
-+        fprintf(stderr,
-+                "[agent.cpp] common_chat_parse threw (%s); falling back to "
-+                "heuristic <tool_call> extraction\n",
++        parsed_msg = parse_with_parser(
++          parser_arena_, params, response, config_.chat_format);
++    } catch (const ModelError& e) {
++        // llamafile: a parse refusal must not kill the agent loop. Fall
++        // back to content-only; the recovery scan below may still lift
++        // tool calls out of the raw text.
++        fprintf(stderr, "[agent.cpp] %s; using heuristic recovery\n",
 +                e.what());
-+        parsed_msg = common_chat_msg{};
 +        parsed_msg.content = response;
 +    }
-+    // Heuristic recovery: even when PEG parses cleanly, it sometimes returns
-+    // tool_calls empty because the template's grammar doesn't anchor to
-+    // <tool_call>{json}</tool_call>. Scan the content for <tool_call>...</tool_call>
-+    // blocks and lift them into tool_calls.
++    // llamafile heuristic recovery: lift <tool_call>{json}</tool_call>
++    // blocks that the parser left in the content.
 +    if (parsed_msg.tool_calls.empty()) {
 +        const std::string open = "<tool_call>";
 +        const std::string close = "</tool_call>";
@@ -181,8 +210,8 @@ diff --git a/src/model.cpp b/src/model.cpp
 +            content_clean.append(response, i, a - i);
 +            auto b = response.find(close, a + open.size());
 +            if (b == std::string::npos) break;
-+            std::string payload = response.substr(a + open.size(), b - (a + open.size()));
-+            // Trim surrounding whitespace.
++            std::string payload =
++              response.substr(a + open.size(), b - (a + open.size()));
 +            size_t s = payload.find_first_not_of(" \t\r\n");
 +            size_t e2 = payload.find_last_not_of(" \t\r\n");
 +            if (s != std::string::npos && e2 != std::string::npos) {
@@ -203,7 +232,6 @@ diff --git a/src/model.cpp b/src/model.cpp
 +                    parsed_msg.tool_calls.push_back(std::move(call));
 +                }
 +            } catch (...) {
-+                // Not JSON — leave as content.
 +                content_clean.append(open).append(payload).append(close);
 +            }
 +            i = b + close.size();
@@ -212,19 +240,20 @@ diff --git a/src/model.cpp b/src/model.cpp
 +            parsed_msg.content = content_clean;
 +        }
 +    }
-     parsed_msg.role = "assistant";
++    parsed_msg.role = "assistant";
++    return parsed_msg;
+ }
  
-     return parsed_msg;
-@@ -211,10 +347,17 @@ Model::generate_from_tokens(const std::vector<llama_token>& all_tokens,
+ common_chat_msg
+@@ -311,10 +414,16 @@ Model::generate_from_tokens(const std::vector<llama_token>& all_tokens,
          common_prefix++;
      }
  
 -    // If tokens diverged, clear KV cache from divergence point onwards
 +    // If tokens diverged, clear KV cache from divergence point onwards.
-+    // Recurrent/hybrid models (Mamba, Qwen3.5, ...) cannot rewind their
-+    // state to a mid-sequence position: llama_memory_seq_rm refuses and
-+    // returns false. Fall back to dropping the whole memory and
-+    // re-decoding from scratch, which is correct on every architecture.
++    // llamafile: recurrent/hybrid models cannot rewind their state to a
++    // mid-sequence position — llama_memory_seq_rm refuses and returns
++    // false. Fall back to dropping the whole memory and re-decoding.
      if (common_prefix < processed_tokens_.size()) {
          llama_memory_t mem = llama_get_memory(ctx_);
 -        llama_memory_seq_rm(mem, 0, common_prefix, -1);
@@ -235,14 +264,23 @@ diff --git a/src/model.cpp b/src/model.cpp
          processed_tokens_.resize(common_prefix);
          n_past_ = common_prefix;
      }
-@@ -245,7 +388,11 @@ Model::generate_from_tokens(const std::vector<llama_token>& all_tokens,
+@@ -343,15 +452,15 @@ Model::generate_from_tokens(const std::vector<llama_token>& all_tokens,
+         i += batch_size;
+     }
+ 
+-    // Reset the grammar sampler before each turn so a finished grammar does
+-    // not force EOS on the next call.
+-    if (grammar_sampler_ != nullptr) {
+-        llama_sampler_reset(grammar_sampler_);
+-    }
++    // Reset sampler state before each turn so a finished grammar does not
++    // force EOS on the next call.
++    common_sampler_reset(sampler_);
  
      llama_token new_token_id{};
      while (true) {
 -        new_token_id = llama_sampler_sample(sampler_, ctx_, -1);
 +        new_token_id = common_sampler_sample(sampler_, ctx_, -1);
-+        // Accept the sampled token in both the sampling chain and the
-+        // grammar (no-op when no grammar is active).
 +        common_sampler_accept(sampler_, new_token_id,
 +                              /*accept_grammar=*/true);
  
