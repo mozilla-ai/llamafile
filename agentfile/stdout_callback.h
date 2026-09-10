@@ -75,6 +75,12 @@ class MaxIterationsCallback : public agent_cpp::Callback {
   public:
     explicit MaxIterationsCallback(int max) : max_(max) {}
 
+    // The cap is per user turn: each run_loop invocation (one-shot run, or
+    // one --interactive follow-up) gets a fresh budget.
+    void before_agent_loop(std::vector<common_chat_msg> & /*messages*/) override {
+        count_ = 0;
+    }
+
     void before_llm_call(std::vector<common_chat_msg> & /*messages*/) override {
         if (max_ > 0 && ++count_ > max_) {
             throw MaxIterationsExceeded();

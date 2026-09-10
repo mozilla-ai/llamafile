@@ -75,6 +75,9 @@ void print_usage(const char *prog) {
             "  -m PATH              Path to a GGUF model file (required)\n"
             "  -p TEXT              User prompt (read from stdin if omitted\n"
             "                       and stdin is not a terminal)\n"
+            "  -c, --ctx-size N     Context window in tokens (default: 10240).\n"
+            "                       0 = the model's full native context — mind the\n"
+            "                       KV-cache memory on long-context models\n"
             "  -s TEXT              System instructions (default: helpful assistant)\n"
             "  --system-file PATH   Read system instructions from a file\n"
             "                       (works with /zip/ paths in packaged agents)\n"
@@ -92,6 +95,9 @@ void print_usage(const char *prog) {
             "  --trace FILE         Record spans as OTLP/JSON lines (OpenTelemetry\n"
             "                       collector `otlpjsonfile` receiver format;\n"
             "                       overwrites FILE)\n"
+            "  -i, --interactive    After the answer, prompt for a follow-up and\n"
+            "                       continue the conversation (empty line or EOF\n"
+            "                       ends the session). --no-interactive undoes it.\n"
             "  --yes                Skip confirmation prompts for destructive tools\n"
             "  --confirm            Re-enable confirmation prompts (inverse of\n"
             "                       --yes; later flag wins)\n"
@@ -112,6 +118,33 @@ bool slurp(FILE *f, std::string &out) {
     while ((n = fread(buf, 1, sizeof(buf), f)) > 0)
         out.append(buf, n);
     return !ferror(f);
+}
+
+// Read one interactive follow-up, prompting on stderr. When the initial
+// prompt was piped in, stdin is consumed — read from the controlling
+// terminal instead. Returns an empty string on EOF, no terminal, or an
+// empty line; the caller ends the session.
+std::string read_followup() {
+    fprintf(stderr, "\n> ");
+    fflush(stderr);
+
+    FILE *tty = nullptr;
+    FILE *in = stdin;
+    if (!isatty(STDIN_FILENO)) {
+        tty = fopen("/dev/tty", "r");
+        if (!tty) return "";
+        in = tty;
+    }
+    std::string line;
+    char buf[4096];
+    while (fgets(buf, sizeof(buf), in)) {
+        line += buf;
+        if (line.back() == '\n') break;
+    }
+    if (tty) fclose(tty);
+    while (!line.empty() && (line.back() == '\n' || line.back() == '\r'))
+        line.pop_back();
+    return line;
 }
 
 // Filter a tool vector by name list. Tools whose name is NOT in `keep` are
@@ -157,6 +190,8 @@ int main(int argc, char **argv) {
     std::string instructions =
         "You are a helpful assistant. Answer concisely.";
     bool always_yes = false;
+    bool interactive = false;
+    int n_ctx = -1;          // -1 = agent.cpp default; 0 = model native
     int verbosity = 1;       // 0 = --quiet, 1 = default, 2 = --verbose
     int max_iterations = 0;  // 0 = no cap
     std::string tools_spec = "all";
@@ -180,6 +215,9 @@ int main(int argc, char **argv) {
             model_path = need_value(i);
         } else if (std::strcmp(argv[i], "-p") == 0) {
             prompt = need_value(i);
+        } else if (std::strcmp(argv[i], "-c") == 0 ||
+                   std::strcmp(argv[i], "--ctx-size") == 0) {
+            n_ctx = std::atoi(need_value(i));
         } else if (std::strcmp(argv[i], "-s") == 0) {
             instructions = need_value(i);
         } else if (std::strcmp(argv[i], "--system-file") == 0) {
@@ -206,6 +244,11 @@ int main(int argc, char **argv) {
             session_path = need_value(i);
         } else if (std::strcmp(argv[i], "--trace") == 0) {
             trace_path = need_value(i);
+        } else if (std::strcmp(argv[i], "-i") == 0 ||
+                   std::strcmp(argv[i], "--interactive") == 0) {
+            interactive = true;
+        } else if (std::strcmp(argv[i], "--no-interactive") == 0) {
+            interactive = false;
         } else if (std::strcmp(argv[i], "--yes") == 0) {
             always_yes = true;
         } else if (std::strcmp(argv[i], "--confirm") == 0) {
@@ -244,8 +287,14 @@ int main(int argc, char **argv) {
         return 1;
     }
 
-    // Silence llama.cpp / ggml logging before backend init.
+    // Silence llama.cpp / ggml logging before backend init. GPU backends are
+    // runtime-loaded DSOs with their own copy of ggml's logger, so the
+    // llamafile_*_log_set hooks must silence each one separately (they queue
+    // the callback if the backend isn't loaded yet).
     llama_log_set(null_log_callback, nullptr);
+    llamafile_metal_log_set(llamafile_log_callback_null, nullptr);
+    llamafile_cuda_log_set(llamafile_log_callback_null, nullptr);
+    llamafile_vulkan_log_set(llamafile_log_callback_null, nullptr);
 
     // Initialize llamafile GPU backends (Metal, CUDA, Vulkan, ROCm).
     // This is also what triggers backend registration.
@@ -253,14 +302,37 @@ int main(int argc, char **argv) {
     llama_backend_init();
 
     try {
+        // Build and validate the toolset before loading the model, so a bad
+        // --tools value fails fast. A requested tool that isn't registered
+        // is an error, not a silently smaller toolset — the model would
+        // otherwise improvise with whatever tools remain.
+        auto tools = agentfile::tools::build_default_tools(searxng_url);
+        auto keep = parse_tools_flag(tools_spec);
+        if (!keep.empty()) {
+            std::set<std::string> known;
+            for (const auto &t : tools) known.insert(t->get_name());
+            for (const auto &name : keep) {
+                if (known.count(name)) continue;
+                if (name == "web_search") {
+                    fprintf(stderr,
+                            "agentfile: web_search requires a SearXNG "
+                            "instance: pass --searxng-url URL or set "
+                            "SEARXNG_URL\n");
+                } else {
+                    fprintf(stderr, "agentfile: unknown tool: %s\n",
+                            name.c_str());
+                }
+                return 1;
+            }
+        }
+        filter_tools(tools, keep);
+
         auto weights = agent_cpp::ModelWeights::create(model_path);
 
         agent_cpp::ModelConfig cfg;  // defaults: temp=0, top_p=1, top_k=0
         cfg.n_batch = 256;  // agent.cpp's default of -1 doesn't play with llama_context
+        if (n_ctx >= 0) cfg.n_ctx = n_ctx;  // 0 = model's native context
         auto model = agent_cpp::Model::create_with_weights(weights, cfg);
-
-        auto tools = agentfile::tools::build_default_tools(searxng_url);
-        filter_tools(tools, parse_tools_flag(tools_spec));
 
         // Model name for session/trace records: the GGUF basename.
         std::string model_name = model_path;
@@ -308,6 +380,21 @@ int main(int argc, char **argv) {
         std::string reply = agent.run_loop(messages);
         fputs(reply.c_str(), stdout);
         fputc('\n', stdout);
+
+        // Follow-up turns reuse `messages`, so the KV-cache prefix carries
+        // over and each turn only pays for what's new.
+        while (interactive) {
+            fflush(stdout);
+            std::string followup = read_followup();
+            if (followup.empty()) break;
+            common_chat_msg msg;
+            msg.role = "user";
+            msg.content = followup;
+            messages.push_back(std::move(msg));
+            reply = agent.run_loop(messages);
+            fputs(reply.c_str(), stdout);
+            fputc('\n', stdout);
+        }
     } catch (const agentfile::MaxIterationsExceeded &e) {
         fprintf(stderr, "%s\n", e.what());
         return 4;
