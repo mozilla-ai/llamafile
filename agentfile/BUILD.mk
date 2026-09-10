@@ -30,6 +30,17 @@ AGENTFILE_SRCS_CPP := \
 
 AGENTFILE_HDRS := $(wildcard agentfile/*.h) $(wildcard agentfile/tools/*.h)
 
+# External headers whose ABI leaks into agentfile objects. Submodule bumps
+# rewrite these without touching agentfile sources; without this dependency
+# the old agentfile.o gets linked against a new httplib/agent.cpp and fails
+# with undefined or mismatched symbols (seen 2026-09-10: httplib's Headers
+# container type changed).
+AGENTFILE_EXT_HDRS := \
+	$(wildcard agent.cpp/src/*.h) \
+	llama.cpp/vendor/cpp-httplib/httplib.h \
+	llama.cpp/common/http.h \
+	llama.cpp/common/chat.h
+
 AGENTFILE_OBJS := $(AGENTFILE_SRCS_CPP:%.cpp=o/$(MODE)/%.o)
 
 # ==============================================================================
@@ -61,7 +72,7 @@ AGENTFILE_CPPFLAGS += \
 	-DCPPHTTPLIB_MBEDTLS_SUPPORT \
 	-isystem third_party/mbedtls/include
 
-o/$(MODE)/agentfile/%.o: agentfile/%.cpp agentfile/BUILD.mk $(AGENTFILE_HDRS)
+o/$(MODE)/agentfile/%.o: agentfile/%.cpp agentfile/BUILD.mk $(AGENTFILE_HDRS) $(AGENTFILE_EXT_HDRS)
 	@mkdir -p $(@D)
 	$(COMPILE.cc) $(AGENTFILE_CPPFLAGS) -frtti -fexceptions -o $@ $<
 
