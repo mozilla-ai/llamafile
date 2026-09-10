@@ -207,20 +207,88 @@ o//llamafile/zipalign -j0 my-agent model.gguf system.md
 4. **web_search**: done — validated against a mock and against a real
    SearXNG instance (`http://raspi:8888`, 2026-07-02: query → 8 capped
    results from 10, model cited them correctly).
-5. **`--interactive`** continuation mode.
-5b. **Full llama.cpp parameter surface** + two-tier help + `-hf`/HF cache
-   (see follow-up section below).
-6. **Packaging**: document + smoke-test the zipalign recipe end-to-end on
+5. **`--interactive`** continuation mode: done (2026-09-10). `-i` prompts
+   on stderr after each answer; follow-ups read from /dev/tty when stdin
+   was a pipe; empty line/EOF ends the session; `--no-interactive` is the
+   `.args`-friendly inverse. `--max-iterations` is now a per-turn budget
+   (reset each run_loop). Verified under a pty: two turns, KV prefix
+   reused, both turns in the session file.
+6. **agent.cpp sync to v0.4.0** + patch rebase (drop upstreamed half of
+   old 0001; keep fallback extractor + grammar sampler). Note: the patch
+   set was regenerated 2026-09-10 as per-file cumulative patches
+   (`src_model.{cpp,h}.patch`), now also containing the hybrid-model
+   rewind fix: `llama_memory_seq_rm` returns false on recurrent/hybrid
+   models (Qwen3.5 etc.), which agent.cpp ignored — interactive
+   follow-ups then decoded on inconsistent state ("failed to decode
+   batch"/crash). Fix falls back to `llama_memory_clear` + full
+   re-decode. Third upstream PR candidate.
+7. **server-tools adapter**: `server_tool → agent_cpp::Tool` bridge;
+   migrate vendored tools to upstream implementations; rewrite web_search
+   as a `server_tool` subclass; wire `permission_write` into the
+   confirmation callback; evaluate `--tools-runtime` isolation.
+8. **Ownership exercise** (pre-packaging, gates any push; decided
+   2026-09-10). Four phases, each gating the next:
+   - *Simplify with approved cuts*: full-tree pass (structure, naming,
+     comment calibration); a proposed-cuts list goes to Davide for
+     per-item approval before anything is removed.
+   - *Live walkthrough*: file-by-file in conversation, dependency order,
+     simplifying inline as we read.
+   - *Reverse Q&A*: Davide explains the design back; gaps get flagged.
+     Exit criterion: every decision defensible without help.
+   - *Fresh curated branch*: rebuild from current main as ~8-12 small
+     commits telling the story in order, plain-language messages in
+     main's conventional style; Davide reviews each commit before push.
+     Current branch kept as development reference.
+9. **Packaging**: document + smoke-test the zipalign recipe end-to-end on
    a second machine; `--name/--description`; pack-time prewarmed KV cache
    (`--warm-cache`/`--load-cache`).
-7. **Integration tests** in `tests/integration/` (absolute paths, models
-   from `~/zipaligner_files`): one-shot run with `--tools read_only`,
+10. **Full llama.cpp parameter surface** + two-tier help + `-hf`/HF cache
+   (see follow-up section below; moved after packaging).
+11. **Integration tests** in `tests/integration/` (absolute paths, models
+   from `~/.llamafile/models`): one-shot run with `--tools read_only`,
    tool-call round-trip, `--max-iterations`, session/trace schema checks,
-   web_search against a mocked searxng (fixed JSON on localhost).
-8. *(post-HTTPS, optional)* `--otlp-endpoint` live OTLP/HTTP-JSON export.
+   web_search against a mocked searxng (fixed JSON on localhost). Plus a
+   compile-only `o//agentfile` check on llama.cpp-bump PRs.
+12. *(optional)* `--otlp-endpoint` live OTLP/HTTP-JSON export.
 
-Dropped for now: upstream PRs to agent.cpp (patches maintained locally;
-pin already at upstream HEAD).
+Upstream PRs: agent.cpp patch 0002 is a strong candidate after the v0.4.0
+sync (composes with upstream #20); SearXNG web_search to llama.cpp
+server-tools deferred until the adapter proves out.
+
+## Strategy: tool layer & positioning (decided 2026-09-10)
+
+Context: upstream llama.cpp now ships built-in server tools
+(`tools/server/server-tools.{h,cpp}`, `--tools`, `-ag/--agent`, a `/tools`
+HTTP catalogue), including tool **isolation runtimes** (`--tools-runtime`:
+podman rootless / ssh remote), MCP-sourced tools, and `permission_write`
+metadata. The agent loop upstream is thin and client-side (Web UI;
+`agent.py` in this repo is a 300-line replacement). What upstream does NOT
+have: serverless one-shot CLI, single-file packaged agents, session/trace
+recording, KV-warm-start packaging — agentfile's identity is **the file
+format for shipping agents**, not another harness.
+
+Decisions:
+
+1. **Inherit upstream tools via an adapter**: one `server_tool →
+   agent_cpp::Tool` bridge (the interfaces are nearly isomorphic:
+   `get_definition()/invoke(json)` vs `get_definition()/execute(json)`).
+   Upstream maintains tool semantics; we inherit isolation runtimes,
+   new tools, and `permission_write` (which replaces the hardcoded
+   destructive-tools set in the confirmation callback).
+2. **Write agentfile-native tools as `server_tool` subclasses** (not
+   `agent_cpp::Tool`), so the adapter is the single bridge and folding a
+   tool upstream later is a file move, not a rewrite. web_search is the
+   first candidate; offering it upstream: **later**, after the adapter
+   proves out.
+3. **API-drift posture**: accepted consciously — we can lock the pin or
+   start vendoring at any moment if server-tools internals churn too hard.
+4. **agent.cpp: sync to v0.4.0 (63d23da)** — the delta beyond llama.cpp
+   bumps is two commits: #22 upstreams the PEG-parser-loading half of our
+   patch 0001 (drop that half, keep the `<tool_call>` fallback extractor
+   as a smaller patch); #20 adds user-supplied GBNF grammar, which does
+   NOT overlap our 0002 (template-generated tool grammar via
+   common_sampler) — 0002 stays and is now a stronger upstream PR
+   candidate since it composes with #20's plumbing.
 
 ## Follow-up: full llama.cpp parameter surface + two-tier help
 
@@ -261,10 +329,23 @@ llama.cpp's parameters, mirroring llamafile's design (see
 - `web_search` result count (8) and snippet truncation length.
 - Whether `get_datetime` belongs in `read_only` preset (yes for now).
 - Trace format field names — freeze only after first real consumer.
-- Qwen3.5's empty `<think>\n\n</think>` block leaks into assistant
-  content (visible in stdout and session files): the chat parser's
-  reasoning syntax isn't configured in agent.cpp's Model. Follow-up:
-  wire `reasoning_format`/`enable_thinking` through `ModelConfig`.
+- Context management: `-c/--ctx-size` (added 2026-09-10; default stays
+  agent.cpp's 10240, `0` = model-native) only sizes the window — a long
+  tool-heavy session still dies with "context size exceeded" instead of
+  degrading. Real fix: a trimming callback in `before_llm_call` (agent.cpp's
+  ContextTrimmerCallback pattern) that drops/summarizes old tool results.
+- Qwen3.5's `<think>` blocks leak into assistant content (the chat
+  parser's reasoning syntax isn't configured in agent.cpp's Model).
+  **Upgraded from cosmetic to performance-critical (2026-09-10)**: the
+  leak makes every re-render diverge from the decoded stream (the
+  template re-strips think blocks each turn), which forces a KV rewind
+  per turn — and on recurrent/hybrid models (Qwen3.5) a rewind is a
+  full re-prefill. Fixing the reasoning round-trip makes re-renders
+  byte-stable, so the warm cache survives interactive turns. Rejected
+  alternative, kept in the back pocket: append-only token stream (never
+  re-render history) — avoids rewinds entirely but bloats context with
+  old reasoning, fights the template's seams, and breaks as soon as
+  context trimming edits history.
 - Token usage in session files is recorded as zeros — agent.cpp's Model
   doesn't expose per-call token counts to callbacks. Candidate upstream
   patch (or local patch 0003).
