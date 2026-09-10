@@ -61,6 +61,10 @@
 
 namespace {
 
+// Default context window. Sized so one full http_fetch result (64 KB body,
+// roughly 16-24k tokens) plus history fits comfortably.
+constexpr int kDefaultCtx = 32 * 1024;
+
 void null_log_callback(ggml_log_level, const char *, void *) {}
 
 void print_usage(const char *prog) {
@@ -75,7 +79,7 @@ void print_usage(const char *prog) {
             "  -m PATH              Path to a GGUF model file (required)\n"
             "  -p TEXT              User prompt (read from stdin if omitted\n"
             "                       and stdin is not a terminal)\n"
-            "  -c, --ctx-size N     Context window in tokens (default: 10240).\n"
+            "  -c, --ctx-size N     Context window in tokens (default: %d).\n"
             "                       0 = the model's full native context — mind the\n"
             "                       KV-cache memory on long-context models\n"
             "  -s TEXT              System instructions (default: helpful assistant)\n"
@@ -111,7 +115,7 @@ void print_usage(const char *prog) {
             "\n"
             "Exit codes: 0 ok, 1 usage error, 2 agent error, 3 other error,\n"
             "            4 --max-iterations cap reached\n",
-            prog, prog);
+            prog, prog, kDefaultCtx);
 }
 
 // Read a whole FILE* into a string.
@@ -183,7 +187,7 @@ int main(int argc, char **argv) {
         "You are a helpful assistant. Answer concisely.";
     bool always_yes = false;
     bool interactive = false;
-    int n_ctx = -1;          // -1 = agent.cpp default; 0 = model native
+    int n_ctx = kDefaultCtx; // tokens; 0 = model native
     int verbosity = 1;       // 0 = --quiet, 1 = default, 2 = --verbose
     int max_iterations = 0;  // 0 = no cap
     std::string tools_spec = "all";
@@ -329,7 +333,7 @@ int main(int argc, char **argv) {
 
         agent_cpp::ModelConfig cfg;  // defaults: temp=0, top_p=1, top_k=0
         cfg.n_batch = 256;  // agent.cpp's default of -1 doesn't play with llama_context
-        if (n_ctx >= 0) cfg.n_ctx = n_ctx;  // 0 = model's native context
+        cfg.n_ctx = n_ctx;  // 0 = model's native context
         auto model = agent_cpp::Model::create_with_weights(weights, cfg);
 
         // Model name for session/trace records: the GGUF basename.

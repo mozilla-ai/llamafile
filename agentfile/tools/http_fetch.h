@@ -7,7 +7,7 @@
 // Written as a server_tool (llama.cpp tools/server style) so it can be
 // offered upstream as-is; agentfile runs it through ServerToolAdapter.
 //
-// Limits: GET only; body capped at 16 KB (truncated + marked); 30s timeout.
+// Limits: GET only; body capped at 64 KB (truncated + marked); 30s timeout.
 //
 
 #pragma once
@@ -23,7 +23,7 @@ namespace agentfile {
 namespace tools {
 
 struct HttpFetchTool : server_tool {
-    static constexpr size_t kMaxBody = 16 * 1024;
+    static constexpr size_t kMaxBody = 64 * 1024;
     static constexpr int    kTimeoutSeconds = 30;
 
     HttpFetchTool() {
@@ -40,7 +40,7 @@ struct HttpFetchTool : server_tool {
                 {"name", name},
                 {"description",
                  "Fetch a URL with HTTP GET and return status + headers + "
-                 "body. Response body is capped at 16 KB. Use sparingly — "
+                 "body. Response body is capped at 64 KB. Use sparingly — "
                  "this tool grants the model network access."},
                 {"parameters", {
                     {"type", "object"},
