@@ -39,7 +39,9 @@ class SessionRecorderCallback : public agent_cpp::Callback {
     FILE *file_;
     std::string model_name_;
     std::string parent_id_;               // last entry id; empty = root
-    std::deque<json> pending_tool_calls_; // toolCall blocks awaiting results
+    // Ids of tool calls awaiting results. The loop executes calls strictly
+    // in order, so the front id always belongs to the next result.
+    std::deque<std::string> pending_tool_calls_;
     size_t seen_messages_ = 0;            // high-water mark into `messages`
 
   public:
@@ -107,12 +109,11 @@ class SessionRecorderCallback : public agent_cpp::Callback {
             } catch (...) {
                 args = {{"_raw", tc.arguments}};
             }
-            json block = {{"type", "toolCall"},
-                          {"id", tc.id},
-                          {"name", tc.name},
-                          {"arguments", args}};
-            content.push_back(block);
-            pending_tool_calls_.push_back(std::move(block));
+            content.push_back({{"type", "toolCall"},
+                               {"id", tc.id},
+                               {"name", tc.name},
+                               {"arguments", args}});
+            pending_tool_calls_.push_back(tc.id);
         }
 
         json zero_usage = {
@@ -144,7 +145,7 @@ class SessionRecorderCallback : public agent_cpp::Callback {
         // the pending queue is the call this result belongs to.
         std::string call_id;
         if (!pending_tool_calls_.empty()) {
-            call_id = pending_tool_calls_.front().value("id", "");
+            call_id = pending_tool_calls_.front();
             pending_tool_calls_.pop_front();
         }
         bool is_error = result.has_error();
