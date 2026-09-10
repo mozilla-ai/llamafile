@@ -1,17 +1,21 @@
 diff --git a/tools/server/server-queue.cpp b/tools/server/server-queue.cpp
 --- a/llama.cpp/tools/server/server-queue.cpp
 +++ b/llama.cpp/tools/server/server-queue.cpp
-@@ -4,6 +4,9 @@
- #include "log.h"
+@@ -5,6 +5,13 @@
  
  #include <chrono>
+ #include <thread>
 +#include <cerrno>
 +#include <system_error>
 +#include <csignal>
++
++#ifdef COSMOCC
++#include "llamafile.h"
++#endif
  
  #define QUE_INF(fmt, ...) LOG_INF("que  %12.*s: " fmt, 12, __func__, __VA_ARGS__)
  #define QUE_WRN(fmt, ...) LOG_WRN("que  %12.*s: " fmt, 12, __func__, __VA_ARGS__)
-@@ -110,9 +113,13 @@ void server_queue::wait_until_no_sleep() {
+@@ -111,9 +118,13 @@ void server_queue::wait_until_no_sleep() {
              condition_tasks.notify_one(); // only main thread is waiting on this
          }
          QUE_DBG("%s", "waiting until no sleep\n");
@@ -28,7 +32,63 @@ diff --git a/tools/server/server-queue.cpp b/tools/server/server-queue.cpp
      }
  }
  
-@@ -123,6 +130,21 @@ void server_queue::terminate() {
+@@ -153,9 +164,13 @@ void server_queue::worker_loop() {
+         std::function<void()> work;
+         {
+             std::unique_lock<std::mutex> lock(mutex_tasks);
+-            worker.cv.wait(lock, [&]{
+-                return worker.stop || worker.work != nullptr;
+-            });
++            // Use wait_for() instead of wait() to work around a
++            // Cosmopolitan libc bug where untimed futex waits on XNU
++            // (macOS) expire after ~72 minutes, causing
++            // condition_variable::wait() to throw ETIMEDOUT.
++            while (!worker.stop && worker.work == nullptr) {
++                worker.cv.wait_for(lock, std::chrono::seconds(30));
++            }
+             if (worker.stop) {
+                 return;
+             }
+@@ -192,6 +207,21 @@ void server_queue::worker_stop() {
+ }
+ 
+ void server_queue::yield_to_queue(std::function<void()> && work) {
++#ifdef COSMOCC
++    // Run inline on the calling thread whenever a GPU backend is loaded.
++    // The backends are host ELFs brought in with cosmo_dlopen(), and their
++    // libc reaches thread-local state through %fs. Cosmo gives its own
++    // threads only cosmo TLS (fs_base == gs_base, no glibc TCB), so host libc
++    // called from this worker faults: pthread_getspecific() dereferences a
++    // NULL TCB self-pointer on the very first CUDA decode. The main thread
++    // does have a real host TCB, and it is where decode ran until b10441
++    // introduced this worker. CPU-only runs keep upstream's behaviour; the
++    // cost here is that /slots and /metrics wait for the in-flight batch.
++    if (llamafile_has_gpu()) {
++        work();
++        return;
++    }
++#endif
+     GGML_ASSERT(worker.thread.joinable() && "yield_to_queue() requires start_loop() to be running");
+ 
+     QUE_DBG("%s", "yielding to queue\n");
+@@ -210,9 +240,13 @@ void server_queue::yield_to_queue(std::function<void()> && work) {
+ 
+         std::unique_lock<std::mutex> lock(mutex_tasks);
+         // declined tasks are moved to queue_tasks_unhandled, so a non-empty queue always has something new
+-        condition_tasks.wait(lock, [&]{
+-            return !worker.busy || (running && !queue_tasks.empty());
+-        });
++        // Use wait_for() instead of wait() to work around a
++        // Cosmopolitan libc bug where untimed futex waits on XNU
++        // (macOS) expire after ~72 minutes, causing
++        // condition_variable::wait() to throw ETIMEDOUT.
++        while (worker.busy && !(running && !queue_tasks.empty())) {
++            condition_tasks.wait_for(lock, std::chrono::seconds(30));
++        }
+         if (!worker.busy) {
+             break;
+         }
+@@ -244,6 +278,21 @@ void server_queue::yield_to_queue(std::function<void()> && work) {
  }
  
  void server_queue::start_loop(int64_t idle_sleep_ms) {
@@ -50,7 +110,7 @@ diff --git a/tools/server/server-queue.cpp b/tools/server/server-queue.cpp
      running = true;
      time_last_task = ggml_time_ms();
  
-@@ -181,9 +203,13 @@ void server_queue::start_loop(int64_t idle_sleep_ms) {
+@@ -293,9 +342,13 @@ void server_queue::start_loop(int64_t idle_sleep_ms) {
                  callback_sleeping_state(true);
                  req_stop_sleeping = false;
                  // wait until we are requested to exit sleeping state
@@ -67,7 +127,7 @@ diff --git a/tools/server/server-queue.cpp b/tools/server/server-queue.cpp
                  if (!running) { // may changed during sleep
                      break; // terminate
                  }
-@@ -266,13 +292,17 @@ void server_response::remove_waiting_task_ids(const std::unordered_set<int> & id
+@@ -384,13 +437,17 @@ void server_response::remove_waiting_task_ids(const std::unordered_set<int> & id
  server_task_result_ptr server_response::recv(const std::unordered_set<int> & id_tasks) {
      while (true) {
          std::unique_lock<std::mutex> lock(mutex_results);

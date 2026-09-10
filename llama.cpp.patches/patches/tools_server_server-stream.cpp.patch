@@ -1,0 +1,37 @@
+diff --git a/tools/server/server-stream.cpp b/tools/server/server-stream.cpp
+--- a/llama.cpp/tools/server/server-stream.cpp
++++ b/llama.cpp/tools/server/server-stream.cpp
+@@ -7,6 +7,7 @@
+ #include <memory>
+ #include <utility>
+ #include <shared_mutex>
++#include <csignal>
+ 
+ enum class stream_read_status {
+     OK,
+@@ -354,6 +355,25 @@ void stream_session_manager::stop_gc() {
+ }
+ 
+ void stream_session_manager::gc_loop() {
++    // Block every signal on this thread so pthread_cond_timedwait() can't be
++    // interrupted with EINTR (libcxx rethrows EINTR as std::system_error, and
++    // nothing here catches it, so the process std::terminate()s). Without this,
++    // Ctrl+C on `llama-server` aborts with "condition_variable timed_wait
++    // failed: Interrupted system call" instead of shutting down: SIGINT lands
++    // on this thread while it sits in the 60s GC wait. Keep synchronous fault
++    // signals deliverable so real crashes still surface. Same treatment as the
++    // log worker, the task queue and the model-stopping thread.
++    sigset_t block_mask;
++    sigfillset(&block_mask);
++    sigdelset(&block_mask, SIGSEGV);
++    sigdelset(&block_mask, SIGBUS);
++    sigdelset(&block_mask, SIGILL);
++    sigdelset(&block_mask, SIGFPE);
++    sigdelset(&block_mask, SIGABRT);
++    sigdelset(&block_mask, SIGSYS);
++    sigdelset(&block_mask, SIGTRAP);
++    pthread_sigmask(SIG_BLOCK, &block_mask, nullptr);
++
+     while (true) {
+         {
+             std::unique_lock<std::mutex> lock(gc_wake_mu);

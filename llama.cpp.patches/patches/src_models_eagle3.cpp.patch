@@ -1,7 +1,7 @@
 diff --git a/src/models/eagle3.cpp b/src/models/eagle3.cpp
 --- a/llama.cpp/src/models/eagle3.cpp
 +++ b/llama.cpp/src/models/eagle3.cpp
-@@ -91,18 +91,6 @@ void llama_model_eagle3::load_arch_tensors(llama_model_loader &) {
+@@ -100,18 +100,6 @@ void llama_model_eagle3::load_arch_tensors(llama_model_loader &) {
      }
  }
  
@@ -20,7 +20,7 @@ diff --git a/src/models/eagle3.cpp b/src/models/eagle3.cpp
  template <>
  ggml_tensor * llama_model_eagle3::graph<true>::build_inp_embd_enc() const {
      ggml_tensor * cur = nullptr;
-@@ -321,3 +309,18 @@ llama_model_eagle3::graph<false>::graph(const llama_model & model, const llm_gra
+@@ -336,3 +324,18 @@ llama_model_eagle3::graph<false>::graph(const llama_model & model, const llm_gra
  
      ggml_build_forward_expand(gf, cur);
  }

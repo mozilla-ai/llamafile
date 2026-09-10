@@ -1,7 +1,7 @@
 diff --git a/src/models/dflash.cpp b/src/models/dflash.cpp
 --- a/llama.cpp/src/models/dflash.cpp
 +++ b/llama.cpp/src/models/dflash.cpp
-@@ -61,18 +61,6 @@ void llama_model_dflash::load_arch_tensors(llama_model_loader &) {
+@@ -177,21 +177,6 @@ void llama_model_dflash::load_arch_tensors(llama_model_loader &) {
      }
  }
  
@@ -11,6 +11,9 @@ diff --git a/src/models/dflash.cpp b/src/models/dflash.cpp
 -            return std::make_unique<graph<true>>(*this, params);
 -        case LLM_GRAPH_TYPE_DEFAULT:
 -        case LLM_GRAPH_TYPE_DECODER:
+-            if (hparams.dsv4_hc_mult > 0) {
+-                return std::make_unique<graph_dsv4>(*this, params);
+-            }
 -            return std::make_unique<graph<false>>(*this, params);
 -        default:
 -            GGML_ABORT("invalid graph type");
@@ -20,20 +23,24 @@ diff --git a/src/models/dflash.cpp b/src/models/dflash.cpp
  template <>
  ggml_tensor * llama_model_dflash::graph<true>::build_inp_embd_enc() const {
      auto inp_target = std::make_unique<llm_graph_input_embd>(hparams.n_embd_inp_enc());
-@@ -291,3 +279,18 @@ llama_model_dflash::graph<false>::graph(const llama_model & model, const llm_gra
- 
-     ggml_build_forward_expand(gf, cur);
+@@ -684,3 +669,22 @@ llama_model_dflash::graph_dsv4::graph_dsv4(const llama_model & model, const llm_
+         build_dspark_markov_head(*this, model, inp_tokens);
+     }
  }
 +
-+// Defined after the graph<true>/graph<false> constructor specializations above:
-+// cosmocc's clang rejects an explicit specialization that appears after the
-+// point where make_unique<graph<...>> would implicitly instantiate it.
++// Defined after the graph<true>/graph<false>/graph_dsv4 constructor
++// specializations above: cosmocc's clang rejects an explicit specialization
++// that appears after the point where make_unique<graph<...>> would implicitly
++// instantiate it.
 +std::unique_ptr<llm_graph_context> llama_model_dflash::build_arch_graph(const llm_graph_params & params) const {
 +    switch (params.gtype) {
 +        case LLM_GRAPH_TYPE_ENCODER:
 +            return std::make_unique<graph<true>>(*this, params);
 +        case LLM_GRAPH_TYPE_DEFAULT:
 +        case LLM_GRAPH_TYPE_DECODER:
++            if (hparams.dsv4_hc_mult > 0) {
++                return std::make_unique<graph_dsv4>(*this, params);
++            }
 +            return std::make_unique<graph<false>>(*this, params);
 +        default:
 +            GGML_ABORT("invalid graph type");

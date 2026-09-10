@@ -74,8 +74,9 @@ These patches address compatibility issues when building with Cosmopolitan libc 
 | Patch | Description |
 |-------|-------------|
 | `common_arg.cpp.patch` | Adds `COSMOCC` platform detection for `PATH_MAX` (includes `linux/limits.h`) |
-| `common_common.cpp.patch` | Adds platform-aware cache directory detection for Cosmopolitan (checks `LOCALAPPDATA`, `XDG_CACHE_HOME`, falls back to `~/.cache/`); also adds mmproj model size estimation to GPU fit params so the fit algorithm reserves enough VRAM for multimodal projectors |
+| `common_common.cpp.patch` | Adds platform-aware cache directory detection for Cosmopolitan (`fs_get_cache_directory`: checks `LOCALAPPDATA`, `XDG_CACHE_HOME`, falls back to `~/.cache/`) and the same for the config directory (`fs_get_config_directory`, new in b10441: `APPDATA`, `XDG_CONFIG_HOME`, `~/.config/`) — both `#else` out to `#error Unknown architecture` upstream, since cosmocc defines none of `__linux__`/`__APPLE__`/`_WIN32`; also adds mmproj model size estimation to GPU fit params so the fit algorithm reserves enough VRAM for multimodal projectors |
 | `common_download.cpp.patch` | Adds `COSMOCC` platform detection for `PATH_MAX` |
+| `vendor_sheredom_subprocess.h.patch` | Under `__COSMOPOLITAN__`, rewrites `subprocess_error_from_errno()`'s `switch` over `E*` values as an `if`/`else` chain. Cosmopolitan resolves errno at runtime (one binary, every host OS), so those are not constant expressions and cannot be case labels — upstream's version fails with `case value is not a constant expression`. Same mapping, no behavior change. Needed since b10441, which added this function; the header only enters the build when `LLAMA_SUBPROCESS` is set (see Server Integration) |
 
 ### Threading and Signal Handling
 
@@ -85,7 +86,8 @@ Cosmopolitan libc has specific behaviors with condition variables and signals th
 |-------|-------------|
 | `common_log.cpp.patch` | Adds `#include <csignal>`; blocks `SIGINT`/`SIGTERM` on logger thread via `pthread_sigmask` to prevent `EINTR` exceptions; replaces `cv.wait()` with `wait_for(30s)` loop to work around XNU futex timeout bug (~72 minute expiry) |
 | `tools_server_server-models.cpp.patch` | Adds `#include <csignal>`; blocks signals on the stopping thread via `pthread_sigmask`; replaces untimed `cv.wait()` with `wait_for(30s)` loops on every model-lifecycle wait (`unload_lru`, the reload-drain wait, `stopping_thread`, the `is_reloading` guard in `load`, and the generic `wait()` predicate helper) to work around the XNU futex timeout bug |
-| `tools_server_server-queue.cpp.patch` | Adds missing includes (`<cerrno>`, `<system_error>`, `<csignal>`); blocks `SIGINT`/`SIGTERM` on queue thread; replaces `wait()` with `wait_for()` loops in three locations (`wait_until_no_sleep`, main loop, `recv`) |
+| `tools_server_server-queue.cpp.patch` | Adds missing includes (`<cerrno>`, `<system_error>`, `<csignal>`); blocks `SIGINT`/`SIGTERM` on queue thread (the `yield_to_queue` worker thread is spawned after this, so it inherits the mask); replaces `wait()` with `wait_for(30s)` loops in five locations (`wait_until_no_sleep`, main loop, `recv`, plus `worker_loop` and `yield_to_queue`, both new upstream in b10441); runs `yield_to_queue()` inline when a GPU backend is loaded (see "GPU decode must stay on the main thread" below) |
+| `tools_server_server-stream.cpp.patch` | Adds `#include <csignal>`; blocks signals on the stream-session GC thread via `pthread_sigmask`. Without it, Ctrl+C on `llama-server` aborts with *"libc++abi: terminating due to uncaught exception ... condition_variable timed_wait failed: Interrupted system call"* instead of shutting down: `SIGINT` is delivered to that thread while it sits in `gc_wake_cv.wait_for(60s)`, `pthread_cond_timedwait()` returns `EINTR`, and libcxx rethrows it as `std::system_error` that nothing catches. This thread was the last one in the server with a condition-variable wait and no signal mask (the log worker, task queue, model-stopping thread and httplib pool were already covered). Pre-existing, not introduced by b10441; combined TUI mode is unaffected |
 | `vendor_cpp-httplib_httplib.cpp.patch` | Fixes httplib thread pool with `wait_for()` instead of `wait()` for XNU futex compatibility; also see HTTPS / TLS Support below |
 
 ### HTTPS / TLS Support
@@ -102,6 +104,14 @@ every object that can reach `httplib.h` (the macro changes httplib class
 layouts, so all TUs must agree) and links `mbedtls.a` into `llama-server`.
 This enables HTTPS model downloads (`-hf`, `--model-url`), https clients
 in server-models, and TLS serving via `--ssl-cert-file`/`--ssl-key-file`.
+
+**Keep-in-sync on a bump:** `third_party/mbedtls/include/mbedtls/` holds one
+forwarding header per `<mbedtls/*.h>` that the vendored `httplib.h` includes.
+When upstream refreshes cpp-httplib and it reaches for a new one, the build
+fails with `fatal error: 'mbedtls/<x>.h' file not found` — add the matching
+one-line forwarder (b10441 needed `version.h`, which httplib now uses to gate
+its 2.x/3.x/4.x API branches; the vendored fork is 2.26, so
+`MBEDTLS_VERSION_MAJOR` is 2 and the 2.x path stays selected).
 
 | Patch | Description |
 |-------|-------------|
@@ -158,6 +168,58 @@ These patches integrate llamafile's file handling APIs for loading models from b
 |-------|-------------|
 | `tools_server_server.cpp.patch` | Renames upstream's `llama_server()` to `server_main()` and adds `on_ready`/`on_shutdown_available` callbacks for combined TUI+server mode; adds Metal/GPU backend trigger before `common_init()`; installs the sandbox (`llamafile_sandbox_server()`, issue #930) — the mechanism lives in `llamafile/sandbox.c`; the patch fills a `llamafile_sandbox_spec` with the on-disk paths the loader opens after the lock (model, mmproj, media dir, LoRA, draft model, control vectors, public path as read; slot-save and prompt cache as read-write), detects outbound-needing features (`--rpc` via argv/env, MCP proxy, server tools) to relax `anet`→`inet`, passes `FLAG_confine_reads` for opt-in unveil(), quiesces the log worker (`common_log_pause`/`resume`, so no thread escapes the per-thread filter) around the call, before the HTTP listener spawns and before model load, and skips it in combined/GPU modes; adds Cosmopolitan-specific standalone `main()` with `cosmo_args`, verbose flag handling, `--unsecure` consumption (`llamafile_consume_flag`), and GPU pre-initialization; handles `LLAMAFILE_TUI` exit to avoid Metal cleanup crashes |
 
+**GPU decode must stay on the main thread** (`tools_server_server-queue.cpp.patch`).
+b10441 moved `llama_decode()` off the main thread: `update_slots()` now hands
+each batch to `queue_tasks.yield_to_queue()`, which runs it on a worker thread
+created in `start_loop()`. Under Cosmopolitan that is fatal for every GPU
+backend, because they are host ELFs loaded with `cosmo_dlopen()` and their libc
+reaches thread-local state through `%fs`:
+
+| thread | `fs_base` | `gs_base` | `*(fs+0x10)` (glibc TCB `self`) |
+|--------|-----------|-----------|-------------------------------|
+| main (created by the host) | `0x7ffff7e54740` | `0x7ffff7ff8000` | valid, points to itself |
+| cosmo-spawned worker | `0x7fffe83ca880` | *same as fs* | `0` |
+
+Cosmo gives its own threads cosmo TLS in **both** `%fs` and `%gs`; there is no
+glibc TCB. `cosmo_dlopen`'s `foreign_tramp` does swap in a host TLS block
+(`__foreign`, set up once via `cosmo_once`), but only for pointers obtained
+through `cosmo_dlsym` — ggml's `ggml_backend_i` vtable holds raw DSO pointers
+that ggml core calls directly. So the first CUDA decode on the worker lands in
+host `pthread_getspecific`, which reads `%fs:0x10` as the TCB self-pointer, gets
+`0`, and segfaults at `0x328` (verified on an L40S: deterministic, any model
+size, `dmesg` shows `segfault at 328 ... in libc.so.6`).
+
+The patch therefore runs the work inline on the calling thread whenever
+`llamafile_has_gpu()` — restoring exactly where decode ran before b10441.
+CPU-only runs keep upstream's worker. The cost is narrow: the yield wraps a
+single `llama_decode(batch_view)`, and only `SERVER_TASK_TYPE_METRICS` is
+serviced during it, so the sole effect is that `/metrics` and `/slots` wait for
+the in-flight batch (~29 ms while generating; up to a few seconds for a full
+prompt batch). This will recur whenever upstream moves work onto a new thread.
+
+**Subprocess support needs `-DLLAMA_SUBPROCESS`** (set in `BUILD.mk`, not a
+patch). b10441 moved child-process spawning into `common_subproc`
+(`common/subproc.*`, wrapping the vendored `sheredom/subprocess.h`) and put it
+behind a build gate; before that `server-models.cpp` included `subprocess.h`
+unconditionally, so the cosmocc build got it for free. Upstream's CMake
+defaults the option ON except on iOS/Android/WASM. It gates three server
+features, all reachable from llamafile since `args.cpp` strips only
+llamafile's own flags and passes the rest to `common_params_parse`:
+
+- **MCP stdio servers** (`--mcp-servers-config`, `--mcp-servers-json`) —
+  `server-mcp.cpp` spawns them and, unlike the other two, does **not** check
+  `common_subproc::is_supported()`, so without the define they fail silently
+  rather than reporting an error.
+- **`--server-tools`** — `server-tools.cpp` throws *"subprocess is not enabled
+  on this build"*, caught into a clean `return 1`.
+- **Router mode** — `llama-server` with no model; `init_routes()` throws the
+  same message, and the server exits at startup.
+
+The macro also switches `subprocess_s` between its real and dummy definition
+in `subproc.h`, so every object that can reach that header must be compiled
+with it. Enabling it pulls `subprocess.h` into the build, which needs the
+Cosmopolitan fix in the patch table above.
+
 The web UI moved upstream from prebuilt `tools/server/public/*` assets to
 a Svelte/PWA project under `tools/ui/`, embedded at CMake time via
 `tools/ui/embed.cpp`. cosmocc has no JS toolchain, so `fetch-ui-assets.sh`
@@ -187,8 +249,8 @@ API still works.
 
 Note that `embed.cpp` only takes that graceful no-asset path when `dist/` is
 *empty*: once the directory is non-empty it enforces a required-asset set
-(its `required_check[]` table — `index.html`, `loading.html`,
-`manifest.webmanifest`, `sw.js`, `build.json`, `version.json`, and the hashed
+(its `required_check[]` table — `index.html`, `manifest.webmanifest`, `sw.js`,
+`build.json`, `version.json`, and the hashed
 `bundle*.js`/`bundle*.css`/`workbox*.js`) and returns a hard error if any is
 missing. So `fetch-ui-assets.sh` validates the *same* set after extracting
 (`ui_missing_assets`); if a downloaded tarball is partial or has drifted, it
@@ -205,7 +267,7 @@ can change on a llama.cpp bump — when it does, the asset list in
 | `ggml_src_ggml-vulkan_ggml-vulkan.cpp.patch` | Fixes unsigned integer underflow in `ggml_backend_vk_get_device_memory` where Vulkan's `heapUsage` can exceed `heapBudget` (clamps to zero instead of wrapping) |
 | `src_models_t5.cpp.patch` | Forward-declares the `graph<false>`/`graph<true>` explicit specializations before `build_arch_graph` so clang's `-std=gnu++23` doesn't reject them as specializations after implicit instantiation |
 | `src_models_eagle3.cpp.patch` | Moves `build_arch_graph` to the end of the file, after the `graph<true>`/`graph<false>` constructor specializations, so clang's `-std=gnu++23` doesn't reject them as explicit specializations appearing after the `make_unique<graph<...>>` implicit instantiation point |
-| `src_models_dflash.cpp.patch` | Same fix as `eagle3` for the DFlash model (new in b10052): moves `build_arch_graph` to the end of the file, after the `graph<true>`/`graph<false>` specializations, so clang's `-std=gnu++23` doesn't reject them as explicit specializations after the `make_unique<graph<...>>` implicit instantiation point |
+| `src_models_dflash.cpp.patch` | Same fix as `eagle3` for the DFlash model (new in b10052): moves `build_arch_graph` to the end of the file, after the `graph<true>`/`graph<false>`/`graph_dsv4` specializations, so clang's `-std=gnu++23` doesn't reject them as explicit specializations after the `make_unique<graph<...>>` implicit instantiation point |
 
 ## Creating New Patches
 

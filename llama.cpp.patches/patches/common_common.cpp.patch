@@ -52,24 +52,49 @@ diff --git a/common/common.cpp b/common/common.cpp
      int32_t logical_cpus = _system_configuration.ncpus;
      int32_t smt_threads = _system_configuration.smt_threads;
      if (smt_threads > 0) {
-@@ -1033,6 +1068,16 @@ std::string fs_get_cache_directory() {
-         cache_directory = std::getenv("HOME") + std::string("/Library/Caches/");
- #elif defined(_WIN32)
-         cache_directory = std::getenv("LOCALAPPDATA");
+@@ -1058,6 +1093,20 @@ std::string fs_get_cache_directory() {
+         if (cache_directory.empty()) {
+             throw std::runtime_error("Failed to find %LOCALAPPDATA% directory");
+         }
 +#elif defined(COSMOCC)
-+        // We don't know what OS we are running on at compile time, just CPU architecture.
-+        // try various environment variables, fall back to ~/.cache.
-+        if (std::getenv("LOCALAPPDATA")) {
-+            cache_directory = std::getenv("LOCALAPPDATA");
-+        } else if (std::getenv("XDG_CACHE_HOME")) {
-+            cache_directory = std::getenv("XDG_CACHE_HOME");
-+        } else {
-+            cache_directory = std::getenv("HOME") + std::string("/.cache/");
++        // We don't know what OS we are running on at compile time, just CPU
++        // architecture. Try various environment variables, fall back to ~/.cache.
++        cache_directory = common_get_env("LOCALAPPDATA");
++        if (cache_directory.empty()) {
++            cache_directory = common_get_env("XDG_CACHE_HOME");
++        }
++        if (cache_directory.empty()) {
++            const std::string home = common_get_env("HOME");
++            if (home.empty()) {
++                throw std::runtime_error("Failed to find $HOME directory");
++            }
++            cache_directory = home + "/.cache/";
 +        }
  #elif defined(__EMSCRIPTEN__)
          GGML_ABORT("not implemented on this platform");
  #else
-@@ -1222,10 +1267,31 @@ common_init_result::common_init_result(common_params & params, bool model_only)
+@@ -1103,6 +1152,20 @@ std::string fs_get_config_directory() {
+     if (config_directory.empty()) {
+         throw std::runtime_error("Failed to find %APPDATA% directory");
+     }
++#elif defined(COSMOCC)
++    // We don't know what OS we are running on at compile time, just CPU
++    // architecture. Try various environment variables, fall back to ~/.config.
++    config_directory = common_get_env("APPDATA");
++    if (config_directory.empty()) {
++        config_directory = common_get_env("XDG_CONFIG_HOME");
++    }
++    if (config_directory.empty()) {
++        const std::string home = common_get_env("HOME");
++        if (home.empty()) {
++            throw std::runtime_error("Failed to find $HOME directory");
++        }
++        config_directory = home + "/.config/";
++    }
+ #elif defined(__EMSCRIPTEN__)
+     // caller decides what to do when there is no config directory
+     throw std::runtime_error("not implemented on this platform");
+@@ -1294,10 +1357,31 @@ common_init_result::common_init_result(common_params & params, bool model_only)
      if (params.fit_params) {
          COM_TRC("%s", "fitting params to device memory ...\n");
          COM_TRC("%s", "(for bugs during this step try to reproduce them with -fit off, or provide --verbose logs if the bug only occurs with -fit on)\n");

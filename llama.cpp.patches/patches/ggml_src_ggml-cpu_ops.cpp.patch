@@ -200,10 +200,10 @@ diff --git a/ggml/src/ggml-cpu/ops.cpp b/ggml/src/ggml-cpu/ops.cpp
 +                    // [jart] llamafile #975: route through optimized AVX-512
 +                    // dequant when available; fall back to upstream's helper.
 +                    if (!llamafile_fa_fp16_to_fp32_row((const ggml_fp16_t *)v_data, V32 + tk * DV, DV)) {
-+                        ggml_fp16_to_fp32_row((const ggml_fp16_t *)v_data, V32 + tk * DV, DV);
++                        ggml_cpu_fp16_to_fp32((const ggml_fp16_t *)v_data, V32 + tk * DV, DV);
 +                    }
 +#else
-                     ggml_fp16_to_fp32_row((const ggml_fp16_t *)v_data, V32 + tk * DV, DV);
+                     ggml_cpu_fp16_to_fp32((const ggml_fp16_t *)v_data, V32 + tk * DV, DV);
 +#endif
                  } else {
                      memcpy(V32 + tk * DV, v_data, DV * sizeof(float));
