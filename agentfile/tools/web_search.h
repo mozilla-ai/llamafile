@@ -100,7 +100,7 @@ class WebSearchTool : public agent_cpp::Tool {
             cli.set_connection_timeout(kTimeoutSeconds, 0);
 
             auto res = cli.Get(parts.path.c_str(),
-                               {{"Accept", "application/json"}});
+                               httplib::Headers{{"Accept", "application/json"}});
             if (!res) {
                 int err = errno;
                 return error_response("request failed: " +
