@@ -12,11 +12,10 @@
 # BUILD.mk for agentfile (agentic CLI binary)
 #
 # agentfile is a cosmocc-compiled APE binary that runs an agentic loop
-# end-to-end from a single CLI invocation. It mirrors the relationship
-# between llama.cpp <-> llamafile and whisper.cpp <-> whisperfile: this
-# package wraps agent.cpp's Agent/Model primitives on top of llamafile's
-# already-built llama.cpp.a and the TOOL_LLAMAFILE_OBJS that provide GPU
-# dispatch + zip filesystem support.
+# end-to-end from a single CLI invocation. It builds on pieces the tree
+# already compiles: agent.cpp's Agent/Model (loop + llama.cpp wrapper),
+# llama.cpp's server-tools objects (the tool implementations), llama.cpp.a,
+# and the TOOL_LLAMAFILE_OBJS providing GPU dispatch + zip filesystem.
 #
 
 PKGS += AGENTFILE
@@ -60,7 +59,6 @@ AGENTFILE_OBJS := $(AGENTFILE_SRCS_CPP:%.cpp=o/$(MODE)/%.o)
 # ==============================================================================
 
 AGENTFILE_INCLUDES := \
-	-iquote . \
 	-iquote agentfile \
 	-iquote llamafile \
 	-iquote agent.cpp/src \
@@ -88,7 +86,7 @@ AGENTFILE_CPPFLAGS += \
 
 o/$(MODE)/agentfile/%.o: agentfile/%.cpp agentfile/BUILD.mk $(AGENTFILE_HDRS) $(AGENTFILE_EXT_HDRS)
 	@mkdir -p $(@D)
-	$(COMPILE.cc) $(AGENTFILE_CPPFLAGS) -frtti -fexceptions -o $@ $<
+	$(COMPILE.cc) $(AGENTFILE_CPPFLAGS) -o $@ $<
 
 # ==============================================================================
 # Executable
@@ -100,7 +98,8 @@ o/$(MODE)/agentfile/%.o: agentfile/%.cpp agentfile/BUILD.mk $(AGENTFILE_HDRS) $(
 #   - llamafile objects for runtime GPU dispatch + zip filesystem
 #   - LLAMAFILE_METAL_SOURCES: embedded Metal kernel sources (macOS)
 #   - TINYBLAS_CPU_OBJS for matmul kernels
-#   - HTTPLIB_OBJS: cpp-httplib implementation for the http_fetch tool
+#   - HTTPLIB_OBJS: cpp-httplib implementation (server tools, http_fetch,
+#     web_search)
 
 o/$(MODE)/agentfile/agentfile: \
 		$(AGENTFILE_OBJS) \
@@ -114,12 +113,6 @@ o/$(MODE)/agentfile/agentfile: \
 		$(HTTPLIB_OBJS)
 	@mkdir -p $(@D)
 	$(LINK.o) $(AGENTFILE_OBJS) o/$(MODE)/agent.cpp/agent.cpp.a $(AGENTFILE_SERVER_OBJS) $(TOOL_LLAMAFILE_OBJS) $(LLAMAFILE_METAL_SOURCES) $(TINYBLAS_CPU_OBJS) $(HTTPLIB_OBJS) o/$(MODE)/llama.cpp/llama.cpp.a o/$(MODE)/third_party/mbedtls/mbedtls.a $(LOADLIBES) $(LDLIBS) -fopenmp -lpthread -o $@
-
-# ==============================================================================
-# Dependencies
-# ==============================================================================
-
-$(AGENTFILE_OBJS): agentfile/BUILD.mk
 
 # ==============================================================================
 # Main target
