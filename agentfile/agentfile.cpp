@@ -16,13 +16,14 @@
 // limitations under the License.
 
 //
-// agentfile: cosmocc-compiled APE binary that runs an agent.cpp agent loop
-// from a single CLI invocation.
+// agentfile: a self-contained agentic CLI. One APE binary runs an
+// agent.cpp loop with llama.cpp's server tools (plus agentfile's own
+// http_fetch/web_search), entirely in-process: prompt in, answer out.
 //
-// v0: ships 8 tools (read_file, file_glob_search, grep_search, write_file,
-// edit_file, apply_diff, exec_shell_command, get_datetime) vendored from
-// llama.cpp/tools/server/server-tools.cpp. Destructive tools prompt the user
-// on stderr unless --yes is given.
+// Layout: this file is the only translation unit — flags, wiring, and the
+// interactive loop. Tools come through server_tools_adapter.h; the loop's
+// observers (confirmation, progress, recorders, iteration cap) live in
+// callbacks/. Answers go to stdout; everything else goes to stderr.
 //
 
 #include <algorithm>
