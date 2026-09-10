@@ -13,9 +13,16 @@
 //                      tools (http_fetch, web_search) and hands out
 //                      adapters; must outlive the Agent using them
 //
-// Isolation: when a runtime spec is set (--tools-runtime, e.g.
-// "podman-rootless:<image>"), it is injected as params["runtime"] on every
-// call — the same mechanism llama-server's HTTP handler uses.
+// Isolation: --tools-runtime makes tools run their file and shell
+// operations inside a sandbox instead of on the host. The spec string is
+// forwarded to every tool call as params["runtime"].
+//
+// Only sandboxes that already exist work here: start a container yourself,
+// then pass e.g. "docker-container:<name>". llama-server can additionally
+// CREATE a container on demand from a spec, but that creation logic is
+// private to llama.cpp (server-tools.cpp), so agentfile cannot reuse it.
+// Consequences: create-on-demand specs are unsupported, and a malformed
+// spec is only detected at the first tool call, not at startup.
 //
 
 #pragma once
