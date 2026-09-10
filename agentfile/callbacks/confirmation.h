@@ -38,11 +38,8 @@ class DestructiveOpsConfirmationCallback : public agent_cpp::Callback {
     void before_tool_execution(std::string &tool_name,
                                std::string &arguments) override {
         if (!destructive_.count(tool_name)) return;
-        if (always_yes_) {
-            std::fprintf(stderr, "[%s --yes] %s\n", tool_name.c_str(),
-                         arguments.c_str());
-            return;
-        }
+        // ProgressCallback already prints every call; nothing to add here.
+        if (always_yes_) return;
         std::fprintf(stderr, "\n[%s] %s\n", tool_name.c_str(),
                      arguments.c_str());
         std::fprintf(stderr, "Allow? [y/N]: ");

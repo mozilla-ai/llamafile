@@ -13,11 +13,26 @@
 #include <chrono>
 #include <cstdint>
 #include <cstdio>
+#include <cstdlib>
 #include <ctime>
 #include <random>
 #include <string>
+#include <unistd.h>
 
 namespace agentfile {
+
+// ANSI dim on/off codes for stderr chrome (progress lines, prompts), so it
+// reads visually distinct from the model's answer on stdout. These wrap the
+// text but never replace it: when stderr is redirected to a file/pipe or
+// NO_COLOR is set, both return "" and the exact same text prints unstyled.
+inline const char *dim() {
+    static const bool on = isatty(STDERR_FILENO) && !std::getenv("NO_COLOR");
+    return on ? "\033[2m" : "";
+}
+inline const char *dim_off() {
+    static const bool on = isatty(STDERR_FILENO) && !std::getenv("NO_COLOR");
+    return on ? "\033[0m" : "";
+}
 
 // n random lowercase hex characters (n/2 random bytes).
 inline std::string random_hex(size_t n) {

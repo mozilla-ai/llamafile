@@ -51,11 +51,12 @@
 
 #include "llamafile.h"
 
-#include "confirmation_callback.h"
+#include "callbacks/confirmation.h"
+#include "callbacks/max_iterations.h"
+#include "callbacks/progress.h"
+#include "callbacks/session_recorder.h"
+#include "callbacks/trace.h"
 #include "server_tools_adapter.h"
-#include "session_recorder.h"
-#include "stdout_callback.h"
-#include "trace_callback.h"
 
 #include <sstream>
 
@@ -132,7 +133,7 @@ bool slurp(FILE *f, std::string &out) {
 // terminal instead. Returns an empty string on EOF, no terminal, or an
 // empty line; the caller ends the session.
 std::string read_followup() {
-    fprintf(stderr, "\n> ");
+    fprintf(stderr, "%s\n> %s", agentfile::dim(), agentfile::dim_off());
     fflush(stderr);
 
     FILE *tty = nullptr;

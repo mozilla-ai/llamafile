@@ -28,7 +28,9 @@ PKGS += AGENTFILE
 AGENTFILE_SRCS_CPP := \
 	agentfile/agentfile.cpp
 
-AGENTFILE_HDRS := $(wildcard agentfile/*.h) $(wildcard agentfile/tools/*.h)
+AGENTFILE_HDRS := $(wildcard agentfile/*.h) \
+	$(wildcard agentfile/callbacks/*.h) \
+	$(wildcard agentfile/tools/*.h)
 
 # External headers whose ABI leaks into agentfile objects. Submodule bumps
 # rewrite these without touching agentfile sources; without this dependency
