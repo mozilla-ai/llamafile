@@ -334,7 +334,11 @@ int main(int argc, char **argv) {
         auto weights = agent_cpp::ModelWeights::create(model_path);
 
         agent_cpp::ModelConfig cfg;  // defaults: temp=0, top_p=1, top_k=0
-        cfg.n_batch = 256;  // agent.cpp's default of -1 doesn't play with llama_context
+        // agent.cpp's default (-1) wraps to ~4 billion in llama_context's
+        // unsigned n_batch and kills context creation, so always set one.
+        // 2048 matches llama.cpp's default; llamafile's TUI uses 256 for
+        // finer prefill progress display, which agentfile doesn't have.
+        cfg.n_batch = 2048;
         cfg.n_ctx = n_ctx;  // 0 = model's native context
         auto model = agent_cpp::Model::create_with_weights(weights, cfg);
 
