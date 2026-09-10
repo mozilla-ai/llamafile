@@ -48,6 +48,7 @@
 #include "tools/http_fetch.h"
 #include "tools/web_search.h"
 
+#include <map>
 #include <memory>
 #include <set>
 #include <string>
@@ -96,6 +97,9 @@ class ServerToolbox {
     server_mcp mcp_;   // default-constructed: no MCP servers
     server_tools st_;
     std::string runtime_spec_;
+    // Tools that exist but could not be registered, with the reason —
+    // shown by --tools validation and in the help text.
+    std::map<std::string, std::string> missing_;
 
   public:
     // searxng_url empty = web_search not registered.
@@ -108,7 +112,16 @@ class ServerToolbox {
         if (!searxng_url.empty()) {
             st_.tools.push_back(
                 std::make_unique<tools::WebSearchTool>(searxng_url));
+        } else {
+            missing_["web_search"] =
+                "requires a SearXNG instance: pass --searxng-url URL or "
+                "set SEARXNG_URL";
         }
+    }
+
+    // name -> why it is not available in this configuration.
+    const std::map<std::string, std::string> &missing() const {
+        return missing_;
     }
 
     ServerToolbox(const ServerToolbox &) = delete;

@@ -69,6 +69,42 @@ constexpr int kDefaultCtx = 32 * 1024;
 
 void null_log_callback(ggml_log_level, const char *, void *) {}
 
+// The tools section of the help is generated from the toolbox so it can't
+// drift from the registered tools. SEARXNG_URL is honored so a configured
+// environment (or packaged agent) shows its true availability.
+void print_tools_help() {
+    try {
+        const char *env = std::getenv("SEARXNG_URL");
+        agentfile::ServerToolbox toolbox(env ? env : "", "");
+        auto guarded = toolbox.write_tool_names();
+        std::string ro, wr;
+        for (const auto &name : toolbox.tool_names()) {
+            std::string &dst = guarded.count(name) ? wr : ro;
+            dst += (dst.empty() ? "" : ", ") + name;
+        }
+        fprintf(stderr,
+                "Tools (choose with --tools LIST, \"all\" or \"read_only\"; "
+                "default: all):\n"
+                "  read-only:  %s\n"
+                "  guarded:    %s\n"
+                "              (ask confirmation before each call; --yes skips,\n"
+                "              --confirm restores)\n",
+                ro.c_str(), wr.c_str());
+        for (const auto &[name, why] : toolbox.missing()) {
+            fprintf(stderr, "  unavailable: %s — %s\n", name.c_str(),
+                    why.c_str());
+        }
+        fprintf(stderr,
+                "  --searxng-url URL    SearXNG instance used by web_search;\n"
+                "                       also read from SEARXNG_URL\n"
+                "  --tools-runtime SPEC Run every tool inside an existing\n"
+                "                       container, e.g. \"docker-container:NAME\"\n"
+                "                       (default: tools run on this host)\n");
+    } catch (const std::exception &e) {
+        fprintf(stderr, "Tools: unavailable in this build (%s)\n", e.what());
+    }
+}
+
 void print_usage(const char *prog) {
     fprintf(stderr,
             "agentfile — agentic CLI on top of agent.cpp + llama.cpp\n"
@@ -87,17 +123,7 @@ void print_usage(const char *prog) {
             "  -s TEXT              System instructions (default: helpful assistant)\n"
             "  --system-file PATH   Read system instructions from a file\n"
             "                       (works with /zip/ paths in packaged agents)\n"
-            "  --tools LIST         Comma-separated tool list, or \"all\" (default),\n"
-            "                       or \"read_only\". Available tools:\n"
-            "                       read_file, file_glob_search, grep_search,\n"
-            "                       get_datetime, get_info, write_file, edit_file,\n"
-            "                       exec_shell_command, http_fetch,\n"
-            "                       web_search (needs --searxng-url)\n"
-            "  --searxng-url URL    SearXNG instance for web_search; also read\n"
-            "                       from the SEARXNG_URL environment variable\n"
-            "  --tools-runtime SPEC Run tools inside an isolate (llama.cpp\n"
-            "                       server-tools runtimes, e.g.\n"
-            "                       \"docker-container:ID\"); default: none\n"
+            "  --tools LIST         Tools the model may use (see Tools below)\n"
             "  --session FILE       Record the conversation as a pi session\n"
             "                       (https://pi.dev, session-format v3 JSONL;\n"
             "                       overwrites FILE)\n"
@@ -117,10 +143,13 @@ void print_usage(const char *prog) {
             "  --quiet              Don't print tool-execution progress to stderr\n"
             "  -v, --verbose        Also print truncated tool results to stderr\n"
             "  -h                   Show this help\n"
+            "\n",
+            prog, prog, kDefaultCtx);
+    print_tools_help();
+    fprintf(stderr,
             "\n"
             "Exit codes: 0 ok, 1 usage error, 2 agent error, 3 other error,\n"
-            "            4 --max-iterations cap reached\n",
-            prog, prog, kDefaultCtx);
+            "            4 --max-iterations cap reached\n");
 }
 
 // Read a whole FILE* into a string.
@@ -325,11 +354,10 @@ int main(int argc, char **argv) {
             auto known = toolbox.tool_names();
             for (const auto &name : keep) {
                 if (known.count(name)) continue;
-                if (name == "web_search") {
-                    fprintf(stderr,
-                            "agentfile: web_search requires a SearXNG "
-                            "instance: pass --searxng-url URL or set "
-                            "SEARXNG_URL\n");
+                auto it = toolbox.missing().find(name);
+                if (it != toolbox.missing().end()) {
+                    fprintf(stderr, "agentfile: %s %s\n", name.c_str(),
+                            it->second.c_str());
                 } else {
                     fprintf(stderr, "agentfile: unknown tool: %s\n",
                             name.c_str());
