@@ -120,10 +120,12 @@ diff --git a/src/model.cpp b/src/model.cpp
  
      try {
          auto parsed_msg =
-@@ -262,10 +251,73 @@ Model::generate(const std::vector<common_chat_msg>& messages,
+@@ -261,11 +250,74 @@ Model::generate(const std::vector<common_chat_msg>& messages,
+     inputs.tools = tools;
      inputs.tool_choice = COMMON_CHAT_TOOL_CHOICE_AUTO;
      inputs.add_generation_prompt = true;
-     inputs.enable_thinking = false;
+-    inputs.enable_thinking = false;
++    inputs.enable_thinking = config_.enable_thinking; // llamafile: was false
 +    // llamafile: build the template's parser with reasoning rules so any
 +    // <think>...</think> the model emits anyway is extracted into
 +    // reasoning_content (matching syntax.reasoning_format in the parse).

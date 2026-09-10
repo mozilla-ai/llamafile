@@ -1,7 +1,18 @@
 diff --git a/src/model.h b/src/model.h
 --- a/agent.cpp/src/model.h
 +++ b/agent.cpp/src/model.h
-@@ -206,10 +206,10 @@ class Model
+@@ -36,6 +36,10 @@ struct ModelConfig
+     // Optional GBNF grammar and root rule name
+     std::string grammar;
+     std::string grammar_root = "root";
++    // llamafile: ask the chat template to enable model reasoning
++    // (<think> blocks). Off by default: agent turns favor latency, and
++    // reasoning is extracted to reasoning_content when it appears anyway.
++    bool enable_thinking = false;
+ };
+ 
+ /// Reads a GBNF file into a string for ModelConfig::grammar
+@@ -206,10 +210,10 @@ class Model
  
      std::shared_ptr<ModelWeights> weights_;
      llama_context* ctx_ = nullptr;

@@ -104,6 +104,9 @@ void print_usage(const char *prog) {
             "  --trace FILE         Record spans as OTLP/JSON lines (OpenTelemetry\n"
             "                       collector `otlpjsonfile` receiver format;\n"
             "                       overwrites FILE)\n"
+            "  --think              Enable model reasoning (<think> blocks; shown\n"
+            "                       dimmed on stderr, never in the answer).\n"
+            "                       --no-think undoes it (default: off)\n"
             "  -i, --interactive    After the answer, prompt for a follow-up and\n"
             "                       continue the conversation (empty line or EOF\n"
             "                       ends the session). --no-interactive undoes it.\n"
@@ -189,6 +192,7 @@ int main(int argc, char **argv) {
         "You are a helpful assistant. Answer concisely.";
     bool always_yes = false;
     bool interactive = false;
+    bool think = false;
     int n_ctx = kDefaultCtx; // tokens; 0 = model native
     int verbosity = 1;       // 0 = --quiet, 1 = default, 2 = --verbose
     int max_iterations = 0;  // 0 = no cap
@@ -250,6 +254,10 @@ int main(int argc, char **argv) {
             interactive = true;
         } else if (std::strcmp(argv[i], "--no-interactive") == 0) {
             interactive = false;
+        } else if (std::strcmp(argv[i], "--think") == 0) {
+            think = true;
+        } else if (std::strcmp(argv[i], "--no-think") == 0) {
+            think = false;
         } else if (std::strcmp(argv[i], "--yes") == 0) {
             always_yes = true;
         } else if (std::strcmp(argv[i], "--confirm") == 0) {
@@ -340,6 +348,7 @@ int main(int argc, char **argv) {
         // finer prefill progress display, which agentfile doesn't have.
         cfg.n_batch = 2048;
         cfg.n_ctx = n_ctx;  // 0 = model's native context
+        cfg.enable_thinking = think;
         auto model = agent_cpp::Model::create_with_weights(weights, cfg);
 
         // Model name for session/trace records: the GGUF basename.
