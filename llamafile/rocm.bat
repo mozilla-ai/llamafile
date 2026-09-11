@@ -132,6 +132,7 @@ set "COMMON_FLAGS=%COMMON_FLAGS% -Wno-ignored-attributes -Wno-nested-anon-types"
 set "COMMON_FLAGS=%COMMON_FLAGS% -I%BUILD_DIR% -I%GGML_INC_DIR% -I%GGML_SRC_DIR% -I%GGML_CUDA_DIR%"
 set "COMMON_FLAGS=%COMMON_FLAGS% -I"%HIP_PATH%\include""
 set "COMMON_FLAGS=%COMMON_FLAGS% -DNDEBUG -DGGML_BUILD=1 -DGGML_SHARED=1 -DGGML_BACKEND_SHARED=1 -DGGML_BACKEND_BUILD=1 -DGGML_MULTIPLATFORM"
+set "COMMON_FLAGS=%COMMON_FLAGS% -DGGML_HIP_GRAPHS=1"
 set "COMMON_FLAGS=%COMMON_FLAGS% -DGGML_USE_HIP=1 -DGGML_USE_TINYBLAS=1 -DGGML_HIP_NO_VMM=1 -D__HIP_PLATFORM_AMD__"
 :: --offload-compress shrinks the fat binary (mirrors rocm.sh / #995); requires a
 :: recent ROCm HIP SDK -- drop this flag if your clang++ rejects it
