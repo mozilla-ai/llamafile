@@ -114,12 +114,14 @@ llamafile -m model.gguf --server --tools all
 `--tools all` enables every tool provided by the bundled server. A
 comma-separated list enables only selected tools, such as
 `--tools read_file,file_glob_search,grep_search`. The exact tool names for a
-build are listed by `--server --help`.
+build are listed by `--server --help`. See [Built-in local tools](built-in-tools.md)
+for the complete tool reference, limits, permission flow, and llamafile sandbox
+behavior.
 
 Built-in tools may access local files with the
 permissions of the llamafile process. Enable only the tools you need, do not
 enable them in an untrusted environment, and review the
-[sandbox limitations](security.md#when-the-sandbox-is-relaxed-or-skipped).
+[sandbox behavior](built-in-tools.md#security-and-sandbox-behavior).
 For security, the server restricts allowed browser origins to localhost by
 default when built-in tools are enabled.
 
