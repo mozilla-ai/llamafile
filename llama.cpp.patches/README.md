@@ -268,6 +268,7 @@ can change on a llama.cpp bump — when it does, the asset list in
 | `src_models_t5.cpp.patch` | Forward-declares the `graph<false>`/`graph<true>` explicit specializations before `build_arch_graph` so clang's `-std=gnu++23` doesn't reject them as specializations after implicit instantiation |
 | `src_models_eagle3.cpp.patch` | Moves `build_arch_graph` to the end of the file, after the `graph<true>`/`graph<false>` constructor specializations, so clang's `-std=gnu++23` doesn't reject them as explicit specializations appearing after the `make_unique<graph<...>>` implicit instantiation point |
 | `src_models_dflash.cpp.patch` | Same fix as `eagle3` for the DFlash model (new in b10052): moves `build_arch_graph` to the end of the file, after the `graph<true>`/`graph<false>`/`graph_dsv4` specializations, so clang's `-std=gnu++23` doesn't reject them as explicit specializations after the `make_unique<graph<...>>` implicit instantiation point |
+| `ggml_src_ggml.c.patch` | Makes the `ggml_time_ms()`/`ggml_time_us()` call `ggml_time_init()` lazily. The Windows dylibs link their own copy of `ggml.c`, so the DLL's `timer_freq` is never set by the executable's `ggml_init()` and any `ggml_time_*()` call made from inside the DLL divides by zero (`0xC0000094`, surfaced by Cosmopolitan as SIGFPE). First hit when #1051 enabled `-DGGML_CUDA_USE_GRAPHS`, calling `ggml_time_us()` in `ggml-cuda`. Linux/macOS are unaffected (`clock_gettime`, no static divisor).  |
 
 ## Creating New Patches
 
