@@ -1,0 +1,17 @@
+diff --git a/ggml/src/ggml.c b/ggml/src/ggml.c
+--- a/llama.cpp/ggml/src/ggml.c
++++ b/llama.cpp/ggml/src/ggml.c
+@@ -547,11 +547,13 @@ void ggml_time_init(void) {
+     InitOnceExecuteOnce(&once, ggml_time_init_once, NULL, NULL);
+ }
+ int64_t ggml_time_ms(void) {
++    ggml_time_init(); // llamafile: GPU DLLs carry their own ggml.c; init lazily so timer_freq is never 0
+     LARGE_INTEGER t;
+     QueryPerformanceCounter(&t);
+     return ((t.QuadPart-timer_start) * 1000) / timer_freq;
+ }
+ int64_t ggml_time_us(void) {
++    ggml_time_init(); // llamafile: see ggml_time_ms
+     LARGE_INTEGER t;
+     QueryPerformanceCounter(&t);
+     return ((t.QuadPart-timer_start) * 1000000) / timer_freq;
