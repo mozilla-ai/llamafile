@@ -93,6 +93,21 @@ if not exist "%VULKAN_SDK%\Lib\vulkan-1.lib" (
     exit /b 1
 )
 
+:: -------- record the shader toolchain --------
+:: The SDK's glslc and headers decide which shader extensions the DLL gets
+:: (see the feature probe below), so the build log must show which were used.
+:: glslc --version prints shaderc on line 1 and glslang on line 3.
+set "GLSLC_VERSION="
+set /a _GLSLC_LINE=0
+for /f "usebackq delims=" %%v in (`"%GLSLC%" --version 2^>nul`) do (
+    set /a _GLSLC_LINE+=1
+    if !_GLSLC_LINE! equ 1 set "GLSLC_VERSION=%%v"
+    if !_GLSLC_LINE! equ 3 set "GLSLC_VERSION=!GLSLC_VERSION! %%v"
+)
+set "VK_HEADER_FILE=%VULKAN_SDK%\Include\vulkan\vulkan_core.h"
+set "VK_HEADER_VERSION="
+for /f "tokens=3" %%v in ('findstr /r /c:"^#define VK_HEADER_VERSION " "%VK_HEADER_FILE%" 2^>nul') do set "VK_HEADER_VERSION=%%v"
+
 :: -------- find Visual Studio / Build Tools --------
 where cl >nul 2>&1
 if errorlevel 1 (
@@ -148,17 +163,23 @@ pushd "%LLAMA_CPP_DIR%\ggml" 2>nul && (
 :: gate which shader variants vulkan-shaders-gen emits and which pipelines
 :: ggml-vulkan.cpp creates, so they must reflect the actual glslc on this
 :: machine. Omitting them silently drops coopmat/coopmat2/decode-vector/
-:: integer-dot/bf16 support from the DLL. Keep this list in sync with
+:: integer-dot/bf16/fp4/fp8 support from the DLL. Keep this list in sync with
 :: upstream's test_shader_extension_support() calls in
 :: ggml-vulkan/CMakeLists.txt.
 set "FEATURE_TESTS_DIR=%SHADERS_DIR%\feature-tests"
 set "GLSLC_DEFINES="
+set "SHADER_FEATURES_OK="
+set "SHADER_FEATURES_MISSING="
 echo Probing glslc shader extension support...
 call :probe_glslc coopmat.comp GGML_VULKAN_COOPMAT_GLSLC_SUPPORT
 call :probe_glslc coopmat2.comp GGML_VULKAN_COOPMAT2_GLSLC_SUPPORT
 call :probe_glslc coopmat2_decode_vector.comp GGML_VULKAN_COOPMAT2_DECODE_VECTOR_GLSLC_SUPPORT
 call :probe_glslc integer_dot.comp GGML_VULKAN_INTEGER_DOT_GLSLC_SUPPORT
 call :probe_glslc bfloat16.comp GGML_VULKAN_BFLOAT16_GLSLC_SUPPORT
+call :probe_glslc float_e2m1.comp GGML_VULKAN_FLOAT_E2M1_GLSLC_SUPPORT
+call :probe_glslc float_e4m3.comp GGML_VULKAN_FLOAT_E4M3_GLSLC_SUPPORT
+if defined SHADER_FEATURES_OK set "SHADER_FEATURES_OK=!SHADER_FEATURES_OK:~1!"
+if defined SHADER_FEATURES_MISSING set "SHADER_FEATURES_MISSING=!SHADER_FEATURES_MISSING:~1!"
 echo.
 
 :: The defines bake into vulkan-shaders-gen, the generated header, and every
@@ -183,6 +204,9 @@ echo   Output:     %OUTPUT%
 echo   Build:      %BUILD_DIR%
 echo   Jobs:       %JOBS%
 echo   Vulkan SDK: %VULKAN_SDK%
+echo   glslc:      %GLSLC%
+if defined GLSLC_VERSION echo               !GLSLC_VERSION!
+if defined VK_HEADER_VERSION (echo   Headers:    VK_HEADER_VERSION !VK_HEADER_VERSION! from !VK_HEADER_FILE!) else (echo   Headers:    VK_HEADER_VERSION unknown - could not parse !VK_HEADER_FILE!)
 echo.
 
 :: ========================================================================
@@ -360,6 +384,17 @@ echo.
 echo Successfully built: %OUTPUT%
 for %%f in ("%OUTPUT%") do echo   Size: %%~zf bytes
 echo.
+echo Toolchain:
+echo   glslc:           %GLSLC%
+if defined GLSLC_VERSION echo                    !GLSLC_VERSION!
+if defined VK_HEADER_VERSION (echo   Vulkan headers:  VK_HEADER_VERSION !VK_HEADER_VERSION! from !VK_HEADER_FILE!) else (echo   Vulkan headers:  VK_HEADER_VERSION unknown - could not parse !VK_HEADER_FILE!)
+echo   Shader features: !SHADER_FEATURES_OK!
+if defined SHADER_FEATURES_MISSING (
+    echo   MISSING:         !SHADER_FEATURES_MISSING!
+    echo                    not supported by this glslc; the corresponding GPU paths are
+    echo                    not in the DLL -- install a newer LunarG Vulkan SDK and set VULKAN_SDK
+)
+echo.
 
 endlocal
 exit /b 0
@@ -369,9 +404,11 @@ exit /b 0
 :probe_glslc
 "%GLSLC%" -o NUL -fshader-stage=compute --target-env=vulkan1.3 "%FEATURE_TESTS_DIR%\%~1" >nul 2>&1
 if errorlevel 1 (
+    set "SHADER_FEATURES_MISSING=!SHADER_FEATURES_MISSING! %~n1"
     echo   %~1: not supported by glslc
 ) else (
     set "GLSLC_DEFINES=!GLSLC_DEFINES! /D%~2"
+    set "SHADER_FEATURES_OK=!SHADER_FEATURES_OK! %~n1"
     echo   %~1: supported
 )
 exit /b 0

@@ -138,6 +138,16 @@ echo "  Build:   $BUILD_DIR"
 echo "  Jobs:    $JOBS"
 echo "  CXX:     $CXX"
 echo "  glslc:   $GLSLC"
+# Record the shader toolchain. A distro glslc can be years behind the SDK's and
+# silently lacks shader extensions (see the feature probe below), and the
+# Vulkan headers decide which extension code paths ggml-vulkan.cpp compiles,
+# so a build log must show which ones were used.
+GLSLC_VERSION=$("$GLSLC" --version 2>/dev/null | sed -n '1p;3p' | tr '\n' ' ' | sed 's/ *$//' || true)
+VK_HEADER_FILE=$(echo '#include <vulkan/vulkan_core.h>' | $CXX -E -x c++ $SPIRV_INCLUDE - 2>/dev/null \
+    | grep -m1 -o '"[^"]*vulkan_core\.h"' | tr -d '"' || true)
+VK_HEADER_VERSION=$(grep -m1 'define VK_HEADER_VERSION ' "${VK_HEADER_FILE:-/dev/null}" 2>/dev/null | awk '{print $3}' || true)
+echo "           ${GLSLC_VERSION:-version unknown}"
+echo "  Vulkan headers: VK_HEADER_VERSION ${VK_HEADER_VERSION:-unknown} (${VK_HEADER_FILE:-not found})"
 echo ""
 
 START_TIME=$(date +%s)
@@ -152,14 +162,18 @@ START_TIME=$(date +%s)
 # test_shader_extension_support() calls in ggml-vulkan/CMakeLists.txt.
 #
 GLSLC_DEFINES=""
+SHADER_FEATURES_OK=""
+SHADER_FEATURES_MISSING=""
 FEATURE_TESTS_DIR="$SHADERS_DIR/feature-tests"
 probe_glslc_extension() {
     # $1 = feature test shader, $2 = define
     if "$GLSLC" -o /dev/null -fshader-stage=compute --target-env=vulkan1.3 \
             "$FEATURE_TESTS_DIR/$1" >/dev/null 2>&1; then
         GLSLC_DEFINES="$GLSLC_DEFINES -D$2"
+        SHADER_FEATURES_OK="$SHADER_FEATURES_OK ${1%.comp}"
         echo "  $1: supported"
     else
+        SHADER_FEATURES_MISSING="$SHADER_FEATURES_MISSING ${1%.comp}"
         echo "  $1: not supported by glslc"
     fi
 }
@@ -377,3 +391,14 @@ echo "Total time: $((END_TIME - START_TIME)) seconds"
 echo ""
 echo "Successfully built: $OUTPUT"
 ls -lh "$OUTPUT"
+echo ""
+echo "Toolchain:"
+echo "  glslc:           $GLSLC"
+echo "                   ${GLSLC_VERSION:-version unknown}"
+echo "  Vulkan headers:  VK_HEADER_VERSION ${VK_HEADER_VERSION:-unknown} (${VK_HEADER_FILE:-not found})"
+echo "  Shader features: ${SHADER_FEATURES_OK# }"
+if [ -n "$SHADER_FEATURES_MISSING" ]; then
+    echo "  MISSING:         ${SHADER_FEATURES_MISSING# }"
+    echo "                   (not supported by this glslc; the corresponding GPU paths are"
+    echo "                   not in the module -- build with the LunarG Vulkan SDK, VULKAN_SDK=...)"
+fi
