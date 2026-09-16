@@ -44,8 +44,9 @@ configured, omit the header.
 > another machine. When you do this, configure `--api-key` or
 > `--api-key-file` so reachable clients still need authentication.
 >
-> CORS only affects which browser origins can read responses. It is not
-> authentication.
+> Also note: the Web UI uses CORS to limit server responses to a given set
+> of browser origins. While this helps limiting server access to some extent,
+> *it should not be used instead of authentication*.
 
 ## OpenAI-compatible APIs
 

@@ -1,8 +1,10 @@
 # Built-in local tools
 
-**llama.cpp's built-in tools are experimental** and can change between
-releases. In llamafile, they are primarily intended for the bundled Web UI,
-though a custom agent loop can use them too.
+As llamafile relies on llama.cpp's code, it also inherits its built-in tools
+for agentic usage.
+**llama.cpp's built-in tools are experimental**, and can change between
+releases. Currently they are primarily intended for the bundled Web UI,
+though any custom agent loop can use them too.
 
 The Web UI oversees the following:
 
@@ -43,7 +45,7 @@ model.gguf`:
 
 Open the Web UI at <http://localhost:8080/> after the model loads.
 
-`--agent` enables all built-in tools and the experimental MCP proxy. Prefer
+Note: `--agent` enables all built-in tools and the experimental MCP proxy. Prefer
 `--tools` when you only need local tools, because it exposes a smaller surface.
 
 ## Available tools
@@ -59,7 +61,8 @@ Open the Web UI at <http://localhost:8080/> after the model loads.
 | `get_datetime` | Read | Get the server's current date and time. |
 | `get_info` | Read | Get the runtime operating system and working directory. |
 
-Tool support in llama.cpp is experimental and subject to change. To inspect the
+Tool support in llama.cpp is experimental and subject to change, so the contents
+of this table might differ from one llamafile version to another. To inspect the
 exact tool definitions and parameter signatures exposed by a running server,
 call `GET /tools`:
 
@@ -67,9 +70,10 @@ call `GET /tools`:
 curl http://127.0.0.1:8080/tools
 ```
 
+The `/tools` endpoint is affected by all [API-related parameters](api.md).
 If the server was started with `--api-prefix`, prepend that prefix here too.
-When `--api-key` or `--api-key-file` is configured, `/tools` uses the same
-authentication as the rest of the API server.
+When `--api-key` or `--api-key-file` is configured, you'll need to authenticate
+your requests too.
 
 ## Security and sandbox behavior
 
@@ -79,15 +83,14 @@ enabled tool directly. The Web UI permission prompt is part of the interactive
 browser flow, not server-side authorization.
 
 Unless `--cors-origins` is set explicitly, enabling built-in tools changes the
-allowed browser origin from `*` to localhost. CORS affects browser access only;
-it is not authentication.
-
+allowed browser origin from `*` to localhost. Rembember, though, that CORS affects
+browser access only and it should not be used instead of authentication.
 As a general rule, expose the server to no more clients than necessary. Keep
 the default loopback binding when possible, and configure `--api-key` before
 making a tool-enabled server reachable from another machine. For the broader
 sandbox model, see [Security](security.md).
 
-llamafile's sandbox changes which tools can succeed:
+llamafile's sandbox adds another layer of security, changing which tools can succeed:
 
 | Runtime mode | Effect on built-in tools |
 | --- | --- |
