@@ -2,6 +2,7 @@
 
 import os
 import platform
+import re
 import subprocess
 import tempfile
 
@@ -202,6 +203,94 @@ class TestGPUAcceleration:
 
             if os.path.exists(log_path):
                 os.unlink(log_path)
+
+    def test_gpu_cuda_graphs(self, executable, model, available_gpu, server_port, timeouts):
+        """NVIDIA: the CUDA module must be built with CUDA graphs and use them.
+
+        ggml keeps its CUDA-graph code behind the compile-time define
+        GGML_CUDA_USE_GRAPHS. A ggml-cuda.so built without it submits every
+        kernel of every decode step individually and generates 3-18% slower
+        at batch size 1 (measured on an L40S; the cost is per layer per token,
+        so small models lose most). Two checks:
+
+        * the backend feature list in the server's system_info line carries
+          ``USE_GRAPHS = 1`` -- the compile-time property of the module;
+        * after a couple of decode steps ggml logs ``CUDA graph warmup
+          complete``, i.e. graphs actually engaged for this model. ggml may
+          legitimately refuse them (pre-Volta GPU, unsupported node type); it
+          then logs ``disabling CUDA graphs due to ...`` and the runtime check
+          is skipped rather than failed.
+
+        The module's own log lines go to stderr, not to --log-file (they are
+        written by the ggml logger inside the DSO), so stderr is captured too.
+        """
+        if available_gpu != "nvidia":
+            pytest.skip("CUDA graphs are a property of the NVIDIA module")
+
+        runner = LlamafileRunner(
+            executable=executable,
+            model=model,
+            gpu=available_gpu,
+        )
+
+        paths = []
+        for suffix in (".log", ".stderr"):
+            with tempfile.NamedTemporaryFile(
+                mode="w", suffix=suffix, delete=False
+            ) as f:
+                paths.append(f.name)
+        log_path, stderr_path = paths
+
+        proc = runner.start_server(port=server_port, log_file=log_path,
+                                    stderr_file=stderr_path,
+                                    extra_args=["--verbose"])
+        try:
+            ready = LlamafileRunner.wait_for_server(
+                server_port, timeout=timeouts.server_ready, proc=proc
+            )
+            assert ready
+
+            # Graph warm-up needs at least two decode steps whose graph
+            # properties did not change; two short requests give plenty.
+            for _ in range(2):
+                response = LlamafileRunner.chat_completion(
+                    port=server_port,
+                    messages=[{"role": "user", "content": GREETING_PROMPT}],
+                    timeout=timeouts.http_request,
+                    max_tokens=32,
+                )
+                assert response["choices"]
+        finally:
+            proc.terminate()
+            proc.wait()
+            log_output = LlamafileRunner.read_log_file(log_path)
+            stderr_output = LlamafileRunner.read_log_file(stderr_path)
+            for path in paths:
+                if os.path.exists(path):
+                    os.unlink(path)
+
+        gpu_info = check_gpu_in_output(log_output)
+        assert gpu_info["gpu_used"], (
+            f"No GPU offloading detected. Devices: {gpu_info['devices']}"
+        )
+
+        system_info = [ln for ln in log_output.splitlines() if "system_info" in ln]
+        assert system_info, "no system_info line in the server log"
+        assert "CUDA : " in system_info[-1], (
+            f"CUDA backend not listed in system_info: {system_info[-1]}"
+        )
+        assert "USE_GRAPHS = 1" in system_info[-1], (
+            "ggml-cuda module was built without GGML_CUDA_USE_GRAPHS "
+            f"(see llamafile/cuda.sh): {system_info[-1]}"
+        )
+
+        disabled = re.search(r"disabling CUDA graphs due to ([^\n]*)", stderr_output)
+        if disabled:
+            pytest.skip(f"ggml disabled CUDA graphs at runtime: {disabled.group(1).strip()}")
+        assert "CUDA graph warmup complete" in stderr_output, (
+            "CUDA graphs never engaged during decode (no 'CUDA graph warmup "
+            "complete' on stderr)"
+        )
 
 
 @pytest.mark.cpu
