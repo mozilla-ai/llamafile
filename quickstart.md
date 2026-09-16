@@ -54,8 +54,9 @@ features. When it is started, in addition to hosting a web UI chat server at
 <http://127.0.0.1:8080/>, it also exposes an endpoint compatible with
 [OpenAI API](https://platform.openai.com/docs/api-reference/chat)
 and [Anthropic's Messages API](https://platform.claude.com/docs/en/api/messages).
-For further details on what fields and endpoints are available, refer to the
-APIs documentation and llama.cpp server's
+See the [API server](api.md) guide for llamafile endpoints, authentication,
+tool calling, and examples. For the exhaustive upstream reference, see the
+llama.cpp server
 [README](https://github.com/ggml-org/llama.cpp/tree/master/tools/server).
 
 <details>
