@@ -310,6 +310,7 @@ class LlamafileRunner:
         thinking: bool | None = None,
         extra_args: list[str] | None = None,
         log_file: str | None = None,
+        stderr_file: str | None = None,
     ) -> subprocess.Popen:
         """Start llamafile in server mode.
 
@@ -321,6 +322,10 @@ class LlamafileRunner:
             extra_args: Additional command-line arguments
             log_file: If provided, adds --log-file flag. Caller should read
                       the file after terminating the process.
+            stderr_file: If provided, the server's stderr is written to this
+                      file. Messages logged by a GPU backend module
+                      (ggml-cuda.so, ...) are emitted by the module's own ggml
+                      logger and reach stderr, not --log-file.
 
         Returns:
             Popen process handle (caller must terminate)
@@ -341,12 +346,17 @@ class LlamafileRunner:
             args.extend(extra_args)
 
         logger.info("Starting server: %s", " ".join(args))
-        return subprocess.Popen(
-            args,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-            text=True,
-        )
+        stderr = open(stderr_file, "w") if stderr_file else subprocess.DEVNULL
+        try:
+            return subprocess.Popen(
+                args,
+                stdout=subprocess.DEVNULL,
+                stderr=stderr,
+                text=True,
+            )
+        finally:
+            if stderr_file:
+                stderr.close()  # the child holds its own copy of the fd
 
     def start_combined(
         self,

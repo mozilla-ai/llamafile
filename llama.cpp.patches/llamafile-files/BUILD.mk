@@ -553,8 +553,10 @@ $(COMMON_OBJS): private CCFLAGS += -DLLAMA_USE_HTTPLIB
 # agree on it.
 $(LLAMA_CPP_OBJS) $(TOOL_SERVER_OBJS): private CPPFLAGS += -DLLAMA_SUBPROCESS
 
-# Optimization flags for specific components
-$(LLAMA_OBJS) $(COMMON_OBJS): private CCFLAGS += -DNDEBUG
+# Compile out assert() across llama.cpp, as upstream's Release build does.
+# The ggml objects were missing this, so asserts stayed live in the CPU hot
+# path. GGML_ASSERT is unaffected: it calls ggml_abort(), not assert().
+$(LLAMA_CPP_OBJS): private CCFLAGS += -DNDEBUG
 
 # Memory management and backend - use default -O2 (backend is in hot path)
 o/$(MODE)/llama.cpp/ggml/src/ggml-alloc.c.o \
