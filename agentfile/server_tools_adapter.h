@@ -78,13 +78,35 @@ class ServerToolAdapter : public agent_cpp::Tool {
 
     // agent.cpp speaks nlohmann::json, server tools speak ordered_json —
     // convert at the boundary via dump/parse.
+    //
+    // NOTE: "runtime", "cwd" and "resp_type" are control keys the server tools
+    // read straight out of params (make_tools_io), not tool arguments, so
+    // they must never come from the model. llama-server strips them in its
+    // HTTP handler before re-adding trusted values; agentfile must apply
+    // the same kind of stripping here.
     std::string execute(const nlohmann::json &arguments) override {
         auto params = nlohmann::ordered_json::parse(arguments.dump());
+        if (params.is_object()) {
+            params.erase("runtime");
+            params.erase("cwd");
+            params.erase("resp_type");
+        }
         if (!runtime_spec_.empty()) {
             params["runtime"] = runtime_spec_;
         }
         try {
-            return tool_->invoke(std::move(params), nullptr).dump();
+            auto result = tool_->invoke(std::move(params), nullptr);
+            // Server tools answer {"plain_text_response": text} on success
+            // and {"error": msg} on failure (tools/server/README-dev.md).
+            // Put the text itself (not the JSON wrapper) into the tool message,
+            // so the model sees plain text rather than escaped JSON.
+            if (result.is_object() && !result.contains("error")) {
+                auto it = result.find("plain_text_response");
+                if (it != result.end() && it->is_string()) {
+                    return it->get<std::string>();
+                }
+            }
+            return result.dump();
         } catch (const std::exception &e) {
             // Tools normally report failures as {"error": ...} themselves;
             // this is the backstop for the ones that throw.
