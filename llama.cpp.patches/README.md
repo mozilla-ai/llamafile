@@ -260,7 +260,7 @@ llamafile's own flags and passes the rest to `common_params_parse`:
   `server-mcp.cpp` spawns them and, unlike the other two, does **not** check
   `common_subproc::is_supported()`, so without the define they fail silently
   rather than reporting an error.
-- **`--server-tools`** — `server-tools.cpp` throws *"subprocess is not enabled
+- **`--tools`** — `server-tools.cpp` throws *"subprocess is not enabled
   on this build"*, caught into a clean `return 1`.
 - **Router mode** — `llama-server` with no model; `init_routes()` throws the
   same message, and the server exits at startup.

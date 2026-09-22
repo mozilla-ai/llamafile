@@ -89,7 +89,7 @@ compatibility.
 | `-c, --ctx-size N` | Context window size. `0` means to use the model default. |
 | `-b, --batch-size N` | Logical maximum batch size. |
 | `-ub, --ubatch-size N` | Physical maximum batch size. |
-| `--mlock` | Keep the model in RAM instead of letting the OS swap or compress it. |
+| `-lm, --load-mode MODE` | How the weights are read: `auto` (default), `none`, `mmap`, `mlock`, `mmap+mlock`, `dio`. Replaces the `--mmap`/`--no-mmap`/`--mlock`/`--dio` flags, which llama.cpp removed in b11100. |
 | `--repeat-penalty N` | Penalize repeating tokens during sampling. `1.0` disables the penalty. |
 | `-ngl, --gpu-layers, --n-gpu-layers N` | Number of layers to offload to GPU. |
 | `--host HOST` | Server bind address. |
@@ -125,7 +125,7 @@ wrapper.
 
 - KV cache and host memory: `-kvo`, `--kv-offload`, `-nkvo`, `--no-kv-offload`, `--repack`, `-nr`, `--no-repack`, `--no-host`
 - Cache storage and defragmentation: `-ctk`, `--cache-type-k`, `-ctv`, `--cache-type-v`, `-dt`, `--defrag-thold`
-- Memory mapping and residency: `--mlock`, `--mmap`, `--no-mmap`, `--numa`, `--check-tensors`, `--op-offload`, `--no-op-offload`
+- Memory mapping and residency: `-lm`, `--load-mode`, `-lzm`, `--lazy-mode`, `--numa`, `--check-tensors`, `--op-offload`, `--no-op-offload`
 - Draft-model cache types: `-ctkd`, `--cache-type-k-draft`, `-ctvd`, `--cache-type-v-draft`
 
 ### Devices, GPU, Tensors, and Adapters

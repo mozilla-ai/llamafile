@@ -70,7 +70,8 @@ on
 -n
 32768
 --no-context-shift
---no-mmap
+--load-mode
+none
 ...
 ```
 
@@ -128,7 +129,8 @@ embed both the weights and the following `.args` file
 0.0.0.0
 -ngl
 9999
---no-mmap
+--load-mode
+none
 ...
 ```
 
