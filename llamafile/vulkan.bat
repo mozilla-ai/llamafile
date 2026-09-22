@@ -189,7 +189,7 @@ set "OLD_DEFINES="
 if exist "%FEATURES_STAMP%" set /p OLD_DEFINES=<"%FEATURES_STAMP%"
 if not "!OLD_DEFINES!"=="!GLSLC_DEFINES!" (
     echo glslc feature set changed; clearing cached shader artifacts
-    del /q "%BUILD_DIR%\vulkan-shaders-gen.exe" "%BUILD_DIR%\ggml-vulkan-shaders.hpp" "%BUILD_DIR%\ggml-vulkan.obj" "%BUILD_DIR%\shader-*.obj" 2>nul
+    del /q "%BUILD_DIR%\vulkan-shaders-gen.exe" "%BUILD_DIR%\ggml-vulkan-shaders.hpp" "%BUILD_DIR%\ggml-vulkan*.obj" "%BUILD_DIR%\shader-*.obj" 2>nul
     if exist "%SHADERS_BUILD_DIR%" rmdir /s /q "%SHADERS_BUILD_DIR%"
     if exist "%SPVDIR%" rmdir /s /q "%SPVDIR%"
     mkdir "%SHADERS_BUILD_DIR%" 2>nul
@@ -308,19 +308,23 @@ if !CPP_CMD_COUNT! gtr 0 (
 echo.
 
 :: ========================================================================
-:: Phase 5: Compile ggml-vulkan.cpp
+:: Phase 5: Compile the backend sources
 :: ========================================================================
-echo Phase 5: Compiling ggml-vulkan.cpp...
+:: Since b11100 the backend is split over several translation units
+:: (ggml-vulkan.cpp plus ggml-vulkan-buffers.cpp, ggml-vulkan-debug.cpp, ...),
+:: so compile every .cpp at the top of ggml-vulkan\ rather than naming one.
+:: vulkan-shaders\ is a subdirectory, so the wildcard leaves it alone.
+echo Phase 5: Compiling backend sources...
 
-set "VULKAN_OBJ=%BUILD_DIR%\ggml-vulkan.obj"
-set "VULKAN_SRC=%GGML_VULKAN_DIR%\ggml-vulkan.cpp"
-
-if not exist "%VULKAN_OBJ%" (
-    echo   Compiling ggml-vulkan.cpp...
-    cl %CXX_FLAGS% /I"%GGML_VULKAN_DIR%" /I"%VULKAN_SDK%\Include" /Fo"%VULKAN_OBJ%" "%VULKAN_SRC%"
-    if errorlevel 1 (echo Error compiling ggml-vulkan.cpp & exit /b 1)
-) else (
-    echo   ggml-vulkan.obj is up to date
+for %%f in ("%GGML_VULKAN_DIR%\*.cpp") do (
+    set "VULKAN_OBJ=%BUILD_DIR%\%%~nf.obj"
+    if not exist "!VULKAN_OBJ!" (
+        echo   Compiling %%~nxf...
+        cl %CXX_FLAGS% /I"%GGML_VULKAN_DIR%" /I"%VULKAN_SDK%\Include" /Fo"!VULKAN_OBJ!" "%%f"
+        if errorlevel 1 (echo Error compiling %%~nxf & exit /b 1)
+    ) else (
+        echo   %%~nf.obj is up to date
+    )
 )
 echo.
 

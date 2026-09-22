@@ -34,6 +34,7 @@ GGML_SRCS_CPP := \
 	llama.cpp/ggml/src/ggml-cpu/binary-ops.cpp \
 	llama.cpp/ggml/src/ggml-cpu/ggml-cpu.cpp \
 	llama.cpp/ggml/src/ggml-cpu/hbm.cpp \
+	llama.cpp/ggml/src/ggml-cpu/iqp.cpp \
 	llama.cpp/ggml/src/ggml-cpu/ops.cpp \
 	llama.cpp/ggml/src/ggml-cpu/repack.cpp \
 	llama.cpp/ggml/src/ggml-cpu/traits.cpp \
@@ -60,6 +61,7 @@ LLAMA_SRCS_CPP := \
 	llama.cpp/src/models/baichuan.cpp \
 	llama.cpp/src/models/bailingmoe.cpp \
 	llama.cpp/src/models/bailingmoe2.cpp \
+	llama.cpp/src/models/bailingmoe3.cpp \
 	llama.cpp/src/models/bert.cpp \
 	llama.cpp/src/models/bitnet.cpp \
 	llama.cpp/src/models/bloom.cpp \
@@ -81,6 +83,7 @@ LLAMA_SRCS_CPP := \
 	llama.cpp/src/models/delta-net-base.cpp \
 	llama.cpp/src/models/dflash.cpp \
 	llama.cpp/src/models/dots1.cpp \
+	llama.cpp/src/models/dots3note.cpp \
 	llama.cpp/src/models/dream.cpp \
 	llama.cpp/src/models/eagle3.cpp \
 	llama.cpp/src/models/ernie4-5-moe.cpp \
@@ -107,6 +110,7 @@ LLAMA_SRCS_CPP := \
 	llama.cpp/src/models/granite-moe.cpp \
 	llama.cpp/src/models/granite-switch.cpp \
 	llama.cpp/src/models/granite.cpp \
+	llama.cpp/src/models/granite-swa.cpp \
 	llama.cpp/src/models/mamba-base.cpp \
 	llama.cpp/src/models/grok.cpp \
 	llama.cpp/src/models/grovemoe.cpp \
@@ -114,6 +118,8 @@ LLAMA_SRCS_CPP := \
 	llama.cpp/src/models/hunyuan-moe.cpp \
 	llama.cpp/src/models/hunyuan-vl.cpp \
 	llama.cpp/src/models/hy-v3.cpp \
+	llama.cpp/src/models/hy-v4.cpp \
+	llama.cpp/src/models/hrm-text.cpp \
 	llama.cpp/src/models/internlm2.cpp \
 	llama.cpp/src/models/jais.cpp \
 	llama.cpp/src/models/jais2.cpp \
@@ -121,6 +127,7 @@ LLAMA_SRCS_CPP := \
 	llama.cpp/src/models/jina-bert-v2.cpp \
 	llama.cpp/src/models/jina-bert-v3.cpp \
 	llama.cpp/src/models/kimi-linear.cpp \
+	llama.cpp/src/models/kimi-k3.cpp \
 	llama.cpp/src/models/laguna.cpp \
 	llama.cpp/src/models/lfm2.cpp \
 	llama.cpp/src/models/lfm2moe.cpp \
@@ -132,6 +139,7 @@ LLAMA_SRCS_CPP := \
 	llama.cpp/src/models/maincoder.cpp \
 	llama.cpp/src/models/mamba.cpp \
 	llama.cpp/src/models/mamba2.cpp \
+	llama.cpp/src/models/maple.cpp \
 	llama.cpp/src/models/mellum.cpp \
 	llama.cpp/src/models/mimo2.cpp \
 	llama.cpp/src/models/minicpm.cpp \
@@ -179,6 +187,7 @@ LLAMA_SRCS_CPP := \
 	llama.cpp/src/models/qwen35moe.cpp \
 	llama.cpp/src/models/qwen3vl.cpp \
 	llama.cpp/src/models/qwen3vlmoe.cpp \
+	llama.cpp/src/models/qwen4exp.cpp \
 	llama.cpp/src/models/refact.cpp \
 	llama.cpp/src/models/rnd1.cpp \
 	llama.cpp/src/models/rwkv6-base.cpp \
@@ -189,6 +198,7 @@ LLAMA_SRCS_CPP := \
 	llama.cpp/src/models/seed-oss.cpp \
 	llama.cpp/src/models/smallthinker.cpp \
 	llama.cpp/src/models/smollm3.cpp \
+	llama.cpp/src/models/spark2-5.cpp \
 	llama.cpp/src/models/stablelm.cpp \
 	llama.cpp/src/models/starcoder.cpp \
 	llama.cpp/src/models/starcoder2.cpp \
@@ -210,11 +220,13 @@ LLAMA_SRCS_CPP := \
 	llama.cpp/src/llama-impl.cpp \
 	llama.cpp/src/llama-io.cpp \
 	llama.cpp/src/llama-kv-cache-dsa.cpp \
+	llama.cpp/src/llama-kv-cache-dsa-iswa.cpp \
 	llama.cpp/src/llama-kv-cache-dsv4.cpp \
 	llama.cpp/src/llama-kv-cache-iswa.cpp \
 	llama.cpp/src/llama-kv-cache-msa.cpp \
 	llama.cpp/src/llama-kv-cache.cpp \
 	llama.cpp/src/llama-memory-hybrid.cpp \
+	llama.cpp/src/llama-memory-hybrid-idx.cpp \
 	llama.cpp/src/llama-memory-hybrid-iswa.cpp \
 	llama.cpp/src/llama-memory-recurrent.cpp \
 	llama.cpp/src/llama-memory.cpp \
@@ -255,12 +267,30 @@ COMMON_SRCS_CPP := \
 	llama.cpp/common/jinja/string.cpp \
 	llama.cpp/common/jinja/value.cpp \
 	llama.cpp/common/json-schema-to-grammar.cpp \
+	llama.cpp/common/json-schema.cpp \
+	llama.cpp/common/json.cpp \
 	llama.cpp/common/license.cpp \
 	llama.cpp/common/llguidance.cpp \
 	llama.cpp/common/log.cpp \
 	llama.cpp/common/ngram-cache.cpp \
 	llama.cpp/common/ngram-map.cpp \
 	llama.cpp/common/ngram-mod.cpp \
+	llama.cpp/common/parsers/parsers.cpp \
+	llama.cpp/common/parsers/cohere2moe.cpp \
+	llama.cpp/common/parsers/deepseek.cpp \
+	llama.cpp/common/parsers/functionary-v3-2.cpp \
+	llama.cpp/common/parsers/gemma4.cpp \
+	llama.cpp/common/parsers/gigachat-v3.cpp \
+	llama.cpp/common/parsers/gpt-oss.cpp \
+	llama.cpp/common/parsers/kimi-k2.cpp \
+	llama.cpp/common/parsers/kimi-k3.cpp \
+	llama.cpp/common/parsers/lfm2.cpp \
+	llama.cpp/common/parsers/ling3.cpp \
+	llama.cpp/common/parsers/minicpm5.cpp \
+	llama.cpp/common/parsers/minimax-m3.cpp \
+	llama.cpp/common/parsers/ministral3.cpp \
+	llama.cpp/common/parsers/muse-glimmer.cpp \
+	llama.cpp/common/parsers/qwen3-coder.cpp \
 	llama.cpp/common/peg-parser.cpp \
 	llama.cpp/common/preset.cpp \
 	llama.cpp/common/reasoning-budget.cpp \
@@ -325,8 +355,10 @@ MTMD_SRCS_CPP := \
 	llama.cpp/tools/mtmd/models/cogvlm.cpp \
 	llama.cpp/tools/mtmd/models/deepseekocr.cpp \
 	llama.cpp/tools/mtmd/models/deepseekocr2.cpp \
+	llama.cpp/tools/mtmd/models/deepseek4v.cpp \
 	llama.cpp/tools/mtmd/models/conformer.cpp \
 	llama.cpp/tools/mtmd/models/dotsocr.cpp \
+	llama.cpp/tools/mtmd/models/dots3note.cpp \
 	llama.cpp/tools/mtmd/models/exaone4_5.cpp \
 	llama.cpp/tools/mtmd/models/gemma4a.cpp \
 	llama.cpp/tools/mtmd/models/gemma4ua.cpp \
@@ -365,7 +397,29 @@ MTMD_SRCS_CPP := \
 	llama.cpp/tools/mtmd/models/yasa2.cpp \
 	llama.cpp/tools/mtmd/models/youtuvl.cpp
 
-MTMD_OBJS := $(MTMD_SRCS_CPP:%.cpp=o/$(MODE)/%.cpp.o)
+# Vendored hashing, linked into mtmd by upstream as vendor::hash. Since b11100
+# mtmd-helper.cpp derives bitmap IDs with hash_sha256_hex() from it, which is
+# the only entry point hash.h exposes and the only one anything here calls.
+# Upstream's vendor/hash also builds xxhash and sha1; both are unreferenced, and
+# sha1 would need compiling as C++ despite its .c extension (its declarations
+# live in a namespace; upstream forces LANGUAGE CXX on it), so neither is built
+# here. Adding a caller for them shows up as an undefined reference at link.
+VENDOR_HASH_SRCS_C := \
+	llama.cpp/vendor/hash/sha256/sha256.c
+
+VENDOR_HASH_SRCS_CPP := \
+	llama.cpp/vendor/hash/hash.cpp
+
+VENDOR_HASH_OBJS := \
+	$(VENDOR_HASH_SRCS_C:%.c=o/$(MODE)/%.c.o) \
+	$(VENDOR_HASH_SRCS_CPP:%.cpp=o/$(MODE)/%.cpp.o)
+
+MTMD_OBJS := \
+	$(MTMD_SRCS_CPP:%.cpp=o/$(MODE)/%.cpp.o) \
+	$(VENDOR_HASH_OBJS)
+
+# sha256.c reaches for "rotate-bits/rotate-bits.h" next to it
+$(VENDOR_HASH_OBJS): private CPPFLAGS += -iquote llama.cpp/vendor/hash
 
 # ==============================================================================
 # cpp-httplib (HTTP library for server)
@@ -521,13 +575,9 @@ $(UI_GEN_OBJ): private CPPFLAGS += -iquote $(UI_GEN_DIR)
 $(UI_GEN_OBJ): $(UI_H_GEN)
 
 # Version definitions
-$(GGML_OBJS): private CCFLAGS += \
-	-DGGML_VERSION=\"$(GGML_VERSION)\" \
-	-DGGML_COMMIT=\"$(GGML_COMMIT)\"
-
-$(LLAMA_OBJS): private CCFLAGS += \
-	-DLLAMA_VERSION=\"$(LLAMA_VERSION)\" \
-	-DLLAMA_COMMIT=\"$(LLAMA_COMMIT)\"
+# ggml/src/ggml.c and src/llama.cpp #include "ggml-version.h" / "llama-version.h",
+# which CMake generates with configure_file(). apply-patches.sh writes them next
+# to their sources from the same .in templates, so no -D flags are needed here.
 
 # Base flags for all objects
 $(LLAMA_CPP_OBJS) $(TOOL_SERVER_OBJS): private CCFLAGS += \

@@ -13,8 +13,11 @@ llama.cpp.patches/
 ├── llamafile-files/       # Additional files to copy into llama.cpp
 │   ├── BUILD.mk           # Makefile for building llama.cpp with cosmocc
 │   ├── README.llamafile   # License and modification notes
-│   └── common/
-│       └── license.cpp    # Llama.cpp's license file (cmake creates this at build time)
+│   ├── common/
+│   │   └── license.cpp    # Llama.cpp's license file (cmake creates this at build time)
+│   └── tools/
+│       └── ui/
+│           └── embed.cpp  # Web UI embedder (upstream moved it into CMake, see Server Integration)
 └── patches/               # Patch files for upstream sources
 ```
 
@@ -53,6 +56,9 @@ The `GGML_CALL` macro (defined as `__attribute__((__ms_abi__))` when `GGML_MULTI
 | `ggml_src_ggml-cuda_ggml-cuda.cu.patch` | Adds `GGML_CALL` to all CUDA backend callback implementations (60+ functions); also adds `free_struct` and TinyBLAS BF16 guard (see below) |
 | `ggml_src_ggml-metal_ggml-metal.cpp.patch` | Adds `GGML_CALL` to all Metal backend callback implementations (62 functions); also adds `free_struct` (see below) |
 | `ggml_src_ggml-vulkan_ggml-vulkan.cpp.patch` | Adds `GGML_CALL` to all Vulkan backend callback implementations; also adds `free_struct` and a heap memory underflow fix (see below) |
+| `ggml_src_ggml-vulkan_ggml-vulkan-common.h.patch` | Adds `GGML_CALL` to the backend callback declarations. b11100 split the Vulkan backend into several translation units and moved the interface structs into `ggml-vulkan-buffers.cpp`, so the callbacks it holds became non-static and are declared here; declaration and definition must agree on the convention |
+| `ggml_src_ggml-vulkan_ggml-vulkan-buffers.cpp.patch` | Adds the `free_struct` entry to `ggml_backend_vk_buffer_interface`, which b11100 moved into this new file |
+| `ggml_src_ggml-metal_ggml-metal-fusion.h.patch` / `.cpp.patch` | Adds `GGML_CALL` to the `add_alloc_dep` function pointer these pass through (see Graph-optimize allocation dependencies below), and includes `ggml-backend.h` for the macro |
 | `ggml_src_ggml-backend-meta.cpp.patch` | Adds `GGML_CALL` to all meta-device, meta-buffer-type, meta-buffer, and meta-backend callback implementations (the meta backend aggregates several simple backends behind one interface, so its callbacks are reached through the same function-pointer structs) |
 
 ### Cross-Module Memory Management
@@ -66,6 +72,39 @@ When GPU backends (CUDA, Vulkan, Metal) are loaded as dynamic libraries, memory 
 | `ggml_src_ggml-cuda_ggml-cuda.cu.patch` | Adds `free_struct` implementation for CUDA buffers (regular and host; upstream removed the split buffer in b10052); sets it on fallback CPU buffers allocated within the DSO |
 | `ggml_src_ggml-metal_ggml-metal.cpp.patch` | Adds `free_struct` implementation for Metal shared and private buffers |
 | `ggml_src_ggml-vulkan_ggml-vulkan.cpp.patch` | Adds `free_struct` implementation for Vulkan buffers and host buffer fallback path |
+| `ggml_src_ggml-vulkan_ggml-vulkan-buffers.cpp.patch` | Wires that `free_struct` into `ggml_backend_vk_buffer_interface`, which lives in this file since b11100 |
+
+### Graph-optimize allocation dependencies
+
+b11100 gave `graph_optimize` a `ggml_backend_graph_optimize_params *`, through
+which a backend tells the scheduler to keep a tensor alive until a later node
+(`params->add_alloc_dep(...)`). The callback is *the host's*, and the CUDA,
+Vulkan and Metal backends call it from inside their DSO, so it crosses the ABI
+boundary in the opposite direction to the backend interface structs and needs
+`GGML_CALL` just the same.
+
+| Patch | Description |
+|-------|-------------|
+| `ggml_src_ggml-backend-impl.h.patch` | Adds `GGML_CALL` to the `add_alloc_dep` member of `ggml_backend_graph_optimize_params` |
+| `ggml_src_ggml-backend.cpp.patch` | Replaces upstream's captureless lambda for `add_alloc_dep` with a named `ggml_backend_sched_add_alloc_dep()` — a lambda cannot carry the attribute |
+| `ggml_src_ggml-metal_ggml-metal-fusion.h.patch` / `.cpp.patch` | Annotates the same pointer where `ggml_metal_fusion_add_alloc_deps()` passes it on, and includes `ggml-backend.h` so the macro is in scope |
+
+### Generated version headers
+
+Since b11100 `ggml/src/ggml.c` includes `ggml-version.h` and `src/llama.cpp`
+includes `llama-version.h`; both are produced by CMake's `configure_file()`
+from the `.in` templates next to them, and hold the `GGML_VERSION`/`GGML_COMMIT`
+and `LLAMA_VERSION`/`LLAMA_COMMIT` macros that used to arrive as `-D` flags.
+There is no CMake step in the cosmocc build, so **`apply-patches.sh` generates
+both headers** (with the same values `build/config.mk` computes) straight into
+the source tree rather than into `o/`. That single location covers every
+consumer: the make build, `llamafile/*.sh` and `*.bat`, which compile `ggml.c`
+with `-I ggml/src`, and `llamafile/metal.c`, which extracts `ggml-version.h`
+alongside `ggml.c` for the runtime Metal build.
+
+They are generated, not patched: keep them out of `llamafile-files/` (delete
+both before running `generate-patches`, which would otherwise pick them up as
+new files and freeze one bump's commit hash into the repo).
 
 ### Cosmopolitan Libc Compatibility
 
@@ -85,7 +124,7 @@ Cosmopolitan libc has specific behaviors with condition variables and signals th
 | Patch | Description |
 |-------|-------------|
 | `common_log.cpp.patch` | Adds `#include <csignal>`; blocks `SIGINT`/`SIGTERM` on logger thread via `pthread_sigmask` to prevent `EINTR` exceptions; replaces `cv.wait()` with `wait_for(30s)` loop to work around XNU futex timeout bug (~72 minute expiry) |
-| `tools_server_server-models.cpp.patch` | Adds `#include <csignal>`; blocks signals on the stopping thread via `pthread_sigmask`; replaces untimed `cv.wait()` with `wait_for(30s)` loops on every model-lifecycle wait (`unload_lru`, the reload-drain wait, `stopping_thread`, the `is_reloading` guard in `load`, and the generic `wait()` predicate helper) to work around the XNU futex timeout bug |
+| `tools_server_server-models.cpp.patch` | Adds `#include <csignal>`; blocks signals via `pthread_sigmask` on `server_monitor`'s thread (b11100 replaced the per-model `stopping_thread` this used to cover with one monitor thread watching every child); replaces untimed `cv.wait()` with `wait_for(30s)` loops on every model-lifecycle wait (`unload_lru`, the reload-drain wait, `unload_all`, the `is_reloading` guard in `load`, and the generic `wait()` predicate helper) to work around the XNU futex timeout bug |
 | `tools_server_server-queue.cpp.patch` | Adds missing includes (`<cerrno>`, `<system_error>`, `<csignal>`); blocks `SIGINT`/`SIGTERM` on queue thread (the `yield_to_queue` worker thread is spawned after this, so it inherits the mask); replaces `wait()` with `wait_for(30s)` loops in five locations (`wait_until_no_sleep`, main loop, `recv`, plus `worker_loop` and `yield_to_queue`, both new upstream in b10441); runs `yield_to_queue()` inline when a GPU backend is loaded (see "GPU decode must stay on the main thread" below) |
 | `tools_server_server-stream.cpp.patch` | Adds `#include <csignal>`; blocks signals on the stream-session GC thread via `pthread_sigmask`. Without it, Ctrl+C on `llama-server` aborts with *"libc++abi: terminating due to uncaught exception ... condition_variable timed_wait failed: Interrupted system call"* instead of shutting down: `SIGINT` is delivered to that thread while it sits in `gc_wake_cv.wait_for(60s)`, `pthread_cond_timedwait()` returns `EINTR`, and libcxx rethrows it as `std::system_error` that nothing catches. This thread was the last one in the server with a condition-variable wait and no signal mask (the log worker, task queue, model-stopping thread and httplib pool were already covered). Pre-existing, not introduced by b10441; combined TUI mode is unaffected |
 | `vendor_cpp-httplib_httplib.cpp.patch` | Fixes httplib thread pool with `wait_for()` instead of `wait()` for XNU futex compatibility; also see HTTPS / TLS Support below |
@@ -197,6 +236,17 @@ serviced during it, so the sole effect is that `/metrics` and `/slots` wait for
 the in-flight batch (~29 ms while generating; up to a few seconds for a full
 prompt batch). This will recur whenever upstream moves work onto a new thread.
 
+**Bitmap hashing needs `vendor/hash`** (added to `BUILD.mk`, not a patch).
+b11100 made `mtmd-helper.cpp` derive a bitmap's ID from `hash_sha256_hex()` in
+the vendored `vendor/hash`, which upstream links into mtmd as `vendor::hash`.
+`BUILD.mk` builds `hash.cpp` and `sha256/sha256.c` into `MTMD_OBJS` (with
+`-iquote llama.cpp/vendor/hash`, since `sha256.c` reaches for
+`"rotate-bits/rotate-bits.h"`). Upstream's target also builds `xxhash` and
+`sha1`; nothing here calls either, and `sha1` would have to be compiled as C++
+despite its `.c` extension (its declarations sit in a namespace, and upstream
+forces `LANGUAGE CXX` on it), so neither is built. A future caller shows up as
+an undefined reference at link.
+
 **Subprocess support needs `-DLLAMA_SUBPROCESS`** (set in `BUILD.mk`, not a
 patch). b10441 moved child-process spawning into `common_subproc`
 (`common/subproc.*`, wrapping the vendored `sheredom/subprocess.h`) and put it
@@ -233,19 +283,30 @@ verifies it, and extracts the whole static site into
 screens). To keep the embedded payload small, the script also builds a
 `dist/_gzip/` mirror with every file gzip-compressed under its original name.
 
+`embed.cpp` itself is **no longer upstream's**. b11100 deleted the standalone
+tool and replaced it with `scripts/ui-assets.cmake`, which provisions the
+assets and generates `ui.cpp`/`ui.h` from `tools/ui/ui.{cpp,h}.in` inside a
+CMake build. The cosmocc build has no CMake step, so llamafile keeps the tool:
+`llamafile-files/tools/ui/embed.cpp` is upstream's b10441 version, copied into
+the submodule by `apply-patches.sh`. It emits the same interface the templates
+do (`llama_ui_find_asset` / `llama_ui_get_assets` / `llama_ui_use_gzip`, and
+`LLAMA_UI_HAS_ASSETS`), which is all `server-http.cpp` consumes. Its
+`required_check[]` table has to stay in sync with `ui_validate_assets()` in
+`scripts/ui-assets.cmake` — that is now the upstream definition of the required
+set — and with `ui_missing_assets` in `fetch-ui-assets.sh`.
+
 At build time, `llama.cpp/BUILD.mk` compiles `tools/ui/embed.cpp` with
 `cosmoc++` (its APE output runs on the host) and runs it against the `dist/`
-**directory** (the new `embed <out_cpp> <out_h> [<asset_dir>]` interface):
-`embed.cpp` recursively bakes every file — auto-detecting `dist/_gzip/` and
-emitting gzip-encoded assets keyed by relative path — into
-`o/$(MODE)/llama.cpp/tools/ui/ui.{cpp,h}`, which is compiled like any other
-C++ source and linked into `llama-server` and `llamafile`. Upstream's
-`server-http.cpp` (unpatched) registers a route per embedded asset
-(`index.html` at `/`) and serves gzip assets with `Content-Encoding: gzip`.
-If the download fails (offline, version not yet on HF) the script leaves
-`dist/` empty — `embed.cpp` then emits a no-op `llama_ui_find_asset` and the
-`LLAMA_UI_HAS_ASSETS` guard keeps the UI routes unregistered, so the REST
-API still works.
+**directory** (`embed <out_cpp> <out_h> [<asset_dir>]`): `embed.cpp` recursively
+bakes every file — auto-detecting `dist/_gzip/` and emitting gzip-encoded assets
+keyed by relative path — into `o/$(MODE)/llama.cpp/tools/ui/ui.{cpp,h}`, which
+is compiled like any other C++ source and linked into `llama-server` and
+`llamafile`. Upstream's `server-http.cpp` (unpatched) registers a route per
+embedded asset (`index.html` at `/`) and serves gzip assets with
+`Content-Encoding: gzip`. If the download fails (offline, version not yet on HF)
+the script leaves `dist/` empty — `embed.cpp` then emits a no-op
+`llama_ui_find_asset` and the `LLAMA_UI_HAS_ASSETS` guard keeps the UI routes
+unregistered, so the REST API still works.
 
 Note that `embed.cpp` only takes that graceful no-asset path when `dist/` is
 *empty*: once the directory is non-empty it enforces a required-asset set
@@ -255,9 +316,9 @@ Note that `embed.cpp` only takes that graceful no-asset path when `dist/` is
 missing. So `fetch-ui-assets.sh` validates the *same* set after extracting
 (`ui_missing_assets`); if a downloaded tarball is partial or has drifted, it
 clears `dist/` and falls back to a UI-less build rather than letting the embed
-step abort the whole build. Because `embed.cpp` is an upstream file, that list
-can change on a llama.cpp bump — when it does, the asset list in
-`ui_missing_assets` must be updated to match.
+step abort the whole build. Upstream owns that list (now in
+`ui_validate_assets()`), so it can change on a llama.cpp bump — when it does,
+both `required_check[]` and `ui_missing_assets` must be updated to match.
 
 ### Bug Fixes
 
@@ -266,8 +327,12 @@ can change on a llama.cpp bump — when it does, the asset list in
 | `ggml_src_ggml-backend-reg.cpp.patch` | Suppresses debug log noise for non-existent backend search paths (irrelevant for llamafile's DSO loading approach) |
 | `ggml_src_ggml-vulkan_ggml-vulkan.cpp.patch` | Fixes unsigned integer underflow in `ggml_backend_vk_get_device_memory` where Vulkan's `heapUsage` can exceed `heapBudget` (clamps to zero instead of wrapping) |
 | `src_models_t5.cpp.patch` | Forward-declares the `graph<false>`/`graph<true>` explicit specializations before `build_arch_graph` so clang's `-std=gnu++23` doesn't reject them as specializations after implicit instantiation |
-| `src_models_eagle3.cpp.patch` | Moves `build_arch_graph` to the end of the file, after the `graph<true>`/`graph<false>` constructor specializations, so clang's `-std=gnu++23` doesn't reject them as explicit specializations appearing after the `make_unique<graph<...>>` implicit instantiation point |
-| `src_models_dflash.cpp.patch` | Same fix as `eagle3` for the DFlash model (new in b10052): moves `build_arch_graph` to the end of the file, after the `graph<true>`/`graph<false>`/`graph_dsv4` specializations, so clang's `-std=gnu++23` doesn't reject them as explicit specializations after the `make_unique<graph<...>>` implicit instantiation point |
+
+The same clang `-std=gnu++23` problem used to need patches for `eagle3.cpp` and
+`dflash.cpp`; b11100 defines `build_arch_graph` at the end of both files, after
+the specializations, so those two patches were dropped as obsolete. A new model
+file that defines `build_arch_graph` before its `graph<...>` specializations
+will reintroduce the error, and wants the same treatment.
 | `ggml_src_ggml.c.patch` | Makes the `ggml_time_ms()`/`ggml_time_us()` call `ggml_time_init()` lazily. The Windows dylibs link their own copy of `ggml.c`, so the DLL's `timer_freq` is never set by the executable's `ggml_init()` and any `ggml_time_*()` call made from inside the DLL divides by zero (`0xC0000094`, surfaced by Cosmopolitan as SIGFPE). First hit when #1051 enabled `-DGGML_CUDA_USE_GRAPHS`, calling `ggml_time_us()` in `ggml-cuda`. Linux/macOS are unaffected (`clock_gettime`, no static divisor).  |
 
 ## Creating New Patches

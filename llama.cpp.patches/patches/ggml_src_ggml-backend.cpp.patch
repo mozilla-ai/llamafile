@@ -1,7 +1,7 @@
 diff --git a/ggml/src/ggml-backend.cpp b/ggml/src/ggml-backend.cpp
 --- a/llama.cpp/ggml/src/ggml-backend.cpp
 +++ b/llama.cpp/ggml/src/ggml-backend.cpp
-@@ -112,7 +112,14 @@ void ggml_backend_buffer_free(ggml_backend_buffer_t buffer) {
+@@ -121,7 +121,14 @@ void ggml_backend_buffer_free(ggml_backend_buffer_t buffer) {
      if (buffer->iface.free_buffer != NULL) {
          buffer->iface.free_buffer(buffer);
      }
@@ -17,7 +17,7 @@ diff --git a/ggml/src/ggml-backend.cpp b/ggml/src/ggml-backend.cpp
  }
  
  size_t ggml_backend_buffer_get_size(ggml_backend_buffer_t buffer) {
-@@ -671,7 +678,7 @@ struct ggml_backend_multi_buffer_context {
+@@ -682,7 +689,7 @@ struct ggml_backend_multi_buffer_context {
      size_t n_buffers;
  };
  
@@ -26,7 +26,7 @@ diff --git a/ggml/src/ggml-backend.cpp b/ggml/src/ggml-backend.cpp
      GGML_ASSERT(buffer);
      ggml_backend_multi_buffer_context * ctx = (ggml_backend_multi_buffer_context *) buffer->context;
      for (size_t i = 0; i < ctx->n_buffers; i++) {
-@@ -682,7 +689,7 @@ static void ggml_backend_multi_buffer_free_buffer(ggml_backend_buffer_t buffer)
+@@ -693,7 +700,7 @@ static void ggml_backend_multi_buffer_free_buffer(ggml_backend_buffer_t buffer)
      free(ctx);
  }
  
@@ -35,7 +35,7 @@ diff --git a/ggml/src/ggml-backend.cpp b/ggml/src/ggml-backend.cpp
      GGML_ASSERT(buffer);
      ggml_backend_multi_buffer_context * ctx = (ggml_backend_multi_buffer_context *) buffer->context;
      for (size_t i = 0; i < ctx->n_buffers; i++) {
-@@ -702,6 +709,7 @@ static const struct ggml_backend_buffer_i ggml_backend_multi_buffer_i = {
+@@ -713,6 +720,7 @@ static const struct ggml_backend_buffer_i ggml_backend_multi_buffer_i = {
      /* .cpy_tensor      = */ NULL,
      /* .clear           = */ ggml_backend_multi_buffer_clear,
      /* .reset           = */ NULL,
@@ -43,7 +43,41 @@ diff --git a/ggml/src/ggml-backend.cpp b/ggml/src/ggml-backend.cpp
  };
  
  ggml_backend_buffer_t ggml_backend_multi_buffer_alloc_buffer(ggml_backend_buffer_t * buffers, size_t n_buffers) {
-@@ -2270,7 +2278,7 @@ bool ggml_backend_compare_graph_backend(ggml_backend_t backend1, ggml_backend_t
+@@ -1063,6 +1071,18 @@ static void ggml_backend_sched_set_if_supported(ggml_backend_sched_t sched, stru
+ }
+ 
+ // assigns backends to ops and splits the graph into subgraphs that can be computed on the same backend
++// [jart] The backends invoke this through ggml_backend_graph_optimize_params,
++// and they live in dynamically loaded modules built with the host ABI, so the
++// callback has to be GGML_CALL. A lambda cannot carry the attribute, so this is
++// a named function rather than the lambda upstream uses.
++static void GGML_CALL ggml_backend_sched_add_alloc_dep(void * user_data, ggml_tensor * tensor, ggml_tensor * until) {
++    auto & deps = *(std::unordered_map<ggml_tensor *, std::vector<ggml_tensor *>> *) user_data;
++    std::vector<ggml_tensor *> & keep = deps[until];
++    if (std::find(keep.begin(), keep.end(), tensor) == keep.end()) {
++        keep.push_back(tensor);
++    }
++}
++
+ void ggml_backend_sched_split_graph(ggml_backend_sched_t sched, struct ggml_cgraph * graph) {
+     // reset splits
+     sched->n_splits = 0;
+@@ -1445,13 +1465,7 @@ void ggml_backend_sched_split_graph(ggml_backend_sched_t sched, struct ggml_cgra
+     std::unordered_map<ggml_tensor *, std::vector<ggml_tensor *>> alloc_deps;
+ 
+     struct ggml_backend_graph_optimize_params opt_params = {
+-        /* .add_alloc_dep = */ [](void * user_data, ggml_tensor * tensor, ggml_tensor * until) {
+-            auto & deps = *(std::unordered_map<ggml_tensor *, std::vector<ggml_tensor *>> *) user_data;
+-            std::vector<ggml_tensor *> & keep = deps[until];
+-            if (std::find(keep.begin(), keep.end(), tensor) == keep.end()) {
+-                keep.push_back(tensor);
+-            }
+-        },
++        /* .add_alloc_dep = */ ggml_backend_sched_add_alloc_dep,
+         /* .user_data     = */ &alloc_deps,
+     };
+ 
+@@ -2352,7 +2366,7 @@ bool ggml_backend_compare_graph_backend(ggml_backend_t backend1, ggml_backend_t
  
  // CPU backend - buffer
  
@@ -52,7 +86,7 @@ diff --git a/ggml/src/ggml-backend.cpp b/ggml/src/ggml-backend.cpp
      GGML_ASSERT(buffer);
      uintptr_t data = (uintptr_t)buffer->context;
  
-@@ -2282,33 +2290,33 @@ static void * ggml_backend_cpu_buffer_get_base(ggml_backend_buffer_t buffer) {
+@@ -2364,33 +2378,33 @@ static void * ggml_backend_cpu_buffer_get_base(ggml_backend_buffer_t buffer) {
      return (void *)data;
  }
  
@@ -91,7 +125,7 @@ diff --git a/ggml/src/ggml-backend.cpp b/ggml/src/ggml-backend.cpp
      GGML_ASSERT(src);
      if (ggml_backend_buffer_is_host(src->buffer)) {
          memcpy(dst->data, src->data, ggml_nbytes(src));
-@@ -2319,7 +2327,7 @@ static bool ggml_backend_cpu_buffer_cpy_tensor(ggml_backend_buffer_t buffer, con
+@@ -2401,7 +2415,7 @@ static bool ggml_backend_cpu_buffer_cpy_tensor(ggml_backend_buffer_t buffer, con
      GGML_UNUSED(buffer);
  }
  
@@ -100,7 +134,7 @@ diff --git a/ggml/src/ggml-backend.cpp b/ggml/src/ggml-backend.cpp
      GGML_ASSERT(buffer);
      memset(buffer->context, value, buffer->size);
  }
-@@ -2336,6 +2344,7 @@ static const struct ggml_backend_buffer_i ggml_backend_cpu_buffer_i = {
+@@ -2418,6 +2432,7 @@ static const struct ggml_backend_buffer_i ggml_backend_cpu_buffer_i = {
      /* .cpy_tensor      = */ ggml_backend_cpu_buffer_cpy_tensor,
      /* .clear           = */ ggml_backend_cpu_buffer_clear,
      /* .reset           = */ NULL,
@@ -108,7 +142,7 @@ diff --git a/ggml/src/ggml-backend.cpp b/ggml/src/ggml-backend.cpp
  };
  
  static const struct ggml_backend_buffer_i ggml_backend_cpu_buffer_from_ptr_i = {
-@@ -2350,19 +2359,20 @@ static const struct ggml_backend_buffer_i ggml_backend_cpu_buffer_from_ptr_i = {
+@@ -2432,19 +2447,20 @@ static const struct ggml_backend_buffer_i ggml_backend_cpu_buffer_from_ptr_i = {
      /* .cpy_tensor      = */ ggml_backend_cpu_buffer_cpy_tensor,
      /* .clear           = */ ggml_backend_cpu_buffer_clear,
      /* .reset           = */ NULL,
@@ -131,7 +165,7 @@ diff --git a/ggml/src/ggml-backend.cpp b/ggml/src/ggml-backend.cpp
      void * data = ggml_aligned_malloc(size);
  
      if (data == NULL) {
-@@ -2373,13 +2383,13 @@ static ggml_backend_buffer_t ggml_backend_cpu_buffer_type_alloc_buffer(ggml_back
+@@ -2455,13 +2471,13 @@ static ggml_backend_buffer_t ggml_backend_cpu_buffer_type_alloc_buffer(ggml_back
      return ggml_backend_buffer_init(buft, ggml_backend_cpu_buffer_i, data, size);
  }
  
@@ -147,7 +181,7 @@ diff --git a/ggml/src/ggml-backend.cpp b/ggml/src/ggml-backend.cpp
      return true;
  
      GGML_UNUSED(buft);
-@@ -2402,7 +2412,7 @@ ggml_backend_buffer_type_t ggml_backend_cpu_buffer_type(void) {
+@@ -2484,7 +2500,7 @@ ggml_backend_buffer_type_t ggml_backend_cpu_buffer_type(void) {
      return &ggml_backend_cpu_buffer_type;
  }
  
