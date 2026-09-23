@@ -62,9 +62,11 @@ that runs anywhere, llamafile-style.
   prepends `.args` before user args).
 - `--system-file PATH`: read system prompt from a file (works with
   `/zip/...` paths). Long prompts don't belong in `.args` one-liners.
-- Exit codes: `0` success, `2` agent_cpp error, `3` other error,
-  `4` max-iterations exceeded, `5` user declined a tool confirmation and
-  the loop could not continue.
+- Exit codes: `0` success, `1` usage error, `2` agent_cpp error, `3` other
+  error, `4` max-iterations exceeded. Declining a confirmation is not an
+  exit: agent.cpp catches `ToolExecutionSkipped` inside the loop, the model
+  receives `{"skipped": "user declined"}` as the tool result and decides
+  how to continue.
 
 ## 3. Session records & tracing
 
@@ -108,9 +110,10 @@ Two artifacts, both existing standards — nothing invented:
 
 ### 3c. stderr verbosity
 
-- Three levels: `--quiet` (nothing), default (current one-line tool
-  progress), `-v` (args + truncated results). `ProgressCallback` stays;
-  it just gains the `-v` branch.
+- Three levels: `--quiet` (nothing, except a one-line `[tool --yes] args`
+  audit record for each destructive tool run under `--yes`), default
+  (current one-line tool progress), `-v` (args + truncated results).
+  `ProgressCallback` stays; it just gains the `-v` branch.
 
 ## 4. Network: HTTPS + http_fetch
 
@@ -126,9 +129,12 @@ Two artifacts, both existing standards — nothing invented:
   vendored mbedtls. Open: whether to add `--insecure` as an escape hatch
   for self-signed local instances (e.g. a LAN SearXNG behind a
   self-signed cert).
-- `http_fetch` keeps GET-only, 16 KB default cap; add an optional
-  `max_bytes` argument (server-side clamped). HTML→text extraction is
-  explicitly out of scope for v0 — the model gets raw bytes.
+- `http_fetch` keeps GET-only with a 64 KB body cap (the download stops
+  there; server-tools use 16 KB for their own outputs). Redirects are
+  reported as `redirect_to`, not followed, so each fetched URL is one the
+  model asked for and the confirmation prompt showed. Still to do: an
+  optional `max_bytes` argument (server-side clamped). HTML→text
+  extraction is explicitly out of scope for v0 — the model gets raw bytes.
 - Stays in the confirmation set (network = exfiltration surface).
 
 ## 5. web_search tool (searxng)
@@ -341,12 +347,14 @@ llama.cpp's parameters, mirroring llamafile's design (see
 
 ## Open items (defaults chosen, veto anytime)
 
-- 16 KB body/output caps — right default? (kept from server-tools)
+- 64 KB `http_fetch` body cap (server-tools keep 16 KB for read_file and
+  shell output) — right default?
 - `web_search` result count (8) and snippet truncation length.
 - Whether `get_datetime` belongs in `read_only` preset (yes for now).
 - Trace format field names — freeze only after first real consumer.
-- Context management: `-c/--ctx-size` (added 2026-09-10; default stays
-  agent.cpp's 10240, `0` = model-native) only sizes the window — a long
+- Context management: `-c/--ctx-size` (added 2026-09-10; default 32768
+  via `kDefaultCtx`, overriding agent.cpp's own 10240; `0` = model-native)
+  only sizes the window — a long
   tool-heavy session still dies with "context size exceeded" instead of
   degrading. Real fix: a trimming callback in `before_llm_call` (agent.cpp's
   ContextTrimmerCallback pattern) that drops/summarizes old tool results.
