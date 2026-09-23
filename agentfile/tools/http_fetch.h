@@ -19,7 +19,8 @@
 // Written as a server_tool (llama.cpp tools/server style) so it can be
 // offered upstream as-is; agentfile runs it through ServerToolAdapter.
 //
-// Limits: GET only; body capped at 64 KB (truncated + marked); 30s timeout;
+// Limits: GET only; body capped at 64 KB (the download stops there and the
+// result is marked truncated); 30s timeout;
 // redirects are reported (redirect_to), not followed.
 //
 
@@ -98,36 +99,53 @@ struct HttpFetchTool : server_tool {
             cli.set_read_timeout(kTimeoutSeconds, 0);
             cli.set_connection_timeout(kTimeoutSeconds, 0);
 
-            auto res = cli.Get(parts.path);
-            if (!res) {
+            // Stream the body and stop reading at the cap, instead of
+            // buffering whatever the server sends (httplib would accept up
+            // to CPPHTTPLIB_PAYLOAD_MAX_LENGTH) and truncating afterwards.
+            int status = 0;
+            httplib::Headers headers;
+            std::string body;
+            bool truncated = false;
+            auto res = cli.Get(
+                parts.path,
+                [&](const httplib::Response &r) {
+                    status = r.status;
+                    headers = r.headers;
+                    return true;
+                },
+                [&](const char *data, size_t n) {
+                    size_t room = kMaxBody - body.size();
+                    if (n > room) {
+                        body.append(data, room);
+                        truncated = true;
+                        return false;  // abort the download at the cap
+                    }
+                    body.append(data, n);
+                    return true;
+                });
+            // Aborting the read ourselves surfaces as a failed Result, but
+            // the status and headers already arrived before the body.
+            if (!res && !truncated) {
                 return {{"error", "request failed: " +
                                       httplib::to_string(res.error())}};
             }
 
-            bool truncated = false;
-            std::string body = res->body;
-            if (body.size() > kMaxBody) {
-                body.resize(kMaxBody);
-                truncated = true;
-            }
-
             json resp_headers = json::object();
-            for (const auto &h : res->headers) {
+            for (const auto &h : headers) {
                 resp_headers[h.first] = h.second;
             }
 
             json out = json::object();
             // Lead with the redirect so the model sees it before the
             // headers/body noise.
-            if (res->status >= 300 && res->status < 400 &&
-                res->has_header("Location")) {
-                out["redirect_to"] =
-                    resolve_location(parts, res->get_header_value("Location"));
+            auto loc = headers.find("Location");
+            if (status >= 300 && status < 400 && loc != headers.end()) {
+                out["redirect_to"] = resolve_location(parts, loc->second);
                 out["note"] = "Redirect, not followed automatically. The "
                               "content is at redirect_to; call http_fetch "
                               "with that URL to retrieve it.";
             }
-            out["status"] = res->status;
+            out["status"] = status;
             out["headers"] = resp_headers;
             out["body"] = body;
             out["truncated"] = truncated;
