@@ -19,7 +19,8 @@
 // Written as a server_tool (llama.cpp tools/server style) so it can be
 // offered upstream as-is; agentfile runs it through ServerToolAdapter.
 //
-// Limits: GET only; body capped at 64 KB (truncated + marked); 30s timeout.
+// Limits: GET only; body capped at 64 KB (truncated + marked); 30s timeout;
+// redirects are reported (redirect_to), not followed.
 //
 
 #pragma once
@@ -52,8 +53,10 @@ struct HttpFetchTool : server_tool {
                 {"name", name},
                 {"description",
                  "Fetch a URL with HTTP GET and return status + headers + "
-                 "body. Response body is capped at 64 KB. Use sparingly — "
-                 "this tool grants the model network access."},
+                 "body. Response body is capped at 64 KB. Redirects are not "
+                 "followed automatically: a 3xx response carries redirect_to; "
+                 "call http_fetch again with that URL to retrieve the content. "
+                 "Use sparingly — this tool grants the model network access."},
                 {"parameters", {
                     {"type", "object"},
                     {"properties", {
@@ -66,6 +69,20 @@ struct HttpFetchTool : server_tool {
         };
     }
 
+    // Resolve a Location header against the request URL (RFC 3986-lite:
+    // absolute, host-relative, or path-relative).
+    static std::string resolve_location(const common_http_url &parts,
+                                        const std::string &loc) {
+        if (loc.find("://") != std::string::npos) return loc;
+        std::string origin = parts.scheme + "://" +
+                             common_http_format_host(parts.host) + ":" +
+                             std::to_string(parts.port);
+        if (!loc.empty() && loc[0] == '/') return origin + loc;
+        std::string dir = parts.path.substr(0, parts.path.rfind('/') + 1);
+        if (dir.empty()) dir = "/";
+        return origin + dir + loc;
+    }
+
     json invoke(json params, server_tool::stream *) const override {
         if (!params.contains("url")) {
             return {{"error", "missing required parameter: url"}};
@@ -74,6 +91,10 @@ struct HttpFetchTool : server_tool {
 
         try {
             auto [cli, parts] = common_http_client(url);
+            // Report redirects instead of following them, so every URL that
+            // gets fetched is one the model asked for by name — and one the
+            // confirmation prompt showed the user.
+            cli.set_follow_location(false);
             cli.set_read_timeout(kTimeoutSeconds, 0);
             cli.set_connection_timeout(kTimeoutSeconds, 0);
 
@@ -95,12 +116,22 @@ struct HttpFetchTool : server_tool {
                 resp_headers[h.first] = h.second;
             }
 
-            return {
-                {"status", res->status},
-                {"headers", resp_headers},
-                {"body", body},
-                {"truncated", truncated},
-            };
+            json out = json::object();
+            // Lead with the redirect so the model sees it before the
+            // headers/body noise.
+            if (res->status >= 300 && res->status < 400 &&
+                res->has_header("Location")) {
+                out["redirect_to"] =
+                    resolve_location(parts, res->get_header_value("Location"));
+                out["note"] = "Redirect, not followed automatically. The "
+                              "content is at redirect_to; call http_fetch "
+                              "with that URL to retrieve it.";
+            }
+            out["status"] = res->status;
+            out["headers"] = resp_headers;
+            out["body"] = body;
+            out["truncated"] = truncated;
+            return out;
         } catch (const std::exception &e) {
             return {{"error", std::string("http_fetch failed: ") + e.what()}};
         }
