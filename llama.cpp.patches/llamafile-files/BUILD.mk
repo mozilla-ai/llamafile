@@ -433,25 +433,29 @@ HTTPLIB_OBJS := $(HTTPLIB_SRCS:%.cpp=o/$(MODE)/%.cpp.o)
 # ==============================================================================
 #
 # Upstream switched from prebuilt bundles in tools/server/public/ to a
-# Svelte/PWA project under tools/ui/, embedded at CMake time by
-# tools/ui/embed.cpp into a generated ui.cpp + ui.h. cosmocc has no JS
-# toolchain, so apply-patches.sh (run by `make setup`) downloads the
-# prebuilt site tarball (dist.tar.gz) from the ggml-org/llama-ui Hugging
-# Face bucket and extracts the whole static site into
-# llama.cpp/tools/ui/dist/ (see fetch-ui-assets.sh). embed.cpp then
-# recursively embeds every file under that directory, keyed by its
-# relative path (e.g. "_app/immutable/bundle.HASH.js"). fetch-ui-assets.sh
-# also builds a dist/_gzip/ mirror of gzip-compressed files; embed.cpp
-# auto-detects it and emits gzip-encoded assets (keeping the embedded
-# payload small), which server-http.cpp serves with Content-Encoding: gzip.
+# Svelte/PWA project under tools/ui/, embedded into a generated ui.cpp + ui.h
+# at build time. cosmocc has no JS toolchain, so apply-patches.sh (run by
+# `make setup`) downloads the prebuilt site tarball (dist.tar.gz) from the
+# ggml-org/llama-ui Hugging Face bucket and extracts the whole static site into
+# llama.cpp/tools/ui/dist/, plus a dist/_gzip/ mirror of gzip-compressed files
+# (see fetch-ui-assets.sh).
+#
+# b11100 replaced upstream's standalone tools/ui/embed.cpp with
+# scripts/ui-assets.cmake, which renders tools/ui/ui.{cpp,h}.in inside a CMake
+# build. There is no CMake step here, so ui-embed.sh does that rendering — a
+# translation of that script's emit_files(), the same way this file is a
+# translation of llama.cpp's CMake build. It renders upstream's own templates,
+# so the generated interface cannot drift from what server-http.cpp expects.
+#
 # With assets present, ui.h defines LLAMA_UI_HAS_ASSETS and server-http.cpp
-# registers a route per asset (index.html at /); without them, embed.cpp
-# emits a no-op llama_ui_find_asset and the UI routes stay unregistered.
+# registers a route per asset (index.html at /), serving the gzip-encoded bytes
+# with Content-Encoding: gzip; without them, the generated llama_ui_find_asset
+# is a no-op and the UI routes stay unregistered.
 
 UI_DIST       := llama.cpp/tools/ui/dist
 UI_GEN_DIR    := o/$(MODE)/llama.cpp/tools/ui
-UI_EMBED_SRC  := llama.cpp/tools/ui/embed.cpp
-UI_EMBED_TOOL := $(UI_GEN_DIR)/llama-ui-embed
+UI_EMBED_SH   := llama.cpp.patches/ui-embed.sh
+UI_TEMPLATES  := llama.cpp/tools/ui/ui.cpp.in llama.cpp/tools/ui/ui.h.in
 UI_CPP_GEN    := $(UI_GEN_DIR)/ui.cpp
 UI_H_GEN      := $(UI_GEN_DIR)/ui.h
 
@@ -462,21 +466,14 @@ UI_H_GEN      := $(UI_GEN_DIR)/ui.h
 # letting the build proceed UI-less (offline / asset build not yet published).
 UI_ASSETS_INDEX_HTML := $(wildcard $(UI_DIST)/index.html)
 
-# Build embed.cpp standalone (no llamafile flags, no llama.cpp includes).
-# cosmoc++ produces an APE that runs on the build host, so we don't need
-# a separate system compiler. Compiled with stock C++17 (embed.cpp uses
-# <filesystem>) so the source isn't entangled with -DCOSMOCC or GGML defines.
-$(UI_EMBED_TOOL): $(UI_EMBED_SRC) $(COSMOCC)
-	@mkdir -p $(@D)
-	$(CXX) -O2 -std=gnu++17 -o $@ $<
-
-# Generate ui.cpp/ui.h. Re-run when the embed tool or the fetched UI changes.
-# When dist/ has assets, pass the directory: embed.cpp recurses it (auto-using
-# dist/_gzip when present). When dist/ is empty, pass no directory so embed
-# emits its no-asset stub.
-$(UI_CPP_GEN) $(UI_H_GEN) &: $(UI_EMBED_TOOL) $(UI_ASSETS_INDEX_HTML)
+# Generate ui.cpp/ui.h. Re-runs when the generator, upstream's templates or the
+# fetched UI change. When dist/ has assets, pass the directory (the script picks
+# up dist/_gzip itself); when it is empty, pass none so it emits the no-asset
+# stub. The script rewrites its outputs only when their contents change, so an
+# unchanged re-fetch does not cascade a rebuild.
+$(UI_CPP_GEN) $(UI_H_GEN) &: $(UI_EMBED_SH) $(UI_TEMPLATES) $(UI_ASSETS_INDEX_HTML)
 	@mkdir -p $(UI_GEN_DIR)
-	$(UI_EMBED_TOOL) $(UI_CPP_GEN) $(UI_H_GEN) \
+	$(UI_EMBED_SH) $(UI_CPP_GEN) $(UI_H_GEN) \
 		$(if $(UI_ASSETS_INDEX_HTML),$(UI_DIST))
 
 # ==============================================================================

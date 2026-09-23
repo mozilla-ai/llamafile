@@ -9,15 +9,13 @@ llama.cpp.patches/
 ├── README.md              # This file
 ├── apply-patches.sh       # Script to apply all patches to llama.cpp submodule
 ├── fetch-ui-assets.sh     # Downloads + validates the prebuilt web UI (see Server Integration)
+├── ui-embed.sh            # Renders upstream's ui.{cpp,h}.in templates (see Server Integration)
 ├── renames.sh             # Script for file renames/moves (if any)
 ├── llamafile-files/       # Additional files to copy into llama.cpp
 │   ├── BUILD.mk           # Makefile for building llama.cpp with cosmocc
 │   ├── README.llamafile   # License and modification notes
-│   ├── common/
-│   │   └── license.cpp    # Llama.cpp's license file (cmake creates this at build time)
-│   └── tools/
-│       └── ui/
-│           └── embed.cpp  # Web UI embedder (upstream moved it into CMake, see Server Integration)
+│   └── common/
+│       └── license.cpp    # Llama.cpp's license file (cmake creates this at build time)
 └── patches/               # Patch files for upstream sources
 ```
 
@@ -271,8 +269,8 @@ with it. Enabling it pulls `subprocess.h` into the build, which needs the
 Cosmopolitan fix in the patch table above.
 
 The web UI moved upstream from prebuilt `tools/server/public/*` assets to
-a Svelte/PWA project under `tools/ui/`, embedded at CMake time via
-`tools/ui/embed.cpp`. cosmocc has no JS toolchain, so `fetch-ui-assets.sh`
+a Svelte/PWA project under `tools/ui/`, embedded into the binary at build
+time. cosmocc has no JS toolchain, so `fetch-ui-assets.sh`
 (run by `apply-patches.sh` / `make setup`) downloads the prebuilt site
 **tarball** `dist.tar.gz` (plus its `.sha256`) from the `ggml-org/llama-ui`
 Hugging Face bucket — picking the newest `bNNNN` tag `<=` our pinned build —
@@ -283,42 +281,46 @@ verifies it, and extracts the whole static site into
 screens). To keep the embedded payload small, the script also builds a
 `dist/_gzip/` mirror with every file gzip-compressed under its original name.
 
-`embed.cpp` itself is **no longer upstream's**. b11100 deleted the standalone
-tool and replaced it with `scripts/ui-assets.cmake`, which provisions the
-assets and generates `ui.cpp`/`ui.h` from `tools/ui/ui.{cpp,h}.in` inside a
-CMake build. The cosmocc build has no CMake step, so llamafile keeps the tool:
-`llamafile-files/tools/ui/embed.cpp` is upstream's b10441 version, copied into
-the submodule by `apply-patches.sh`. It emits the same interface the templates
-do (`llama_ui_find_asset` / `llama_ui_get_assets` / `llama_ui_use_gzip`, and
-`LLAMA_UI_HAS_ASSETS`), which is all `server-http.cpp` consumes. Its
-`required_check[]` table has to stay in sync with `ui_validate_assets()` in
-`scripts/ui-assets.cmake` — that is now the upstream definition of the required
-set — and with `ui_missing_assets` in `fetch-ui-assets.sh`.
+b11100 deleted upstream's standalone `tools/ui/embed.cpp` and replaced it with
+`scripts/ui-assets.cmake`, which provisions the assets and renders
+`tools/ui/ui.{cpp,h}.in` into `ui.cpp`/`ui.h` inside a CMake build. There is no
+CMake step in the cosmocc build, so **`ui-embed.sh` does that rendering** — a
+translation of that script's `emit_files()`, in the same spirit as `BUILD.mk`
+being a translation of llama.cpp's CMake build.
 
-At build time, `llama.cpp/BUILD.mk` compiles `tools/ui/embed.cpp` with
-`cosmoc++` (its APE output runs on the host) and runs it against the `dist/`
-**directory** (`embed <out_cpp> <out_h> [<asset_dir>]`): `embed.cpp` recursively
-bakes every file — auto-detecting `dist/_gzip/` and emitting gzip-encoded assets
-keyed by relative path — into `o/$(MODE)/llama.cpp/tools/ui/ui.{cpp,h}`, which
-is compiled like any other C++ source and linked into `llama-server` and
-`llamafile`. Upstream's `server-http.cpp` (unpatched) registers a route per
-embedded asset (`index.html` at `/`) and serves gzip assets with
-`Content-Encoding: gzip`. If the download fails (offline, version not yet on HF)
-the script leaves `dist/` empty — `embed.cpp` then emits a no-op
-`llama_ui_find_asset` and the `LLAMA_UI_HAS_ASSETS` guard keeps the UI routes
-unregistered, so the REST API still works.
+The important property is that it renders **upstream's own templates**, so the
+generated interface (`llama_ui_find_asset` / `llama_ui_get_assets` /
+`llama_ui_use_gzip` and `LLAMA_UI_HAS_ASSETS` — all that the unpatched
+`server-http.cpp` consumes) tracks upstream automatically and cannot drift.
+Only the substitutions live on our side: `@ASSET_ARRAYS@`, `@ASSET_TABLE@`,
+`@N_ASSETS@`, `@USE_GZIP@` and the `#cmakedefine`. ETags are the SHA-256 of the
+embedded bytes, as upstream computes them; the MIME table mirrors
+`mime_from_ext()`, and an extension missing from it degrades to
+`application/octet-stream` rather than breaking anything.
 
-Note that `embed.cpp` only takes that graceful no-asset path when `dist/` is
-*empty*: once the directory is non-empty it enforces a required-asset set
-(its `required_check[]` table — `index.html`, `manifest.webmanifest`, `sw.js`,
-`build.json`, `version.json`, and the hashed
-`bundle*.js`/`bundle*.css`/`workbox*.js`) and returns a hard error if any is
-missing. So `fetch-ui-assets.sh` validates the *same* set after extracting
-(`ui_missing_assets`); if a downloaded tarball is partial or has drifted, it
-clears `dist/` and falls back to a UI-less build rather than letting the embed
-step abort the whole build. Upstream owns that list (now in
-`ui_validate_assets()`), so it can change on a llama.cpp bump — when it does,
-both `required_check[]` and `ui_missing_assets` must be updated to match.
+At build time `llama.cpp/BUILD.mk` runs `ui-embed.sh <out_cpp> <out_h> [dist]`,
+which walks `dist/` (using the `dist/_gzip/` mirror when present, so the
+embedded bytes are gzip-compressed) and writes
+`o/$(MODE)/llama.cpp/tools/ui/ui.{cpp,h}`, compiled like any other C++ source
+and linked into `llama-server` and `llamafile`. `server-http.cpp` registers a
+route per embedded asset (`index.html` at `/`) and serves them with
+`Content-Encoding: gzip`. If the download fails (offline, version not yet on
+HF) the fetch script leaves `dist/` empty; `ui-embed.sh` then emits the
+no-asset stub and the `LLAMA_UI_HAS_ASSETS` guard keeps the UI routes
+unregistered, so the REST API still works. A zero-length asset takes the same
+path, with a warning — upstream hard-errors there, but aborting a whole build
+over a corrupt UI tarball is the wrong trade for us.
+
+`ui-embed.sh` embeds whatever it is given without validating the set, so the
+**one** required-asset check lives in `fetch-ui-assets.sh` (`ui_missing_assets`:
+`index.html`, `manifest.webmanifest`, `sw.js`, `build.json`, `version.json` and
+the hashed `bundle*.js`/`bundle*.css`/`workbox*.js`). When a downloaded tarball
+is partial or has drifted it clears `dist/` and takes the UI-less path. That
+list mirrors `ui_validate_assets()` in `scripts/ui-assets.cmake`, which is
+upstream's definition of a complete tree and the only remaining sync point in
+the UI path — when upstream changes it on a bump, update `ui_missing_assets` to
+match, or we will accept a tree upstream considers incomplete (silently broken
+UI) or reject one it considers fine (UI-less build).
 
 ### Bug Fixes
 
