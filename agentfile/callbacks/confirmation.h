@@ -17,6 +17,9 @@
 //
 // DestructiveOpsConfirmationCallback — prompts the user on stderr before
 // agentfile invokes a destructive tool. Read-only tools execute silently.
+// Under --yes the prompt is skipped; when --quiet has also silenced the
+// progress output, a one-line audit record is printed instead, so a
+// write, shell command or network call never runs without a trace.
 // Pattern inspired by agent.cpp/examples/shell/shell.cpp's
 // ShellConfirmationCallback.
 //
@@ -38,20 +41,30 @@ namespace agentfile {
 
 class DestructiveOpsConfirmationCallback : public agent_cpp::Callback {
     bool always_yes_;
+    // Log destructive calls under --yes when nothing else will (--quiet
+    // disables the ProgressCallback that normally prints every call).
+    bool audit_;
     // Tool names requiring confirmation. Comes from the tools' own
     // permission_write metadata (writes, shell, network access).
     std::set<std::string> destructive_;
 
   public:
     DestructiveOpsConfirmationCallback(bool always_yes,
-                                       std::set<std::string> destructive)
-        : always_yes_(always_yes), destructive_(std::move(destructive)) {}
+                                       std::set<std::string> destructive,
+                                       bool audit = false)
+        : always_yes_(always_yes), audit_(audit),
+          destructive_(std::move(destructive)) {}
 
     void before_tool_execution(std::string &tool_name,
                                std::string &arguments) override {
         if (!destructive_.count(tool_name)) return;
-        // ProgressCallback already prints every call; nothing to add here.
-        if (always_yes_) return;
+        if (always_yes_) {
+            if (audit_) {
+                std::fprintf(stderr, "[%s --yes] %s\n", tool_name.c_str(),
+                             arguments.c_str());
+            }
+            return;
+        }
         std::fprintf(stderr, "\n[%s] %s\n", tool_name.c_str(),
                      arguments.c_str());
         std::fprintf(stderr, "Allow? [y/N]: ");

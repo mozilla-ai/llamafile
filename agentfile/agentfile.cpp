@@ -141,6 +141,8 @@ void print_usage(const char *prog) {
             "                       --yes; later flag wins)\n"
             "  --max-iterations N   Cap agent loop at N LLM calls (default: unlimited)\n"
             "  --quiet              Don't print tool-execution progress to stderr\n"
+            "                       (destructive tools run under --yes are still\n"
+            "                       logged, one line each)\n"
             "  -v, --verbose        Also print truncated tool results to stderr\n"
             "  -h                   Show this help\n"
             "\n",
@@ -396,7 +398,8 @@ int main(int argc, char **argv) {
         }
         callbacks.emplace_back(
             std::make_unique<agentfile::DestructiveOpsConfirmationCallback>(
-                always_yes, toolbox.write_tool_names()));
+                always_yes, toolbox.write_tool_names(),
+                /*audit=*/verbosity == 0));
         if (verbosity > 0) {
             callbacks.emplace_back(
                 std::make_unique<agentfile::ProgressCallback>(verbosity > 1));
