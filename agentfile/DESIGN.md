@@ -201,6 +201,34 @@ o//llamafile/zipalign -j0 my-agent model.gguf system.md
 
 ---
 
+## 7. Security model (decided 2026-09-23)
+
+agentfile does **not** sandbox itself: there is no `pledge()`/`unveil()`
+call anywhere in it, so every tool runs with the invoking user's full
+permissions, on macOS as on Linux. What stands between the model and the
+host:
+
+- The confirmation prompt for `permission_write` tools (writes, shell,
+  network) is the only gate. `--yes` removes it; under `--yes --quiet`
+  each such call is still logged to stderr, one line each.
+- Tool inputs are defended at the adapter: model-supplied `runtime`,
+  `cwd` and `resp_type` keys are stripped before a server tool runs
+  (llama-server does the same in its HTTP handler). `http_fetch` reports
+  redirects instead of following them and stops downloading at 64 KB.
+- Isolation, when wanted, comes from `--tools-runtime`: tools then run
+  inside an already-running container (or over ssh). That is the right
+  boundary for an agent whose purpose is running shell commands against
+  a filesystem.
+
+Why not llamafile's pledge sandbox now: on macOS it is a no-op and the
+GPU gate skips it anyway, so it would protect nobody on the platform
+agentfile is developed on; and a policy derived from the enabled toolset
+would make "is the sandbox on?" depend on `--tools`, `--session`,
+`--trace`, GPU, OS and `--unsecure` at once. Follow-up, in its own PR:
+one fixed rule modelled on the server table in `docs/built-in-tools.md`,
+a status line printed at every start, `--unsecure` to opt out, and a
+startup check naming the enabled tools that cannot work under it.
+
 ## Implementation plan (ordered)
 
 1. **CLI polish**: stdin prompt, last-wins + inverse flags, exit codes,

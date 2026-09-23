@@ -99,7 +99,10 @@ void print_tools_help() {
                 "                       also read from SEARXNG_URL\n"
                 "  --tools-runtime SPEC Run every tool inside an existing\n"
                 "                       container, e.g. \"docker-container:NAME\"\n"
-                "                       (default: tools run on this host)\n");
+                "                       (default: tools run on this host)\n"
+                "  Tools run with this process's permissions; agentfile does not\n"
+                "  sandbox itself. The confirmation prompt is the only gate (--yes\n"
+                "  removes it); use --tools-runtime for isolation.\n");
     } catch (const std::exception &e) {
         fprintf(stderr, "Tools: unavailable in this build (%s)\n", e.what());
     }
