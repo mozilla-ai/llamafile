@@ -251,12 +251,14 @@ COMMON_FLAGS="\
 if [ "$NO_IQ_QUANTS" = "1" ]; then
     COMMON_FLAGS="$COMMON_FLAGS -DGGML_CUDA_NO_IQ_QUANTS"
 fi
-if [ "$FA_ALL_QUANTS" = "1" ]; then
-    COMMON_FLAGS="$COMMON_FLAGS -DGGML_CUDA_FA_ALL_QUANTS"
-fi
 
 # Collect sources
 collect_gpu_sources "$GGML_CUDA_DIR" "$EXTRA_SOURCES" "$NO_IQ_QUANTS" "$FA_ALL_QUANTS"
+
+# fattn.cu gates each K-V combination on a GGML_CUDA_FA_<K>_<V> macro that must
+# be defined for all of them; collect_gpu_sources derives them from the same
+# combination list it picked the template instances from.
+COMMON_FLAGS="$COMMON_FLAGS $CUDA_FA_DEFINES"
 echo "  Sources: $NUM_SOURCES .cu files"
 echo ""
 
