@@ -322,6 +322,17 @@ the UI path — when upstream changes it on a bump, update `ui_missing_assets` t
 match, or we will accept a tree upstream considers incomplete (silently broken
 UI) or reject one it considers fine (UI-less build).
 
+### Upstream fixes carried ahead of a release
+
+Patches that are **not** llamafile's own: an upstream fix we need before it
+lands in a tagged llama.cpp. Drop each one at the bump that first includes it,
+rather than reconciling it — `check_patches.sh` will flag it as conflicting
+once upstream has the same change.
+
+| Patch | Description |
+|-------|-------------|
+| `ggml_src_ggml-alloc.c.patch` | [PR #25584](https://github.com/ggml-org/llama.cpp/pull/25584), verbatim minus its test. `ggml_backend_alloc_ctx_tensors_from_buft()` splits a context across buffers when a tensor exceeds the backend's `max_size` (1 GiB on Vulkan); when the tail of the context holds only views, the final `alloc_tensor_range()` is skipped and those views never get `ggml_backend_view_init()`. The persistent KV stream views (`layer.k_stream`/`v_stream`) then keep `data == NULL`, and the server's state save/restore hits `GGML_ASSERT(tensor->data != NULL && "tensor not allocated")` in `ggml_backend_tensor_get()`. The fix allocates only parent tensors per split range and initializes every view in one final pass. **Symptom without it:** `llama-server` on Vulkan dies on the *second* request at the default `--parallel 4` (upstream [#29221](https://github.com/ggml-org/llama.cpp/issues/29221); `--parallel 1` is the workaround). Reproduced on an L40S with vanilla b11100, so it is not llamafile-specific; verified fixed on both vanilla and llamafile. Upstream also files it against #19839, #23737 and #21762. |
+
 ### Bug Fixes
 
 | Patch | Description |
