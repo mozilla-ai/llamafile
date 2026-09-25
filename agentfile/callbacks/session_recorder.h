@@ -33,6 +33,7 @@
 #include "callbacks.h"
 #include "tool_result.h"
 
+#include "server-common.h"  // safe_json_to_str
 #include "util.h"
 
 #include <cstdio>
@@ -46,7 +47,7 @@
 namespace agentfile {
 
 class SessionRecorderCallback : public agent_cpp::Callback {
-    using json = nlohmann::json;
+    using json = nlohmann::ordered_json;  // what safe_json_to_str takes
 
     FILE *file_;
     std::string model_name_;
@@ -188,8 +189,10 @@ class SessionRecorderCallback : public agent_cpp::Callback {
         parent_id_ = id;
     }
 
+    // Tool output can be any bytes (a Latin-1 file, a truncated page):
+    // safe_json_to_str replaces invalid UTF-8 where dump() would throw.
     void write_line(const json &j) {
-        std::string line = j.dump();
+        std::string line = safe_json_to_str(j);
         std::fwrite(line.data(), 1, line.size(), file_);
         std::fputc('\n', file_);
         std::fflush(file_);

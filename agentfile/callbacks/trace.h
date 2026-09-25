@@ -37,6 +37,7 @@
 #include "callbacks.h"
 #include "tool_result.h"
 
+#include "server-common.h"  // safe_json_to_str
 #include "util.h"
 
 #include <cstdio>
@@ -48,7 +49,7 @@
 namespace agentfile {
 
 class OtlpTraceCallback : public agent_cpp::Callback {
-    using json = nlohmann::json;
+    using json = nlohmann::ordered_json;  // what safe_json_to_str takes
 
     struct OpenSpan {
         std::string span_id;
@@ -214,7 +215,10 @@ class OtlpTraceCallback : public agent_cpp::Callback {
                                   {"spans", json::array({span})}}})}}})},
         };
 
-        std::string line = request.dump();
+        // safe_json_to_str never throws on invalid UTF-8 (a model path or
+        // error message can carry it): this also runs from the destructor,
+        // where a throw is std::terminate.
+        std::string line = safe_json_to_str(request);
         std::fwrite(line.data(), 1, line.size(), file_);
         std::fputc('\n', file_);
         std::fflush(file_);

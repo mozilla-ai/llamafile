@@ -106,11 +106,15 @@ class ServerToolAdapter : public agent_cpp::Tool {
                     return it->get<std::string>();
                 }
             }
-            return result.dump();
+            // safe_json_to_str: structured results can carry invalid UTF-8
+            // (http_fetch bodies, byte-truncated snippets); a strict dump()
+            // would throw and turn the result into an error.
+            return safe_json_to_str(result);
         } catch (const std::exception &e) {
             // Tools normally report failures as {"error": ...} themselves;
             // this is the backstop for the ones that throw.
-            return nlohmann::ordered_json{{"error", e.what()}}.dump();
+            return safe_json_to_str(
+                nlohmann::ordered_json{{"error", e.what()}});
         }
     }
 };
