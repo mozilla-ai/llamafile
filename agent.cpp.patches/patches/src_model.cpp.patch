@@ -181,7 +181,7 @@ diff --git a/src/model.cpp b/src/model.cpp
  
      try {
          auto parsed_msg =
-@@ -261,11 +276,78 @@ Model::generate(const std::vector<common_chat_msg>& messages,
+@@ -261,11 +276,97 @@ Model::generate(const std::vector<common_chat_msg>& messages,
      inputs.tools = tools;
      inputs.tool_choice = COMMON_CHAT_TOOL_CHOICE_AUTO;
      inputs.add_generation_prompt = true;
@@ -217,6 +217,25 @@ diff --git a/src/model.cpp b/src/model.cpp
 +        sp.grammar_lazy = params.grammar_lazy;
 +
 +        const llama_vocab* vocab = weights_->get_vocab();
++
++        // Tell the sampler where reasoning starts and ends: a lazy grammar
++        // must not fire on a tool-call tag the model writes inside <think>.
++        // With these set, common_sampler keeps the grammar dormant until the
++        // reasoning block closes. Mirrors server-common.cpp.
++        if (!params.thinking_end_tags.empty()) {
++            sp.reasoning_budget_start =
++              common_tokenize(vocab, params.thinking_start_tag,
++                              /*add_special=*/false,
++                              /*parse_special=*/true);
++            for (const auto& tag : params.thinking_end_tags) {
++                if (!tag.empty()) {
++                    sp.reasoning_budget_end.push_back(
++                      common_tokenize(vocab, tag,
++                                      /*add_special=*/false,
++                                      /*parse_special=*/true));
++                }
++            }
++        }
 +
 +        // Resolve preserved-token strings to single token ids.
 +        for (const auto& t : params.preserved_tokens) {
@@ -261,7 +280,7 @@ diff --git a/src/model.cpp b/src/model.cpp
      // Tokenize the prompt
      std::vector<llama_token> prompt_tokens = tokenize(params.prompt);
      if (prompt_tokens.empty()) {
-@@ -281,8 +363,66 @@ Model::generate(const std::vector<common_chat_msg>& messages,
+@@ -281,8 +382,66 @@ Model::generate(const std::vector<common_chat_msg>& messages,
          parser_source_ = params.parser;
      }
  
@@ -330,7 +349,7 @@ diff --git a/src/model.cpp b/src/model.cpp
  }
  
  common_chat_msg
-@@ -311,10 +451,16 @@ Model::generate_from_tokens(const std::vector<llama_token>& all_tokens,
+@@ -311,10 +470,16 @@ Model::generate_from_tokens(const std::vector<llama_token>& all_tokens,
          common_prefix++;
      }
  
@@ -349,7 +368,7 @@ diff --git a/src/model.cpp b/src/model.cpp
          processed_tokens_.resize(common_prefix);
          n_past_ = common_prefix;
      }
-@@ -343,15 +489,15 @@ Model::generate_from_tokens(const std::vector<llama_token>& all_tokens,
+@@ -343,15 +508,15 @@ Model::generate_from_tokens(const std::vector<llama_token>& all_tokens,
          i += batch_size;
      }
  
