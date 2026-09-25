@@ -18,10 +18,12 @@ include llama.cpp/BUILD.mk
 include whisper.cpp/BUILD.mk
 include transcribe.cpp/BUILD.mk
 include stable-diffusion.cpp/BUILD.mk
+include agent.cpp/BUILD.mk
 include llamafile/BUILD.mk
 include whisperfile/BUILD.mk
 include transcribefile/BUILD.mk
 include diffusionfile/BUILD.mk
+include agentfile/BUILD.mk
 include tests/BUILD.mk
 endif
 
@@ -36,6 +38,7 @@ o/$(MODE)/:	o/$(MODE)/llamafile	\
 		o/$(MODE)/transcribe.cpp \
 		o/$(MODE)/transcribefile \
 		o/$(MODE)/diffusionfile \
+		o/$(MODE)/agentfile \
 		o/$(MODE)/third_party/zipalign
 
 .PHONY: install
@@ -47,6 +50,7 @@ install:	o/$(MODE)/llamafile/llamafile \
 	$(INSTALL) o/$(MODE)/llamafile/llamafile $(PREFIX)/bin/llamafile
 	$(INSTALL) o/$(MODE)/whisperfile/whisperfile $(PREFIX)/bin/whisperfile
 	$(INSTALL) o/$(MODE)/diffusionfile/diffusionfile $(PREFIX)/bin/diffusionfile
+	$(INSTALL) o/$(MODE)/agentfile/agentfile $(PREFIX)/bin/agentfile
 	$(INSTALL) o/$(MODE)/transcribefile/transcribefile $(PREFIX)/bin/transcribefile
 	$(INSTALL) o/$(MODE)/third_party/zipalign/zipalign $(PREFIX)/bin/zipalign
 	mkdir -p $(PREFIX)/share/man/man1
@@ -124,13 +128,21 @@ setup: # Initialize and configure all dependencies (submodules, patches, etc.)
 		echo "Initializing zipalign submodule..."; \
 		git submodule update --init third_party/zipalign; \
 	fi
+
+	@if [ ! -f agent.cpp/.git ]; then \
+		echo "Initializing agent.cpp submodule..."; \
+		git submodule update --init agent.cpp; \
+	fi
+	@echo "Applying agent.cpp patches..."
+	@export TMPDIR=$$(pwd)/o/tmp && ./agent.cpp.patches/apply-patches.sh
+
 	@echo "Setup complete!"
 	@$(MAKE) cosmocc
 
 .PHONY: reset-repo
 reset-repo: # Reset all submodules to their original state (removes patches or any other change)
 	@echo "Resetting submodules to original state..."
-	@for dir in llama.cpp whisper.cpp stable-diffusion.cpp transcribe.cpp third_party/zipalign; do \
+	@for dir in llama.cpp whisper.cpp stable-diffusion.cpp transcribe.cpp third_party/zipalign agent.cpp; do \
 		if [ -e "$$dir" ]; then \
 			echo "Removing $$dir..."; \
 			rm -rf "$$dir"; \
