@@ -54,11 +54,11 @@
 #include "llamafile.h"
 
 #include "callbacks/confirmation.h"
+#include "callbacks/error_recovery.h"
 #include "callbacks/max_iterations.h"
 #include "callbacks/progress.h"
 #include "callbacks/session_recorder.h"
 #include "callbacks/trace.h"
-#include "error_recovery_callback.h"  // agent.cpp/examples/shared
 #include "server_tools_adapter.h"
 
 #include <sstream>
@@ -433,7 +433,8 @@ int main(int argc, char **argv) {
         // run; hand it to the model instead, so it can fix the call (bad
         // arguments, a tool it doesn't have). Goes after the observers so
         // progress, session and trace still record the call as failed.
-        callbacks.emplace_back(std::make_unique<ErrorRecoveryCallback>());
+        callbacks.emplace_back(
+            std::make_unique<agentfile::ErrorRecoveryCallback>());
         if (max_iterations > 0) {
             callbacks.emplace_back(
                 std::make_unique<agentfile::MaxIterationsCallback>(
