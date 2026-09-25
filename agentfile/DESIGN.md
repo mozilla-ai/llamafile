@@ -218,7 +218,10 @@ host:
 - Isolation, when wanted, comes from `--tools-runtime`: tools then run
   inside an already-running container (or over ssh). That is the right
   boundary for an agent whose purpose is running shell commands against
-  a filesystem.
+  a filesystem. The exceptions are `http_fetch` and `web_search`, which
+  are agentfile-native and ignore the runtime: they always connect from
+  this host, localhost services and cloud metadata endpoints included.
+  Leave them out of `--tools` when network access must be contained too.
 
 Why not llamafile's pledge sandbox now: on macOS it is a no-op and the
 GPU gate skips it anyway, so it would protect nobody on the platform

@@ -99,9 +99,10 @@ void print_tools_help() {
         fprintf(stderr,
                 "  --searxng-url URL    SearXNG instance used by web_search;\n"
                 "                       also read from SEARXNG_URL\n"
-                "  --tools-runtime SPEC Run every tool inside an existing\n"
-                "                       container, e.g. \"docker-container:NAME\"\n"
-                "                       (default: tools run on this host)\n"
+                "  --tools-runtime SPEC Run tools inside an existing container,\n"
+                "                       e.g. \"docker-container:NAME\" (default: this\n"
+                "                       host). http_fetch and web_search still connect\n"
+                "                       from this host.\n"
                 "  Tools run with this process's permissions; agentfile does not\n"
                 "  sandbox itself. The confirmation prompt is the only gate (--yes\n"
                 "  removes it); use --tools-runtime for isolation.\n");
