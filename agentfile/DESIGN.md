@@ -255,18 +255,29 @@ startup check naming the enabled tools that cannot work under it.
 6. **agent.cpp sync to v0.4.0**: done (2026-09-10). Pin 7b75852 →
    63d23da; upstream #22's PEG-parser work replaced the old patch-0001
    loading half. Remaining local patches (per-file,
-   `src_model.{cpp,h}.patch`, ~300 lines): (a) common_sampler switch +
+   `src_model.{cpp,h}.patch`, ~500 lines): (a) common_sampler switch +
    chat-template tool-call grammar (user GBNF rides along via
    `COMMON_GRAMMAR_TYPE_USER`; caveat: `ModelConfig::grammar_root` is
-   ignored — grammars must use "root"); (b) parse-failure fallback +
+   ignored — grammars must use "root"). The new sampler is built before
+   the old one is freed; a user grammar is re-initialized on every call
+   (`common_sampler_reset` leaves a finished grammar finished); the
+   template's thinking tags go to the sampler as reasoning-budget
+   start/end, so a lazy tool-call grammar stays dormant inside
+   `<think>` (as llama-server does); (b) parse-failure fallback +
    heuristic `<tool_call>` recovery (upstream now throws ModelError,
    which would kill the loop). Recovery scans the content only (the
    reasoning is split off first), and only when the parser failed or
    the template has no tool-call grammar; a `<tool_call>` it cannot
    lift rethrows the parse error (exit 2) instead of becoming the
-   answer; (c) hybrid-model rewind fix
-   (`llama_memory_seq_rm` returns false on recurrent state → fall back
-   to `llama_memory_clear` + full re-decode). All three are upstream PR
+   answer; recovered arguments keep the model's key order, so the next
+   prompt matches the KV cache. A reply that ends inside a reasoning
+   block it never closed returns that block as the content; (c)
+   hybrid-model rewind fix (`llama_memory_seq_rm` returns false on
+   recurrent state → fall back to `llama_memory_clear` + full
+   re-decode); (d) `tokenize()` always adds special tokens: keying BOS
+   on an empty cache dropped it on every call after the first, which
+   broke the KV prefix match for BOS models; (e)
+   `ModelConfig::enable_thinking` for `--think`. All are upstream PR
    candidates. Verified: tool-call grammar path, hybrid interactive,
    web_search live, session/trace, patch round-trip.
 7. **server-tools adapter**: done (2026-09-10). `server_tools_adapter.h`
