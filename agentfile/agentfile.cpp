@@ -195,7 +195,7 @@ std::string read_followup() {
 }
 
 std::set<std::string> parse_tools_flag(const std::string &spec) {
-    if (spec == "all" || spec.empty()) return {};
+    if (spec == "all") return {};
     if (spec == "read_only") {
         return {"read_file", "file_glob_search", "grep_search",
                 "get_datetime", "get_info"};
@@ -356,6 +356,13 @@ int main(int argc, char **argv) {
         // toolbox owns them and must outlive the Agent below.
         agentfile::ServerToolbox toolbox(searxng_url, tools_runtime);
         auto keep = parse_tools_flag(tools_spec);
+        // An empty set means "all tools" to make_adapters, so a list that
+        // names nothing (--tools "", ",", " ") must not reach it.
+        if (keep.empty() && tools_spec != "all") {
+            fprintf(stderr, "agentfile: --tools: no tool names in \"%s\"\n",
+                    tools_spec.c_str());
+            return 1;
+        }
         {
             auto known = toolbox.tool_names();
             for (const auto &name : keep) {
