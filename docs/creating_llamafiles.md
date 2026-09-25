@@ -82,6 +82,12 @@ none
 > prefix is required whenever referencing a file packaged inside the llamafile.
 > The `...` token is replaced with any additional CLI arguments the user passes
 > at runtime.
+>
+> `--load-mode none` disables memory mapping. It replaces `--no-mmap`, which
+> llama.cpp removed in b11100. Existing `.args` files that still use
+> `--no-mmap`, `--mmap` or `--mlock` keep working, because llamafile
+> translates them (see [Model Loading Flags](cli_arguments.md#model-loading-flags)).
+> New ones should use `--load-mode`.
 
 - Copy the llamafile executable and run zipalign to embed the weights and args:
 

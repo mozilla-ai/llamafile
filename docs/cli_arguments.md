@@ -89,11 +89,38 @@ compatibility.
 | `-c, --ctx-size N` | Context window size. `0` means to use the model default. |
 | `-b, --batch-size N` | Logical maximum batch size. |
 | `-ub, --ubatch-size N` | Physical maximum batch size. |
-| `-lm, --load-mode MODE` | How the weights are read: `auto` (default), `none`, `mmap`, `mlock`, `mmap+mlock`, `dio`. Replaces the `--mmap`/`--no-mmap`/`--mlock`/`--dio` flags, which llama.cpp removed in b11100. |
+| `-lm, --load-mode MODE` | How the weights are read: `auto` (default), `none`, `mmap`, `mlock`, `mmap+mlock`, `dio`. Replaces `--mmap`, `--no-mmap`, `--mlock` and `-dio`; see [Model Loading Flags](#model-loading-flags). |
 | `--repeat-penalty N` | Penalize repeating tokens during sampling. `1.0` disables the penalty. |
 | `-ngl, --gpu-layers, --n-gpu-layers N` | Number of layers to offload to GPU. |
 | `--host HOST` | Server bind address. |
 | `--port PORT` | Server listen port. |
+
+## Model Loading Flags
+
+llama.cpp b11100 replaced the separate `--mmap`, `--no-mmap`, `--mlock`,
+`-dio`/`--direct-io` and `-ndio`/`--no-direct-io` flags with a single
+`-lm, --load-mode MODE`, and no longer accepts the old flags. Use
+`--load-mode` in new command lines and `.args` files, as llama.cpp does.
+
+So that existing llamafiles and `.args` files keep working, llamafile still
+accepts the old flags. It prints a warning and replaces them with the
+equivalent `--load-mode`, keeping their original meaning: memory mapping is on
+unless `--no-mmap` is given, `--mlock` locks the model in RAM on top of that,
+and direct I/O takes precedence over memory mapping.
+
+| Old flags | Equivalent |
+| --- | --- |
+| `--mmap` | `--load-mode mmap` |
+| `--no-mmap` | `--load-mode none` |
+| `--mlock` | `--load-mode mmap+mlock` |
+| `--no-mmap --mlock` | `--load-mode mlock` |
+| `-dio`, `--direct-io` | `--load-mode dio` |
+| `-ndio`, `--no-direct-io` | `--load-mode mmap` |
+
+Several old flags combine into one mode, applied in command-line order. If
+you mix them with `--load-mode`, whichever comes last wins. The old
+`LLAMA_ARG_MMAP`, `LLAMA_ARG_MLOCK` and `LLAMA_ARG_DIO` environment variables
+are not translated; use `LLAMA_ARG_LOAD_MODE` instead.
 
 ## Wrapper and Mode Flags
 
