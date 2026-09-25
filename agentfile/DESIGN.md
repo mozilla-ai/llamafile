@@ -66,7 +66,9 @@ that runs anywhere, llamafile-style.
   error, `4` max-iterations exceeded. Declining a confirmation is not an
   exit: agent.cpp catches `ToolExecutionSkipped` inside the loop, the model
   receives `{"skipped": "user declined"}` as the tool result and decides
-  how to continue.
+  how to continue. No answer at all (no terminal to ask on, or EOF at the
+  prompt) does end the run, with exit 2: every later guarded call would
+  go unanswered too, and the model would retry them without end.
 
 ## 3. Session records & tracing
 

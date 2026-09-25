@@ -145,8 +145,10 @@ def run_agentfile(prompt: str, tools: str, tmp_path: Path, extra=(), cwd=None) -
     # APE binaries need a shell launcher on macOS (kernel rejects the format).
     cmd = [*(["sh"] if os.name != "nt" else []), EXE, "-m", MODEL, "-p", prompt, "--tools", tools,
            "--session", str(session), "--no-think", *extra]
-    proc = subprocess.run(cmd, capture_output=True, text=True,
-                          cwd=cwd or tmp_path, timeout=RUN_TIMEOUT)
+    # No stdin and a new session (no controlling terminal): a confirmation
+    # prompt gets no answer instead of waiting on the keyboard.
+    proc = subprocess.run(cmd, capture_output=True, text=True, stdin=subprocess.DEVNULL,
+                          start_new_session=True, cwd=cwd or tmp_path, timeout=RUN_TIMEOUT)
     tool_calls, tool_results = [], []
     if session.exists():
         for line in session.read_text().splitlines():
@@ -312,3 +314,15 @@ def test_default_verbosity_has_progress_not_audit(tmp_path):
     assert (tmp_path / "note.txt").exists(), _dump(run)
     assert "[tool: write_file" in run.proc.stderr, _dump(run)
     assert "--yes]" not in run.proc.stderr, "duplicate audit line at default verbosity" + _dump(run)
+
+
+# --- confirmation without a terminal ----------------------------------------
+
+# With no terminal to confirm on, a guarded call used to come back as
+# "user cancelled" and the model retried it without end.
+def test_guarded_call_without_terminal_ends_run(tmp_path):
+    run = run_agentfile(WRITE_PROMPT, "write_file", tmp_path)
+    assert run.proc.returncode == 2, _dump(run)
+    assert "cannot confirm write_file" in run.proc.stderr, _dump(run)
+    assert run.proc.stderr.count("Allow? [y/N]") == 1, _dump(run)
+    assert not (tmp_path / "note.txt").exists(), _dump(run)

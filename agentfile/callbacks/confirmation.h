@@ -66,6 +66,17 @@ inline std::string printable_arguments(const std::string &arguments) {
     return out;
 }
 
+// No answer from a terminal (none to ask on in CI or cron, or EOF at the
+// prompt): every later guarded call would go unanswered too, and the
+// model retries them without end. Ends the run instead (main exits 2).
+class ConfirmationUnavailable : public agent_cpp::Error {
+  public:
+    explicit ConfirmationUnavailable(const std::string &tool_name)
+        : agent_cpp::Error("cannot confirm " + tool_name +
+                           ": no answer from a terminal (use --yes for "
+                           "unattended runs)") {}
+};
+
 class DestructiveOpsConfirmationCallback : public agent_cpp::Callback {
     bool always_yes_;
     // Log destructive calls under --yes when nothing else will (--quiet
@@ -98,8 +109,8 @@ class DestructiveOpsConfirmationCallback : public agent_cpp::Callback {
         std::fflush(stderr);
 
         // When the prompt was piped in, stdin is consumed/EOF — ask on the
-        // controlling terminal instead. No terminal at all (CI, cron) means
-        // the answer is a decline; use --yes for unattended runs.
+        // controlling terminal instead. No terminal at all (CI, cron) ends
+        // the run; use --yes for unattended runs.
         std::string line;
         bool got = false;
         if (isatty(STDIN_FILENO)) {
@@ -113,9 +124,7 @@ class DestructiveOpsConfirmationCallback : public agent_cpp::Callback {
             std::fclose(tty);
         }
         if (!got) {
-            throw agent_cpp::ToolExecutionSkipped(
-                "user cancelled (no terminal to confirm on; use --yes for "
-                "unattended runs)");
+            throw ConfirmationUnavailable(tool_name);
         }
         char c = line.empty() ? 'n' : (char)std::tolower((unsigned char)line[0]);
         if (c != 'y') {
