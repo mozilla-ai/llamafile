@@ -547,15 +547,25 @@ static bool ImportMetalImpl(void) {
     llamafile_get_app_dir(app_dir, PATH_MAX);
     snprintf(dso, PATH_MAX, "%sggml-metal.dylib", app_dir);
 
+    // The dylib is built without GGML_METAL_EMBED_LIBRARY, so
+    // ggml_metal_library_init() compiles kernels/<kind>.metal at first use.
+    // It finds them through [NSBundle bundleForClass:], which for a loose
+    // dylib resolves to the dylib's own directory, i.e. app_dir, where
+    // BuildMetal() extracts them. GGML_METAL_PATH_RESOURCES takes precedence
+    // over that lookup, and it can't be overridden from here: setenv() only
+    // changes Cosmopolitan's environ, which libSystem inside the dylib never
+    // reads. So if it is set, kernels come from elsewhere; say so.
+    const char *res_path = getenv("GGML_METAL_PATH_RESOURCES");
+    if (res_path && *res_path) {
+        fprintf(stderr,
+                "metal: warning: GGML_METAL_PATH_RESOURCES=%s overrides the kernels "
+                "extracted to %s; unset it unless those kernels match this llamafile\n",
+                res_path, app_dir);
+    }
+
     if (FLAG_nocompile) {
         return LinkMetal(dso);
     }
-
-    // ggml_metal_library_init() compiles kernels/<kind>.metal at first use and
-    // looks for them here (the dylib is built without GGML_METAL_EMBED_LIBRARY,
-    // and its NSBundle lookup would resolve against the host executable, not
-    // the app dir). Set before cosmo_dlopen so the DSO's libc sees it.
-    setenv("GGML_METAL_PATH_RESOURCES", app_dir, 1);
 
     // Build and link Metal support DSO if possible
     if (BuildMetal(dso)) {
