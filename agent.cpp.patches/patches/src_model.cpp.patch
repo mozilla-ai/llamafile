@@ -1,15 +1,21 @@
 diff --git a/src/model.cpp b/src/model.cpp
 --- a/agent.cpp/src/model.cpp
 +++ b/agent.cpp/src/model.cpp
-@@ -1,5 +1,7 @@
+@@ -1,9 +1,13 @@
  #include "model.h"
  #include "chat.h"
 +#include "sampling.h" // common_sampler (llamafile)
++#include "log.h" // LOG_WRN (llamafile)
 +#include <nlohmann/json.hpp> // heuristic tool-call recovery (llamafile)
  #include "error.h"
  #include <algorithm>
  #include <cstdio>
-@@ -78,7 +80,7 @@ Model::create_with_weights(std::shared_ptr<ModelWeights> weights,
+ #include <fstream>
++#include <optional>
+ #include <sstream>
+ 
+ namespace agent_cpp {
+@@ -78,7 +82,7 @@ Model::create_with_weights(std::shared_ptr<ModelWeights> weights,
  Model::~Model()
  {
      if (sampler_ != nullptr) {
@@ -18,7 +24,7 @@ diff --git a/src/model.cpp b/src/model.cpp
      }
      if (ctx_ != nullptr) {
          llama_free(ctx_);
-@@ -90,14 +92,12 @@ Model::Model(Model&& other) noexcept
+@@ -90,14 +94,12 @@ Model::Model(Model&& other) noexcept
    : weights_(std::move(other.weights_))
    , ctx_(other.ctx_)
    , sampler_(other.sampler_)
@@ -33,7 +39,7 @@ diff --git a/src/model.cpp b/src/model.cpp
      other.n_past_ = 0;
  }
  
-@@ -106,7 +106,7 @@ Model::operator=(Model&& other) noexcept
+@@ -106,7 +108,7 @@ Model::operator=(Model&& other) noexcept
  {
      if (this != &other) {
          if (sampler_ != nullptr) {
@@ -42,7 +48,7 @@ diff --git a/src/model.cpp b/src/model.cpp
          }
          if (ctx_ != nullptr) {
              llama_free(ctx_);
-@@ -115,19 +115,51 @@ Model::operator=(Model&& other) noexcept
+@@ -115,19 +117,51 @@ Model::operator=(Model&& other) noexcept
          weights_ = std::move(other.weights_);
          ctx_ = other.ctx_;
          sampler_ = other.sampler_;
@@ -96,7 +102,7 @@ diff --git a/src/model.cpp b/src/model.cpp
  void
  Model::initialize_context(const ModelConfig& model_config)
  {
-@@ -146,57 +178,37 @@ Model::initialize_context(const ModelConfig& model_config)
+@@ -146,57 +180,37 @@ Model::initialize_context(const ModelConfig& model_config)
          throw ModelError("failed to create llama context");
      }
  
@@ -171,7 +177,7 @@ diff --git a/src/model.cpp b/src/model.cpp
                         true) < 0) {
          return {}; // Return empty vector on failure
      }
-@@ -234,6 +246,9 @@ parse_with_parser(const common_peg_arena& parser,
+@@ -234,6 +248,9 @@ parse_with_parser(const common_peg_arena& parser,
      // (ggml-org/llama.cpp#18675). Without them tool calls stay as raw text.
      syntax.generation_prompt = params.generation_prompt;
      syntax.parse_tool_calls = true;
@@ -181,7 +187,57 @@ diff --git a/src/model.cpp b/src/model.cpp
  
      try {
          auto parsed_msg =
-@@ -261,11 +276,97 @@ Model::generate(const std::vector<common_chat_msg>& messages,
+@@ -249,6 +266,49 @@ parse_with_parser(const common_peg_arena& parser,
+     }
+ }
+ 
++/// llamafile: moves a leading reasoning block out of msg.content into
++/// msg.reasoning_content, using the template's thinking tags. For raw text
++/// the parser refused. An unclosed block is all reasoning.
++void
++split_reasoning(const common_chat_params& params, common_chat_msg& msg)
++{
++    const std::string& start = params.thinking_start_tag;
++    if (start.empty() || params.thinking_end_tags.empty()) {
++        return;
++    }
++    std::string text = msg.content;
++    size_t begin = text.find_first_not_of(" \t\r\n");
++    if (begin != std::string::npos &&
++        text.compare(begin, start.size(), start) == 0) {
++        text.erase(0, begin + start.size());
++    } else {
++        // The generation prompt may have opened the block already.
++        std::string gp = params.generation_prompt;
++        gp.erase(gp.find_last_not_of(" \t\r\n") + 1);
++        if (gp.size() < start.size() ||
++            gp.compare(gp.size() - start.size(), start.size(), start) != 0) {
++            return;
++        }
++    }
++    // The first end tag closes the block; others (e.g. "<tool_call>" for
++    // Qwen3-Coder) also end reasoning but belong to the content.
++    size_t cut = std::string::npos;
++    size_t skip = 0;
++    for (size_t k = 0; k < params.thinking_end_tags.size(); k++) {
++        const std::string& tag = params.thinking_end_tags[k];
++        size_t p = tag.empty() ? std::string::npos : text.find(tag);
++        if (p < cut) {
++            cut = p;
++            skip = k == 0 ? tag.size() : 0;
++        }
++    }
++    msg.reasoning_content = text.substr(0, cut);
++    msg.content = cut == std::string::npos ? "" : text.substr(cut + skip);
++    for (std::string* s : { &msg.reasoning_content, &msg.content }) {
++        s->erase(0, s->find_first_not_of(" \t\r\n"));
++    }
++}
++
+ }
+ 
+ common_chat_msg
+@@ -261,11 +321,97 @@ Model::generate(const std::vector<common_chat_msg>& messages,
      inputs.tools = tools;
      inputs.tool_choice = COMMON_CHAT_TOOL_CHOICE_AUTO;
      inputs.add_generation_prompt = true;
@@ -280,42 +336,49 @@ diff --git a/src/model.cpp b/src/model.cpp
      // Tokenize the prompt
      std::vector<llama_token> prompt_tokens = tokenize(params.prompt);
      if (prompt_tokens.empty()) {
-@@ -281,8 +382,66 @@ Model::generate(const std::vector<common_chat_msg>& messages,
+@@ -281,8 +427,82 @@ Model::generate(const std::vector<common_chat_msg>& messages,
          parser_source_ = params.parser;
      }
  
 -    return parse_with_parser(
 -      parser_arena_, params, response, config_.chat_format);
 +    common_chat_msg parsed_msg;
++    std::optional<ModelError> parse_error;
 +    try {
 +        parsed_msg = parse_with_parser(
 +          parser_arena_, params, response, config_.chat_format);
 +    } catch (const ModelError& e) {
 +        // llamafile: a parse refusal must not kill the agent loop. Fall
-+        // back to content-only; the recovery scan below may still lift
-+        // tool calls out of the raw text.
-+        fprintf(stderr, "[agent.cpp] %s; using heuristic recovery\n",
-+                e.what());
++        // back to content-only, with the reasoning split off so it is
++        // neither returned as the answer nor scanned for tool calls; the
++        // recovery scan below may still lift tool calls out of the rest.
++        LOG_WRN("[agent.cpp] %s; using heuristic recovery\n", e.what());
++        parse_error = e;
 +        parsed_msg.content = response;
++        split_reasoning(params, parsed_msg);
 +    }
 +    // llamafile heuristic recovery: lift <tool_call>{json}</tool_call>
-+    // blocks that the parser left in the content.
-+    if (parsed_msg.tool_calls.empty()) {
++    // blocks out of the content. Only when the parser failed or has no
++    // tool-call format of its own (no grammar): after a clean parse by a
++    // tool-aware parser, such text in the content is prose, not a call.
++    if (parsed_msg.tool_calls.empty() &&
++        (parse_error || params.grammar.empty())) {
++        const std::string text = parsed_msg.content;
 +        const std::string open = "<tool_call>";
 +        const std::string close = "</tool_call>";
 +        std::string content_clean;
 +        size_t i = 0;
-+        while (i < response.size()) {
-+            auto a = response.find(open, i);
++        while (i < text.size()) {
++            auto a = text.find(open, i);
 +            if (a == std::string::npos) {
-+                content_clean.append(response, i, std::string::npos);
++                content_clean.append(text, i, std::string::npos);
 +                break;
 +            }
-+            content_clean.append(response, i, a - i);
-+            auto b = response.find(close, a + open.size());
++            content_clean.append(text, i, a - i);
++            auto b = text.find(close, a + open.size());
 +            if (b == std::string::npos) break;
 +            std::string payload =
-+              response.substr(a + open.size(), b - (a + open.size()));
++              text.substr(a + open.size(), b - (a + open.size()));
 +            size_t s = payload.find_first_not_of(" \t\r\n");
 +            size_t e2 = payload.find_last_not_of(" \t\r\n");
 +            if (s != std::string::npos && e2 != std::string::npos) {
@@ -325,13 +388,16 @@ diff --git a/src/model.cpp b/src/model.cpp
 +                auto j = nlohmann::json::parse(payload);
 +                common_chat_tool_call call;
 +                call.name = j.value("name", std::string{});
++                // Calls to parameterless tools often omit "arguments", and
++                // some models say "parameters"; the tool loop needs JSON.
++                auto args = nlohmann::json::object();
 +                if (j.contains("arguments")) {
-+                    if (j["arguments"].is_string()) {
-+                        call.arguments = j["arguments"].get<std::string>();
-+                    } else {
-+                        call.arguments = j["arguments"].dump();
-+                    }
++                    args = j["arguments"];
++                } else if (j.contains("parameters")) {
++                    args = j["parameters"];
 +                }
++                call.arguments =
++                  args.is_string() ? args.get<std::string>() : args.dump();
 +                if (!call.name.empty()) {
 +                    parsed_msg.tool_calls.push_back(std::move(call));
 +                }
@@ -344,12 +410,18 @@ diff --git a/src/model.cpp b/src/model.cpp
 +            parsed_msg.content = content_clean;
 +        }
 +    }
++    // A tool call the parser refused and recovery could not lift is not an
++    // answer: report the parse error rather than return the raw markup.
++    if (parse_error && parsed_msg.tool_calls.empty() &&
++        parsed_msg.content.find("<tool_call>") != std::string::npos) {
++        throw *parse_error;
++    }
 +    parsed_msg.role = "assistant";
 +    return parsed_msg;
  }
  
  common_chat_msg
-@@ -311,10 +470,16 @@ Model::generate_from_tokens(const std::vector<llama_token>& all_tokens,
+@@ -311,10 +531,16 @@ Model::generate_from_tokens(const std::vector<llama_token>& all_tokens,
          common_prefix++;
      }
  
@@ -368,7 +440,7 @@ diff --git a/src/model.cpp b/src/model.cpp
          processed_tokens_.resize(common_prefix);
          n_past_ = common_prefix;
      }
-@@ -343,15 +508,15 @@ Model::generate_from_tokens(const std::vector<llama_token>& all_tokens,
+@@ -343,15 +569,15 @@ Model::generate_from_tokens(const std::vector<llama_token>& all_tokens,
          i += batch_size;
      }
  

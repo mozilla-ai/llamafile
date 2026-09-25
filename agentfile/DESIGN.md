@@ -255,7 +255,11 @@ startup check naming the enabled tools that cannot work under it.
    `COMMON_GRAMMAR_TYPE_USER`; caveat: `ModelConfig::grammar_root` is
    ignored — grammars must use "root"); (b) parse-failure fallback +
    heuristic `<tool_call>` recovery (upstream now throws ModelError,
-   which would kill the loop); (c) hybrid-model rewind fix
+   which would kill the loop). Recovery scans the content only (the
+   reasoning is split off first), and only when the parser failed or
+   the template has no tool-call grammar; a `<tool_call>` it cannot
+   lift rethrows the parse error (exit 2) instead of becoming the
+   answer; (c) hybrid-model rewind fix
    (`llama_memory_seq_rm` returns false on recurrent state → fall back
    to `llama_memory_clear` + full re-decode). All three are upstream PR
    candidates. Verified: tool-call grammar path, hybrid interactive,
