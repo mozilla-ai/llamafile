@@ -42,7 +42,7 @@ diff --git a/src/model.cpp b/src/model.cpp
          }
          if (ctx_ != nullptr) {
              llama_free(ctx_);
-@@ -115,14 +115,12 @@ Model::operator=(Model&& other) noexcept
+@@ -115,19 +115,35 @@ Model::operator=(Model&& other) noexcept
          weights_ = std::move(other.weights_);
          ctx_ = other.ctx_;
          sampler_ = other.sampler_;
@@ -57,7 +57,30 @@ diff --git a/src/model.cpp b/src/model.cpp
          other.n_past_ = 0;
      }
      return *this;
-@@ -146,36 +144,24 @@ Model::initialize_context(const ModelConfig& model_config)
+ }
+ 
++namespace {
++
++/// common_sampler_init() throws (it never returns nullptr) on a bad grammar
++/// or a rejected grammar prefill; surface that as a library error.
++common_sampler*
++init_sampler(const llama_model* model,
++             common_params_sampling& params,
++             const char* what)
++{
++    try {
++        return common_sampler_init(model, params);
++    } catch (const std::exception& e) {
++        throw ModelError(std::string(what) + ": " + e.what());
++    }
++}
++
++}
++
+ void
+ Model::initialize_context(const ModelConfig& model_config)
+ {
+@@ -146,36 +162,22 @@ Model::initialize_context(const ModelConfig& model_config)
          throw ModelError("failed to create llama context");
      }
  
@@ -91,10 +114,6 @@ diff --git a/src/model.cpp b/src/model.cpp
 -        // turns
 -        grammar_sampler_ = grammar_sampler;
 +        sp.grammar = { COMMON_GRAMMAR_TYPE_USER, model_config.grammar };
-+    }
-+    sampler_ = common_sampler_init(weights_->get_model(), sp);
-+    if (sampler_ == nullptr) {
-+        throw ModelError("failed to initialize sampler (bad GBNF grammar?)");
      }
 -
 -    llama_sampler_chain_add(sampler_,
@@ -107,10 +126,12 @@ diff --git a/src/model.cpp b/src/model.cpp
 -                            llama_sampler_init_temp(model_config.temp));
 -    llama_sampler_chain_add(sampler_,
 -                            llama_sampler_init_dist(model_config.seed));
++    sampler_ = init_sampler(weights_->get_model(), sp,
++                            "failed to initialize sampler (bad GBNF grammar?)");
  }
  
  std::vector<llama_token>
-@@ -234,6 +220,9 @@ parse_with_parser(const common_peg_arena& parser,
+@@ -234,6 +236,9 @@ parse_with_parser(const common_peg_arena& parser,
      // (ggml-org/llama.cpp#18675). Without them tool calls stay as raw text.
      syntax.generation_prompt = params.generation_prompt;
      syntax.parse_tool_calls = true;
@@ -120,7 +141,7 @@ diff --git a/src/model.cpp b/src/model.cpp
  
      try {
          auto parsed_msg =
-@@ -261,11 +250,74 @@ Model::generate(const std::vector<common_chat_msg>& messages,
+@@ -261,11 +266,75 @@ Model::generate(const std::vector<common_chat_msg>& messages,
      inputs.tools = tools;
      inputs.tool_choice = COMMON_CHAT_TOOL_CHOICE_AUTO;
      inputs.add_generation_prompt = true;
@@ -186,17 +207,18 @@ diff --git a/src/model.cpp b/src/model.cpp
 +            }
 +        }
 +
++        // Swap only once the new sampler exists: if init throws, sampler_
++        // must still be the live one that ~Model frees.
++        common_sampler* sampler = init_sampler(
++          weights_->get_model(), sp, "failed to initialize tool-call sampler");
 +        common_sampler_free(sampler_);
-+        sampler_ = common_sampler_init(weights_->get_model(), sp);
-+        if (sampler_ == nullptr) {
-+            throw ModelError("failed to initialize tool-call sampler");
-+        }
++        sampler_ = sampler;
 +    }
 +
      // Tokenize the prompt
      std::vector<llama_token> prompt_tokens = tokenize(params.prompt);
      if (prompt_tokens.empty()) {
-@@ -281,8 +333,66 @@ Model::generate(const std::vector<common_chat_msg>& messages,
+@@ -281,8 +350,66 @@ Model::generate(const std::vector<common_chat_msg>& messages,
          parser_source_ = params.parser;
      }
  
@@ -265,7 +287,7 @@ diff --git a/src/model.cpp b/src/model.cpp
  }
  
  common_chat_msg
-@@ -311,10 +421,16 @@ Model::generate_from_tokens(const std::vector<llama_token>& all_tokens,
+@@ -311,10 +438,16 @@ Model::generate_from_tokens(const std::vector<llama_token>& all_tokens,
          common_prefix++;
      }
  
@@ -284,7 +306,7 @@ diff --git a/src/model.cpp b/src/model.cpp
          processed_tokens_.resize(common_prefix);
          n_past_ = common_prefix;
      }
-@@ -343,15 +459,15 @@ Model::generate_from_tokens(const std::vector<llama_token>& all_tokens,
+@@ -343,15 +476,15 @@ Model::generate_from_tokens(const std::vector<llama_token>& all_tokens,
          i += batch_size;
      }
  
