@@ -159,12 +159,16 @@ class ServerToolbox {
         return names;
     }
 
-    // Tools that mutate state or reach the network (permission_write) —
-    // these get a confirmation prompt unless --yes is given.
-    std::set<std::string> write_tool_names() const {
+    // Tools in `keep` (empty = all) that mutate state or reach the network
+    // (permission_write) — these get a confirmation prompt unless --yes is
+    // given.
+    std::set<std::string>
+    write_tool_names(const std::set<std::string> &keep = {}) const {
         std::set<std::string> names;
-        for (const auto &t : st_.tools)
+        for (const auto &t : st_.tools) {
+            if (!keep.empty() && !keep.count(t->name)) continue;
             if (t->permission_write) names.insert(t->name);
+        }
         return names;
     }
 

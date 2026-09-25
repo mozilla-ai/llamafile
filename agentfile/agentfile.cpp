@@ -416,7 +416,7 @@ int main(int argc, char **argv) {
         }
         callbacks.emplace_back(
             std::make_unique<agentfile::DestructiveOpsConfirmationCallback>(
-                always_yes, toolbox.write_tool_names(),
+                always_yes, toolbox.write_tool_names(keep),
                 /*audit=*/verbosity == 0));
         if (verbosity > 0) {
             callbacks.emplace_back(
