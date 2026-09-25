@@ -31,6 +31,7 @@
 #include <cpp-httplib/httplib.h>
 #include "http.h"   // common_http_client, common_http_parse_url
 
+#include <algorithm>
 #include <string>
 
 namespace agentfile {
@@ -84,6 +85,29 @@ struct HttpFetchTool : server_tool {
         return origin + dir + loc;
     }
 
+    // common_http_parse_url ends the userinfo at the first '@' anywhere
+    // after the scheme and the host only at a '/', so the host it connects
+    // to can differ from the one the confirmation prompt showed
+    // ("http://a.example/?x=@b.example/" goes to b.example). Keep the two
+    // in agreement: drop the fragment (never sent), give a bare "?query"
+    // its '/', and percent-encode any '@' past the authority (paths like
+    // medium.com/@user are common, so refusing them would be worse).
+    static std::string normalize_url(std::string url) {
+        url.erase(std::min(url.find('#'), url.size()));
+        auto scheme_end = url.find("://");
+        if (scheme_end == std::string::npos) return url;  // parser rejects it
+        auto auth_end = url.find_first_of("/?", scheme_end + 3);
+        if (auth_end == std::string::npos) return url;
+        std::string rest;
+        for (size_t i = auth_end; i < url.size(); ++i) {
+            if (url[i] == '@') rest += "%40";
+            else rest += url[i];
+        }
+        url.erase(auth_end);
+        if (rest[0] == '?') url += '/';
+        return url + rest;
+    }
+
     json invoke(json params, server_tool::stream *) const override {
         if (!params.contains("url")) {
             return {{"error", "missing required parameter: url"}};
@@ -91,7 +115,7 @@ struct HttpFetchTool : server_tool {
         std::string url = params.at("url").get<std::string>();
 
         try {
-            auto [cli, parts] = common_http_client(url);
+            auto [cli, parts] = common_http_client(normalize_url(url));
             // Report redirects instead of following them, so every URL that
             // gets fetched is one the model asked for by name — and one the
             // confirmation prompt showed the user.
