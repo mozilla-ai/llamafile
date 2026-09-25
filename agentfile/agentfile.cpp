@@ -43,6 +43,7 @@
 
 #include "llama.h"
 #include "chat.h"
+#include "log.h"
 
 #include "agent.h"
 #include "callbacks.h"
@@ -339,6 +340,11 @@ int main(int argc, char **argv) {
     llamafile_metal_log_set(llamafile_log_callback_null, nullptr);
     llamafile_cuda_log_set(llamafile_log_callback_null, nullptr);
     llamafile_vulkan_log_set(llamafile_log_callback_null, nullptr);
+    // llama.cpp common (and agent.cpp) warnings, e.g. a model reply the
+    // chat parser refused, go through common_log instead: keep them unless
+    // --quiet, which only leaves errors.
+    if (verbosity == 0)
+        common_log_set_verbosity_thold(LOG_LEVEL_ERROR);
 
     // Initialize llamafile GPU backends (Metal, CUDA, Vulkan, ROCm).
     // This is also what triggers backend registration.
