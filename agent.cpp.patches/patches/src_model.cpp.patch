@@ -42,7 +42,7 @@ diff --git a/src/model.cpp b/src/model.cpp
          }
          if (ctx_ != nullptr) {
              llama_free(ctx_);
-@@ -115,19 +115,35 @@ Model::operator=(Model&& other) noexcept
+@@ -115,19 +115,51 @@ Model::operator=(Model&& other) noexcept
          weights_ = std::move(other.weights_);
          ctx_ = other.ctx_;
          sampler_ = other.sampler_;
@@ -75,29 +75,34 @@ diff --git a/src/model.cpp b/src/model.cpp
 +    }
 +}
 +
++/// Sampling settings from ModelConfig, including the user's GBNF grammar.
++common_params_sampling
++sampling_params(const ModelConfig& config)
++{
++    common_params_sampling sp;
++    sp.temp  = config.temp;
++    sp.top_k = config.top_k;
++    sp.top_p = config.top_p;
++    sp.min_p = config.min_p;
++    sp.seed  = config.seed;
++    if (!config.grammar.empty()) {
++        sp.grammar = { COMMON_GRAMMAR_TYPE_USER, config.grammar };
++    }
++    return sp;
++}
++
 +}
 +
  void
  Model::initialize_context(const ModelConfig& model_config)
  {
-@@ -146,36 +162,22 @@ Model::initialize_context(const ModelConfig& model_config)
+@@ -146,36 +178,15 @@ Model::initialize_context(const ModelConfig& model_config)
          throw ModelError("failed to create llama context");
      }
  
 -    sampler_ = llama_sampler_chain_init(llama_sampler_chain_default_params());
 -
-+    // llamafile: grammar-aware common_sampler instead of a raw chain. The
-+    // user's GBNF grammar (if any) rides along; chat-template tool-call
-+    // grammars re-init the sampler per generate() call. Note: common_grammar
-+    // has no root-rule field, so the grammar's start rule must be "root"
-+    // (ModelConfig::grammar_root is ignored).
-+    common_params_sampling sp;
-+    sp.temp  = model_config.temp;
-+    sp.top_k = model_config.top_k;
-+    sp.top_p = model_config.top_p;
-+    sp.min_p = model_config.min_p;
-+    sp.seed  = model_config.seed;
-     if (!model_config.grammar.empty()) {
+-    if (!model_config.grammar.empty()) {
 -        llama_sampler* grammar_sampler =
 -          llama_sampler_init_grammar(weights_->get_vocab(),
 -                                     model_config.grammar.c_str(),
@@ -113,8 +118,7 @@ diff --git a/src/model.cpp b/src/model.cpp
 -        // Keep a non-owning reference so we can reset this sampler between
 -        // turns
 -        grammar_sampler_ = grammar_sampler;
-+        sp.grammar = { COMMON_GRAMMAR_TYPE_USER, model_config.grammar };
-     }
+-    }
 -
 -    llama_sampler_chain_add(sampler_,
 -                            llama_sampler_init_top_k(model_config.top_k));
@@ -126,12 +130,19 @@ diff --git a/src/model.cpp b/src/model.cpp
 -                            llama_sampler_init_temp(model_config.temp));
 -    llama_sampler_chain_add(sampler_,
 -                            llama_sampler_init_dist(model_config.seed));
++    // llamafile: grammar-aware common_sampler instead of a raw chain. The
++    // user's GBNF grammar (if any) rides along; generate() re-inits the
++    // sampler per call, with the user grammar or the chat template's
++    // tool-call grammar. Note: common_grammar has no root-rule field, so the
++    // grammar's start rule must be "root" (ModelConfig::grammar_root is
++    // ignored).
++    common_params_sampling sp = sampling_params(model_config);
 +    sampler_ = init_sampler(weights_->get_model(), sp,
 +                            "failed to initialize sampler (bad GBNF grammar?)");
  }
  
  std::vector<llama_token>
-@@ -234,6 +236,9 @@ parse_with_parser(const common_peg_arena& parser,
+@@ -234,6 +245,9 @@ parse_with_parser(const common_peg_arena& parser,
      // (ggml-org/llama.cpp#18675). Without them tool calls stay as raw text.
      syntax.generation_prompt = params.generation_prompt;
      syntax.parse_tool_calls = true;
@@ -141,7 +152,7 @@ diff --git a/src/model.cpp b/src/model.cpp
  
      try {
          auto parsed_msg =
-@@ -261,11 +266,75 @@ Model::generate(const std::vector<common_chat_msg>& messages,
+@@ -261,11 +275,78 @@ Model::generate(const std::vector<common_chat_msg>& messages,
      inputs.tools = tools;
      inputs.tool_choice = COMMON_CHAT_TOOL_CHOICE_AUTO;
      inputs.add_generation_prompt = true;
@@ -159,16 +170,19 @@ diff --git a/src/model.cpp b/src/model.cpp
 +    // (or preserved tokens / triggers), re-init the sampler with it so
 +    // generation is constrained to syntactically valid tool calls. Mirrors
 +    // llama-server's wiring. An explicit user grammar in ModelConfig takes
-+    // precedence and is left untouched.
-+    if (config_.grammar.empty() &&
-+        (!params.grammar.empty() || !params.grammar_triggers.empty() ||
-+         !params.preserved_tokens.empty())) {
-+        common_params_sampling sp;
-+        sp.temp  = config_.temp;
-+        sp.top_k = config_.top_k;
-+        sp.top_p = config_.top_p;
-+        sp.min_p = config_.min_p;
-+        sp.seed  = config_.seed;
++    // precedence; it is rebuilt every call because common_sampler_reset()
++    // resets the chain but not the grammar, and a grammar that completed on
++    // the last turn would only allow EOG on this one.
++    if (!config_.grammar.empty()) {
++        common_params_sampling sp = sampling_params(config_);
++        common_sampler* sampler = init_sampler(
++          weights_->get_model(), sp,
++          "failed to initialize sampler (bad GBNF grammar?)");
++        common_sampler_free(sampler_);
++        sampler_ = sampler;
++    } else if (!params.grammar.empty() || !params.grammar_triggers.empty() ||
++               !params.preserved_tokens.empty()) {
++        common_params_sampling sp = sampling_params(config_);
 +        sp.generation_prompt = params.generation_prompt;
 +        sp.grammar = { COMMON_GRAMMAR_TYPE_TOOL_CALLS, params.grammar };
 +        sp.grammar_lazy = params.grammar_lazy;
@@ -218,7 +232,7 @@ diff --git a/src/model.cpp b/src/model.cpp
      // Tokenize the prompt
      std::vector<llama_token> prompt_tokens = tokenize(params.prompt);
      if (prompt_tokens.empty()) {
-@@ -281,8 +350,66 @@ Model::generate(const std::vector<common_chat_msg>& messages,
+@@ -281,8 +362,66 @@ Model::generate(const std::vector<common_chat_msg>& messages,
          parser_source_ = params.parser;
      }
  
@@ -287,7 +301,7 @@ diff --git a/src/model.cpp b/src/model.cpp
  }
  
  common_chat_msg
-@@ -311,10 +438,16 @@ Model::generate_from_tokens(const std::vector<llama_token>& all_tokens,
+@@ -311,10 +450,16 @@ Model::generate_from_tokens(const std::vector<llama_token>& all_tokens,
          common_prefix++;
      }
  
@@ -306,7 +320,7 @@ diff --git a/src/model.cpp b/src/model.cpp
          processed_tokens_.resize(common_prefix);
          n_past_ = common_prefix;
      }
-@@ -343,15 +476,15 @@ Model::generate_from_tokens(const std::vector<llama_token>& all_tokens,
+@@ -343,15 +488,15 @@ Model::generate_from_tokens(const std::vector<llama_token>& all_tokens,
          i += batch_size;
      }
  
@@ -315,8 +329,8 @@ diff --git a/src/model.cpp b/src/model.cpp
 -    if (grammar_sampler_ != nullptr) {
 -        llama_sampler_reset(grammar_sampler_);
 -    }
-+    // Reset sampler state before each turn so a finished grammar does not
-+    // force EOS on the next call.
++    // Reset the sampler chain before each turn. This leaves the grammar
++    // alone; generate() rebuilds the sampler when a grammar must restart.
 +    common_sampler_reset(sampler_);
  
      llama_token new_token_id{};
