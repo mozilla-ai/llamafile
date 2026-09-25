@@ -68,7 +68,18 @@ o/$(MODE)/agent.cpp/agent.cpp.a: $(AGENT_CPP_OBJS)
 # Dependencies
 # ==============================================================================
 
-$(AGENT_CPP_OBJS): agent.cpp/BUILD.mk
+# Headers whose layout is compiled into these objects: agent.cpp's own
+# classes and the llama.cpp common types they embed (common_chat_msg,
+# common_sampler, ...). AGENT_CPP declares no SRCS/HDRS, so mkdeps never
+# scans these sources; without this list a patch to model.h or a llama.cpp
+# bump leaves stale objects in agent.cpp.a (the failure AGENTFILE_EXT_HDRS
+# in agentfile/BUILD.mk guards against for agentfile.o).
+AGENT_CPP_DEP_HDRS := \
+	$(wildcard agent.cpp/src/*.h) \
+	$(wildcard llama.cpp/common/*.h) \
+	$(wildcard llama.cpp/include/*.h)
+
+$(AGENT_CPP_OBJS): agent.cpp/BUILD.mk $(AGENT_CPP_DEP_HDRS)
 
 # ==============================================================================
 # Main target
