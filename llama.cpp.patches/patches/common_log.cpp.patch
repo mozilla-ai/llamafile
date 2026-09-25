@@ -9,7 +9,37 @@ diff --git a/common/log.cpp b/common/log.cpp
  #endif // defined(_WIN32)
  
  int common_log_verbosity_thold = LOG_DEFAULT_LLAMA;
-@@ -345,9 +346,32 @@ public:
+@@ -243,7 +244,13 @@ public:
+         std::unique_lock<std::mutex> lock(mtx);
+ 
+         // block if the queue is full
+-        cv_full.wait(lock, [this]() { return !running || !is_full(); });
++        // Use wait_for() instead of an untimed wait to work around a
++        // Cosmopolitan libc bug where untimed futex waits on XNU (macOS)
++        // expire after ~72 minutes, causing condition_variable::wait() to
++        // throw ETIMEDOUT.
++        while (running && is_full()) {
++            cv_full.wait_for(lock, std::chrono::seconds(30));
++        }
+ 
+         if (!running) {
+             // discard messages while the worker thread is paused
+@@ -310,7 +317,13 @@ public:
+         std::unique_lock<std::mutex> lock(mtx);
+ 
+         // block if the queue is full
+-        cv_full.wait(lock, [this]() { return !running || !is_full(); });
++        // Use wait_for() instead of an untimed wait to work around a
++        // Cosmopolitan libc bug where untimed futex waits on XNU (macOS)
++        // expire after ~72 minutes, causing condition_variable::wait() to
++        // throw ETIMEDOUT.
++        while (running && is_full()) {
++            cv_full.wait_for(lock, std::chrono::seconds(30));
++        }
+ 
+         if (!running) {
+             // discard messages while the worker thread is paused
+@@ -345,9 +358,32 @@ public:
          running = true;
  
          thrd = std::thread([this]() {
