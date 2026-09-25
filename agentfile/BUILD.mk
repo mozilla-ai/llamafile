@@ -38,6 +38,7 @@ AGENTFILE_HDRS := $(wildcard agentfile/*.h) \
 # container type changed).
 AGENTFILE_EXT_HDRS := \
 	$(wildcard agent.cpp/src/*.h) \
+	agent.cpp/examples/shared/error_recovery_callback.h \
 	$(wildcard llama.cpp/tools/server/server-*.h) \
 	llama.cpp/vendor/cpp-httplib/httplib.h \
 	llama.cpp/common/http.h \
@@ -62,6 +63,7 @@ AGENTFILE_INCLUDES := \
 	-iquote agentfile \
 	-iquote llamafile \
 	-iquote agent.cpp/src \
+	-iquote agent.cpp/examples/shared \
 	-iquote llama.cpp/common \
 	-iquote llama.cpp/include \
 	-iquote llama.cpp/ggml/include \
