@@ -1,7 +1,7 @@
 diff --git a/vendor/sheredom/subprocess.h b/vendor/sheredom/subprocess.h
 --- a/llama.cpp/vendor/sheredom/subprocess.h
 +++ b/llama.cpp/vendor/sheredom/subprocess.h
-@@ -562,6 +562,25 @@ int subprocess_error_from_windows_error(unsigned long error) {
+@@ -620,6 +620,25 @@ int subprocess_error_from_windows_error(unsigned long error) {
  #else
  subprocess_weak int subprocess_error_from_errno(int error);
  int subprocess_error_from_errno(int error) {
@@ -27,7 +27,7 @@ diff --git a/vendor/sheredom/subprocess.h b/vendor/sheredom/subprocess.h
    switch (error) {
    case ENOENT:
    case ENOTDIR:
-@@ -578,6 +597,7 @@ int subprocess_error_from_errno(int error) {
+@@ -636,6 +655,7 @@ int subprocess_error_from_errno(int error) {
    default:
      return subprocess_error_unknown;
    }

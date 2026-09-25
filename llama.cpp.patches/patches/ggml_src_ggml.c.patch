@@ -1,7 +1,7 @@
 diff --git a/ggml/src/ggml.c b/ggml/src/ggml.c
 --- a/llama.cpp/ggml/src/ggml.c
 +++ b/llama.cpp/ggml/src/ggml.c
-@@ -547,11 +547,13 @@ void ggml_time_init(void) {
+@@ -548,11 +548,13 @@ void ggml_time_init(void) {
      InitOnceExecuteOnce(&once, ggml_time_init_once, NULL, NULL);
  }
  int64_t ggml_time_ms(void) {

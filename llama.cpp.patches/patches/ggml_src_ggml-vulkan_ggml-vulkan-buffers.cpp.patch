@@ -1,0 +1,11 @@
+diff --git a/ggml/src/ggml-vulkan/ggml-vulkan-buffers.cpp b/ggml/src/ggml-vulkan/ggml-vulkan-buffers.cpp
+--- a/llama.cpp/ggml/src/ggml-vulkan/ggml-vulkan-buffers.cpp
++++ b/llama.cpp/ggml/src/ggml-vulkan/ggml-vulkan-buffers.cpp
+@@ -754,6 +754,7 @@ ggml_backend_buffer_i ggml_backend_vk_buffer_interface = {
+     /* .cpy_tensor      = */ ggml_backend_vk_buffer_cpy_tensor,
+     /* .clear           = */ ggml_backend_vk_buffer_clear,
+     /* .reset           = */ NULL,
++    /* .free_struct     = */ ggml_backend_vk_buffer_free_struct,
+ };
+ 
+ vk_buffer ggml_vk_buffer_from_host_ptr(vk_device & device, void * ptr, size_t size) {

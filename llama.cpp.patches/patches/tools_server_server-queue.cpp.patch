@@ -1,8 +1,8 @@
 diff --git a/tools/server/server-queue.cpp b/tools/server/server-queue.cpp
 --- a/llama.cpp/tools/server/server-queue.cpp
 +++ b/llama.cpp/tools/server/server-queue.cpp
-@@ -5,6 +5,13 @@
- 
+@@ -6,6 +6,13 @@
+ #include <algorithm>
  #include <chrono>
  #include <thread>
 +#include <cerrno>
@@ -15,7 +15,7 @@ diff --git a/tools/server/server-queue.cpp b/tools/server/server-queue.cpp
  
  #define QUE_INF(fmt, ...) LOG_INF("que  %12.*s: " fmt, 12, __func__, __VA_ARGS__)
  #define QUE_WRN(fmt, ...) LOG_WRN("que  %12.*s: " fmt, 12, __func__, __VA_ARGS__)
-@@ -111,9 +118,13 @@ void server_queue::wait_until_no_sleep() {
+@@ -123,9 +130,13 @@ void server_queue::wait_until_no_sleep() {
              condition_tasks.notify_one(); // only main thread is waiting on this
          }
          QUE_DBG("%s", "waiting until no sleep\n");
@@ -32,24 +32,41 @@ diff --git a/tools/server/server-queue.cpp b/tools/server/server-queue.cpp
      }
  }
  
-@@ -153,9 +164,13 @@ void server_queue::worker_loop() {
-         std::function<void()> work;
+@@ -165,9 +176,13 @@ void server_queue::worker_loop() {
          {
              std::unique_lock<std::mutex> lock(mutex_tasks);
+             // wait on busy instead of yielding - busy stays set even when the yield already ended
 -            worker.cv.wait(lock, [&]{
--                return worker.stop || worker.work != nullptr;
+-                return worker.stop || worker.busy;
 -            });
 +            // Use wait_for() instead of wait() to work around a
 +            // Cosmopolitan libc bug where untimed futex waits on XNU
 +            // (macOS) expire after ~72 minutes, causing
 +            // condition_variable::wait() to throw ETIMEDOUT.
-+            while (!worker.stop && worker.work == nullptr) {
++            while (!worker.stop && !worker.busy) {
 +                worker.cv.wait_for(lock, std::chrono::seconds(30));
 +            }
              if (worker.stop) {
                  return;
              }
-@@ -192,6 +207,21 @@ void server_queue::worker_stop() {
+@@ -192,9 +207,13 @@ void server_queue::worker_loop() {
+             if (!queue_tasks.empty()) {
+                 continue; // a new task arrived in the meantime
+             }
+-            condition_tasks.wait(lock, [&]{
+-                return worker.stop || !running || !worker.yielding || !queue_tasks.empty();
+-            });
++            // Use wait_for() instead of wait() to work around a
++            // Cosmopolitan libc bug where untimed futex waits on XNU
++            // (macOS) expire after ~72 minutes, causing
++            // condition_variable::wait() to throw ETIMEDOUT.
++            while (!worker.stop && running && worker.yielding && queue_tasks.empty()) {
++                condition_tasks.wait_for(lock, std::chrono::seconds(30));
++            }
+         }
+ 
+         // signal to yield_to_queue() that no more tasks will be processed
+@@ -220,6 +239,21 @@ void server_queue::worker_stop() {
  }
  
  void server_queue::yield_to_queue(std::function<void()> && work) {
@@ -71,24 +88,24 @@ diff --git a/tools/server/server-queue.cpp b/tools/server/server-queue.cpp
      GGML_ASSERT(worker.thread.joinable() && "yield_to_queue() requires start_loop() to be running");
  
      QUE_DBG("%s", "yielding to queue\n");
-@@ -210,9 +240,13 @@ void server_queue::yield_to_queue(std::function<void()> && work) {
- 
-         std::unique_lock<std::mutex> lock(mutex_tasks);
-         // declined tasks are moved to queue_tasks_unhandled, so a non-empty queue always has something new
+@@ -246,9 +280,13 @@ void server_queue::yield_to_queue(std::function<void()> && work) {
+         // the yield is over, wait for the worker to finish its current task
+         worker.yielding = false;
+         condition_tasks.notify_all();
 -        condition_tasks.wait(lock, [&]{
--            return !worker.busy || (running && !queue_tasks.empty());
+-            return !worker.busy;
 -        });
 +        // Use wait_for() instead of wait() to work around a
 +        // Cosmopolitan libc bug where untimed futex waits on XNU
 +        // (macOS) expire after ~72 minutes, causing
 +        // condition_variable::wait() to throw ETIMEDOUT.
-+        while (worker.busy && !(running && !queue_tasks.empty())) {
++        while (worker.busy) {
 +            condition_tasks.wait_for(lock, std::chrono::seconds(30));
 +        }
-         if (!worker.busy) {
-             break;
-         }
-@@ -244,6 +278,21 @@ void server_queue::yield_to_queue(std::function<void()> && work) {
+ 
+         // put the declined tasks back, keeping their order
+         while (!queue_tasks_unhandled.empty()) {
+@@ -276,6 +314,21 @@ void server_queue::yield_to_queue(std::function<void()> && work) {
  }
  
  void server_queue::start_loop(int64_t idle_sleep_ms) {
@@ -110,8 +127,8 @@ diff --git a/tools/server/server-queue.cpp b/tools/server/server-queue.cpp
      running = true;
      time_last_task = ggml_time_ms();
  
-@@ -293,9 +342,13 @@ void server_queue::start_loop(int64_t idle_sleep_ms) {
-                 callback_sleeping_state(true);
+@@ -333,9 +386,13 @@ void server_queue::start_loop(int64_t idle_sleep_ms) {
+                 }
                  req_stop_sleeping = false;
                  // wait until we are requested to exit sleeping state
 -                condition_tasks.wait(lock, [&]{
@@ -127,7 +144,7 @@ diff --git a/tools/server/server-queue.cpp b/tools/server/server-queue.cpp
                  if (!running) { // may changed during sleep
                      break; // terminate
                  }
-@@ -384,13 +437,17 @@ void server_response::remove_waiting_task_ids(const std::unordered_set<int> & id
+@@ -427,13 +484,17 @@ void server_response::remove_waiting_task_ids(const std::unordered_set<int> & id
  server_task_result_ptr server_response::recv(const std::unordered_set<int> & id_tasks) {
      while (true) {
          std::unique_lock<std::mutex> lock(mutex_results);

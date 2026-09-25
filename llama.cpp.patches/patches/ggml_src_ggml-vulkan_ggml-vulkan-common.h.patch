@@ -1,0 +1,48 @@
+diff --git a/ggml/src/ggml-vulkan/ggml-vulkan-common.h b/ggml/src/ggml-vulkan/ggml-vulkan-common.h
+--- a/llama.cpp/ggml/src/ggml-vulkan/ggml-vulkan-common.h
++++ b/llama.cpp/ggml/src/ggml-vulkan/ggml-vulkan-common.h
+@@ -209,26 +209,27 @@ bool ggml_vk_can_fuse_snake(ggml_backend_vk_context * ctx, const struct ggml_cgr
+ bool ggml_vk_tensors_overlap(const ggml_tensor * a, const ggml_tensor * b, bool elementwise);
+ bool ggml_vk_can_fuse_rms_norm_mul_rope(ggml_backend_vk_context * ctx, const struct ggml_cgraph * cgraph, int node_idx);
+ uint32_t ggml_vk_fuse_multi_add(ggml_backend_vk_context * ctx, const struct ggml_cgraph * cgraph, int node_idx);
+-void ggml_vk_graph_optimize(ggml_backend_t backend, struct ggml_cgraph * graph, struct ggml_backend_graph_optimize_params * params);
++void GGML_CALL ggml_vk_graph_optimize(ggml_backend_t backend, struct ggml_cgraph * graph, struct ggml_backend_graph_optimize_params * params);
+ 
+ // backend
+ bool ggml_backend_buffer_is_vk(ggml_backend_buffer_t buffer);
+-void ggml_backend_vk_buffer_free_buffer(ggml_backend_buffer_t buffer);
+-void * ggml_backend_vk_buffer_get_base(ggml_backend_buffer_t buffer);
+-enum ggml_status ggml_backend_vk_buffer_init_tensor(ggml_backend_buffer_t buffer, ggml_tensor * tensor);
+-void ggml_backend_vk_buffer_memset_tensor(ggml_backend_buffer_t buffer, ggml_tensor * tensor, uint8_t value, size_t offset, size_t size);
+-void ggml_backend_vk_buffer_set_tensor(ggml_backend_buffer_t buffer, ggml_tensor * tensor, const void * data, size_t offset, size_t size);
+-void ggml_backend_vk_buffer_set_tensor_2d(ggml_backend_buffer_t buffer, ggml_tensor * tensor, const void * data, size_t offset, size_t size, size_t n_copies, size_t stride_tensor, size_t stride_data);
+-void ggml_backend_vk_buffer_get_tensor(ggml_backend_buffer_t buffer, const ggml_tensor * tensor, void * data, size_t offset, size_t size);
+-void ggml_backend_vk_buffer_get_tensor_2d(ggml_backend_buffer_t buffer, const ggml_tensor * tensor, void * data, size_t offset, size_t size, size_t n_copies, size_t stride_tensor, size_t stride_data);
+-bool ggml_backend_vk_buffer_cpy_tensor(ggml_backend_buffer_t buffer, const ggml_tensor * src, ggml_tensor * dst);
+-void ggml_backend_vk_buffer_clear(ggml_backend_buffer_t buffer, uint8_t value);
+-const char * ggml_backend_vk_buffer_type_name(ggml_backend_buffer_type_t buft);
+-ggml_backend_buffer_t ggml_backend_vk_buffer_type_alloc_buffer(ggml_backend_buffer_type_t buft, size_t size);
+-size_t ggml_backend_vk_buffer_type_get_alignment(ggml_backend_buffer_type_t buft);
+-size_t ggml_backend_vk_buffer_type_get_max_size(ggml_backend_buffer_type_t buft);
+-size_t ggml_backend_vk_buffer_type_get_alloc_size(ggml_backend_buffer_type_t buft, const ggml_tensor * tensor);
+-void ggml_backend_vk_free(ggml_backend_t backend);
++void GGML_CALL ggml_backend_vk_buffer_free_buffer(ggml_backend_buffer_t buffer);
++void GGML_CALL ggml_backend_vk_buffer_free_struct(ggml_backend_buffer_t buffer);
++void * GGML_CALL ggml_backend_vk_buffer_get_base(ggml_backend_buffer_t buffer);
++enum ggml_status GGML_CALL ggml_backend_vk_buffer_init_tensor(ggml_backend_buffer_t buffer, ggml_tensor * tensor);
++void GGML_CALL ggml_backend_vk_buffer_memset_tensor(ggml_backend_buffer_t buffer, ggml_tensor * tensor, uint8_t value, size_t offset, size_t size);
++void GGML_CALL ggml_backend_vk_buffer_set_tensor(ggml_backend_buffer_t buffer, ggml_tensor * tensor, const void * data, size_t offset, size_t size);
++void GGML_CALL ggml_backend_vk_buffer_set_tensor_2d(ggml_backend_buffer_t buffer, ggml_tensor * tensor, const void * data, size_t offset, size_t size, size_t n_copies, size_t stride_tensor, size_t stride_data);
++void GGML_CALL ggml_backend_vk_buffer_get_tensor(ggml_backend_buffer_t buffer, const ggml_tensor * tensor, void * data, size_t offset, size_t size);
++void GGML_CALL ggml_backend_vk_buffer_get_tensor_2d(ggml_backend_buffer_t buffer, const ggml_tensor * tensor, void * data, size_t offset, size_t size, size_t n_copies, size_t stride_tensor, size_t stride_data);
++bool GGML_CALL ggml_backend_vk_buffer_cpy_tensor(ggml_backend_buffer_t buffer, const ggml_tensor * src, ggml_tensor * dst);
++void GGML_CALL ggml_backend_vk_buffer_clear(ggml_backend_buffer_t buffer, uint8_t value);
++const char * GGML_CALL ggml_backend_vk_buffer_type_name(ggml_backend_buffer_type_t buft);
++ggml_backend_buffer_t GGML_CALL ggml_backend_vk_buffer_type_alloc_buffer(ggml_backend_buffer_type_t buft, size_t size);
++size_t GGML_CALL ggml_backend_vk_buffer_type_get_alignment(ggml_backend_buffer_type_t buft);
++size_t GGML_CALL ggml_backend_vk_buffer_type_get_max_size(ggml_backend_buffer_type_t buft);
++size_t GGML_CALL ggml_backend_vk_buffer_type_get_alloc_size(ggml_backend_buffer_type_t buft, const ggml_tensor * tensor);
++void GGML_CALL ggml_backend_vk_free(ggml_backend_t backend);
+ ggml_backend_reg_t ggml_backend_vk_reg();
+ 
+ // debug
