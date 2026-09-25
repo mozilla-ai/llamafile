@@ -336,7 +336,7 @@ diff --git a/src/model.cpp b/src/model.cpp
      // Tokenize the prompt
      std::vector<llama_token> prompt_tokens = tokenize(params.prompt);
      if (prompt_tokens.empty()) {
-@@ -281,8 +427,82 @@ Model::generate(const std::vector<common_chat_msg>& messages,
+@@ -281,8 +427,85 @@ Model::generate(const std::vector<common_chat_msg>& messages,
          parser_source_ = params.parser;
      }
  
@@ -385,12 +385,15 @@ diff --git a/src/model.cpp b/src/model.cpp
 +                payload = payload.substr(s, e2 - s + 1);
 +            }
 +            try {
-+                auto j = nlohmann::json::parse(payload);
++                // ordered_json keeps the keys in the order the model wrote
++                // them, so the next prompt renders this call exactly as it
++                // was generated and reuses its tokens from the KV cache.
++                auto j = nlohmann::ordered_json::parse(payload);
 +                common_chat_tool_call call;
 +                call.name = j.value("name", std::string{});
 +                // Calls to parameterless tools often omit "arguments", and
 +                // some models say "parameters"; the tool loop needs JSON.
-+                auto args = nlohmann::json::object();
++                auto args = nlohmann::ordered_json::object();
 +                if (j.contains("arguments")) {
 +                    args = j["arguments"];
 +                } else if (j.contains("parameters")) {
@@ -421,7 +424,7 @@ diff --git a/src/model.cpp b/src/model.cpp
  }
  
  common_chat_msg
-@@ -311,10 +531,16 @@ Model::generate_from_tokens(const std::vector<llama_token>& all_tokens,
+@@ -311,10 +534,16 @@ Model::generate_from_tokens(const std::vector<llama_token>& all_tokens,
          common_prefix++;
      }
  
@@ -440,7 +443,7 @@ diff --git a/src/model.cpp b/src/model.cpp
          processed_tokens_.resize(common_prefix);
          n_past_ = common_prefix;
      }
-@@ -343,15 +569,15 @@ Model::generate_from_tokens(const std::vector<llama_token>& all_tokens,
+@@ -343,15 +572,15 @@ Model::generate_from_tokens(const std::vector<llama_token>& all_tokens,
          i += batch_size;
      }
  
