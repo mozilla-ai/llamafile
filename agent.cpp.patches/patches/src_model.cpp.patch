@@ -96,7 +96,7 @@ diff --git a/src/model.cpp b/src/model.cpp
  void
  Model::initialize_context(const ModelConfig& model_config)
  {
-@@ -146,36 +178,15 @@ Model::initialize_context(const ModelConfig& model_config)
+@@ -146,57 +178,37 @@ Model::initialize_context(const ModelConfig& model_config)
          throw ModelError("failed to create llama context");
      }
  
@@ -142,7 +142,36 @@ diff --git a/src/model.cpp b/src/model.cpp
  }
  
  std::vector<llama_token>
-@@ -234,6 +245,9 @@ parse_with_parser(const common_peg_arena& parser,
+ Model::tokenize(const std::string& prompt) const
+ {
+     const llama_vocab* vocab = weights_->get_vocab();
+-    // Use processed_tokens to determine if this is the first tokenization
+-    // This is important for cache loading: even if KV cache memory is
+-    // populated, we need IS_FIRST=true if we're tokenizing a full prompt from
+-    // scratch to ensure consistent BOS token handling for prefix matching
+-    const bool IS_FIRST = processed_tokens_.empty();
++    // llamafile: every caller tokenizes a full rendered prompt from scratch
++    // (the chat template strips its BOS text when the vocab adds one), so
++    // always add special tokens. Keying this on processed_tokens_ dropped
++    // BOS on every call after the first, which broke the KV prefix match at
++    // token 0 and re-decoded the whole conversation without BOS.
++    const bool ADD_SPECIAL = true;
+ 
+     const int N_PROMPT_TOKENS = -llama_tokenize(
+-      vocab, prompt.c_str(), prompt.size(), nullptr, 0, IS_FIRST, true);
++      vocab, prompt.c_str(), prompt.size(), nullptr, 0, ADD_SPECIAL, true);
+     std::vector<llama_token> prompt_tokens(N_PROMPT_TOKENS);
+     if (llama_tokenize(vocab,
+                        prompt.c_str(),
+                        prompt.size(),
+                        prompt_tokens.data(),
+                        prompt_tokens.size(),
+-                       IS_FIRST,
++                       ADD_SPECIAL,
+                        true) < 0) {
+         return {}; // Return empty vector on failure
+     }
+@@ -234,6 +246,9 @@ parse_with_parser(const common_peg_arena& parser,
      // (ggml-org/llama.cpp#18675). Without them tool calls stay as raw text.
      syntax.generation_prompt = params.generation_prompt;
      syntax.parse_tool_calls = true;
@@ -152,7 +181,7 @@ diff --git a/src/model.cpp b/src/model.cpp
  
      try {
          auto parsed_msg =
-@@ -261,11 +275,78 @@ Model::generate(const std::vector<common_chat_msg>& messages,
+@@ -261,11 +276,78 @@ Model::generate(const std::vector<common_chat_msg>& messages,
      inputs.tools = tools;
      inputs.tool_choice = COMMON_CHAT_TOOL_CHOICE_AUTO;
      inputs.add_generation_prompt = true;
@@ -232,7 +261,7 @@ diff --git a/src/model.cpp b/src/model.cpp
      // Tokenize the prompt
      std::vector<llama_token> prompt_tokens = tokenize(params.prompt);
      if (prompt_tokens.empty()) {
-@@ -281,8 +362,66 @@ Model::generate(const std::vector<common_chat_msg>& messages,
+@@ -281,8 +363,66 @@ Model::generate(const std::vector<common_chat_msg>& messages,
          parser_source_ = params.parser;
      }
  
@@ -301,7 +330,7 @@ diff --git a/src/model.cpp b/src/model.cpp
  }
  
  common_chat_msg
-@@ -311,10 +450,16 @@ Model::generate_from_tokens(const std::vector<llama_token>& all_tokens,
+@@ -311,10 +451,16 @@ Model::generate_from_tokens(const std::vector<llama_token>& all_tokens,
          common_prefix++;
      }
  
@@ -320,7 +349,7 @@ diff --git a/src/model.cpp b/src/model.cpp
          processed_tokens_.resize(common_prefix);
          n_past_ = common_prefix;
      }
-@@ -343,15 +488,15 @@ Model::generate_from_tokens(const std::vector<llama_token>& all_tokens,
+@@ -343,15 +489,15 @@ Model::generate_from_tokens(const std::vector<llama_token>& all_tokens,
          i += batch_size;
      }
  
