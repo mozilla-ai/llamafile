@@ -336,7 +336,7 @@ diff --git a/src/model.cpp b/src/model.cpp
      // Tokenize the prompt
      std::vector<llama_token> prompt_tokens = tokenize(params.prompt);
      if (prompt_tokens.empty()) {
-@@ -281,8 +427,85 @@ Model::generate(const std::vector<common_chat_msg>& messages,
+@@ -281,8 +427,99 @@ Model::generate(const std::vector<common_chat_msg>& messages,
          parser_source_ = params.parser;
      }
  
@@ -419,12 +419,26 @@ diff --git a/src/model.cpp b/src/model.cpp
 +        parsed_msg.content.find("<tool_call>") != std::string::npos) {
 +        throw *parse_error;
 +    }
++    // A reply that ends inside a reasoning block it never closed, with
++    // nothing else, holds the model's answer in that block: small models
++    // do this after a tool result. Return it as the content.
++    if (parsed_msg.tool_calls.empty() && parsed_msg.content.empty() &&
++        !parsed_msg.reasoning_content.empty() &&
++        std::none_of(params.thinking_end_tags.begin(),
++                     params.thinking_end_tags.end(),
++                     [&](const std::string& tag) {
++                         return !tag.empty() &&
++                                response.find(tag) != std::string::npos;
++                     })) {
++        parsed_msg.content = std::move(parsed_msg.reasoning_content);
++        parsed_msg.reasoning_content.clear();
++    }
 +    parsed_msg.role = "assistant";
 +    return parsed_msg;
  }
  
  common_chat_msg
-@@ -311,10 +534,16 @@ Model::generate_from_tokens(const std::vector<llama_token>& all_tokens,
+@@ -311,10 +548,16 @@ Model::generate_from_tokens(const std::vector<llama_token>& all_tokens,
          common_prefix++;
      }
  
@@ -443,7 +457,7 @@ diff --git a/src/model.cpp b/src/model.cpp
          processed_tokens_.resize(common_prefix);
          n_past_ = common_prefix;
      }
-@@ -343,15 +572,15 @@ Model::generate_from_tokens(const std::vector<llama_token>& all_tokens,
+@@ -343,15 +586,15 @@ Model::generate_from_tokens(const std::vector<llama_token>& all_tokens,
          i += batch_size;
      }
  
