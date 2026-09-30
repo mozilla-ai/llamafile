@@ -92,6 +92,9 @@ Two artifacts, both existing standards — nothing invented:
 - Mapping notes: `provider` = `"agentfile"`, `model` = GGUF basename,
   cost fields zero/omitted, agentfile's linear history is a degenerate
   tree (each entry's `parentId` = previous entry).
+  A failed tool call is recorded as `isError: true` with the error
+  message, pi's own shape for a failed call; the model receives the
+  same error wrapped as `{"error": true, "tool": …, "message": …}`.
 - Risk to track: it's an application format owned by Earendil with version
   migrations; we pin v3 and revisit when pi bumps.
 
