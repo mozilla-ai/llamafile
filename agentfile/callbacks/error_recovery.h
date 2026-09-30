@@ -33,11 +33,27 @@
 
 #include <nlohmann/json.hpp>
 #include <string>
+#include <vector>
 
 namespace agentfile {
 
 class ErrorRecoveryCallback : public agent_cpp::Callback {
   public:
+    // A call whose arguments are not JSON stays in the history after its
+    // error is handed back, and chat templates that take arguments as an
+    // object refuse to render it. Store such arguments as a JSON string:
+    // templates print it as the model wrote it.
+    void before_llm_call(std::vector<common_chat_msg> &messages) override {
+        for (auto &msg : messages) {
+            for (auto &tc : msg.tool_calls) {
+                if (!nlohmann::ordered_json::accept(tc.arguments)) {
+                    tc.arguments =
+                        safe_json_to_str(nlohmann::ordered_json(tc.arguments));
+                }
+            }
+        }
+    }
+
     void after_tool_execution(std::string &tool_name,
                               agent_cpp::ToolResult &result) override {
         if (!result.has_error()) return;
