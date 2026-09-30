@@ -76,6 +76,9 @@ def _make_handler(state: ServerState, base_url_box: list):
                 self._bytes(200, json.dumps(body).encode(), "application/json")
             elif self.path.startswith("/?ref="):
                 self._text(200, "at-ok")
+            elif self.path.startswith("/?next="):
+                # Relative Location: resolves against "/", not a '/' in the query.
+                self._text(302, "", {"Location": "login"})
             elif self.path == "/latin1":
                 self._bytes(200, LATIN1_TEXT.encode("latin-1"),
                             "text/plain; charset=iso-8859-1")
@@ -269,6 +272,19 @@ def test_http_fetch_rejects_junk_after_port(http_server, tmp_path):
     assert "invalid URL port" in first.get("error", ""), _dump(run)
     assert not state.requests, f"a request reached the test server: {state.requests}" + _dump(run)
 
+
+# resolve_location took the base directory from a path that includes the
+# query, so a relative redirect resolved against the '/' in "next=a/b".
+def test_http_fetch_relative_redirect_after_query(http_server, tmp_path):
+    base, _ = http_server
+    run = run_agentfile(
+        f"Call http_fetch once with exactly this url, unchanged: {base}?next=a/b and report the status code.",
+        "http_fetch", tmp_path, extra=["--yes"])
+    fetches = run.results_for("http_fetch")
+    assert fetches, "model did not call http_fetch" + _dump(run)
+    first = json.loads(AgentRun.result_text(fetches[0]))
+    assert first.get("status") == 302, _dump(run)
+    assert first.get("redirect_to") == f"{base}/login", _dump(run)
 
 # --- web_search -------------------------------------------------------------
 

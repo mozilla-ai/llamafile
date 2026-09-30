@@ -71,15 +71,21 @@ struct HttpFetchTool : server_tool {
     }
 
     // Resolve a Location header against the request URL (RFC 3986-lite:
-    // absolute, host-relative, or path-relative).
+    // absolute, scheme-relative, host-relative, query-only, or
+    // path-relative).
     static std::string resolve_location(const common_http_url &parts,
                                         const std::string &loc) {
         if (loc.find("://") != std::string::npos) return loc;
+        if (loc.rfind("//", 0) == 0) return parts.scheme + ":" + loc;
         std::string origin = parts.scheme + "://" +
                              common_http_format_host(parts.host) + ":" +
                              std::to_string(parts.port);
         if (!loc.empty() && loc[0] == '/') return origin + loc;
-        std::string dir = parts.path.substr(0, parts.path.rfind('/') + 1);
+        // The request's query is not part of its directory: a '/' inside
+        // it must not become the base of a relative Location.
+        std::string path = parts.path.substr(0, parts.path.find('?'));
+        if (!loc.empty() && loc[0] == '?') return origin + path + loc;
+        std::string dir = path.substr(0, path.rfind('/') + 1);
         if (dir.empty()) dir = "/";
         return origin + dir + loc;
     }
