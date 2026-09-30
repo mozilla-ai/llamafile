@@ -21,12 +21,14 @@
 // run. Same result shape as agent.cpp's
 // examples/shared/error_recovery_callback.h, serialized with
 // safe_json_to_str: the message can quote invalid UTF-8 from the model's
-// arguments.
+// arguments. A model that keeps failing gets kMaxConsecutiveFailures
+// errors back; the next failure ends the run (main exits 2).
 //
 
 #pragma once
 
 #include "callbacks.h"
+#include "error.h"
 #include "tool_result.h"
 
 #include "server-common.h"  // safe_json_to_str
@@ -38,7 +40,16 @@
 namespace agentfile {
 
 class ErrorRecoveryCallback : public agent_cpp::Callback {
+    // Failed tool calls in a row. Without a cap, a model that keeps calling
+    // a tool it doesn't have loops until the context fills.
+    static constexpr int kMaxConsecutiveFailures = 3;
+    int failures_ = 0;
+
   public:
+    void before_agent_loop(std::vector<common_chat_msg> &) override {
+        failures_ = 0;
+    }
+
     // A call whose arguments are not JSON stays in the history after its
     // error is handed back, and chat templates that take arguments as an
     // object refuse to render it. Store such arguments as a JSON string:
@@ -56,7 +67,16 @@ class ErrorRecoveryCallback : public agent_cpp::Callback {
 
     void after_tool_execution(std::string &tool_name,
                               agent_cpp::ToolResult &result) override {
-        if (!result.has_error()) return;
+        if (!result.has_error()) {
+            failures_ = 0;
+            return;
+        }
+        if (++failures_ > kMaxConsecutiveFailures) {
+            throw agent_cpp::Error("giving up after " +
+                                   std::to_string(failures_) +
+                                   " failed tool calls in a row; last: " +
+                                   result.error().message);
+        }
         nlohmann::ordered_json err = {
             {"error", true},
             {"tool", tool_name},

@@ -69,6 +69,9 @@ that runs anywhere, llamafile-style.
   how to continue. No answer at all (no terminal to ask on, or EOF at the
   prompt) does end the run, with exit 2: every later guarded call would
   go unanswered too, and the model would retry them without end.
+  A failed tool call (a tool the model doesn't have, arguments that are
+  not JSON) goes back to the model as an error result; four failures in
+  a row end the run, with exit 2.
 
 ## 3. Session records & tracing
 
