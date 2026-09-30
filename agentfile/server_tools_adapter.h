@@ -202,16 +202,23 @@ class ServerToolbox {
         return names;
     }
 
+    // The tools in `keep` (empty = all), for both lists below.
+    std::vector<const server_tool *>
+    selected(const std::set<std::string> &keep) const {
+        std::vector<const server_tool *> out;
+        for (const auto &t : st_.tools)
+            if (keep.empty() || keep.count(t->name)) out.push_back(t.get());
+        return out;
+    }
+
     // Tools in `keep` (empty = all) that mutate state or reach the network
     // (permission_write) — these get a confirmation prompt unless --yes is
     // given.
     std::set<std::string>
     write_tool_names(const std::set<std::string> &keep = {}) const {
         std::set<std::string> names;
-        for (const auto &t : st_.tools) {
-            if (!keep.empty() && !keep.count(t->name)) continue;
+        for (const server_tool *t : selected(keep))
             if (t->permission_write) names.insert(t->name);
-        }
         return names;
     }
 
@@ -220,11 +227,8 @@ class ServerToolbox {
     std::vector<std::unique_ptr<agent_cpp::Tool>>
     make_adapters(const std::set<std::string> &keep) const {
         std::vector<std::unique_ptr<agent_cpp::Tool>> out;
-        for (const auto &t : st_.tools) {
-            if (!keep.empty() && !keep.count(t->name)) continue;
-            out.push_back(
-                std::make_unique<ServerToolAdapter>(t.get(), runtime_spec_));
-        }
+        for (const server_tool *t : selected(keep))
+            out.push_back(std::make_unique<ServerToolAdapter>(t, runtime_spec_));
         return out;
     }
 };
