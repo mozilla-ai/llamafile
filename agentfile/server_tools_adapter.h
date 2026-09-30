@@ -44,6 +44,7 @@
 
 #include "chat.h"
 #include "tool.h"
+#include "util.h"
 
 #include "tools/http_fetch.h"
 #include "tools/web_search.h"
@@ -55,6 +56,22 @@
 #include <vector>
 
 namespace agentfile {
+
+// Tool-call arguments are model-controlled text headed for the terminal
+// (the confirmation prompt, the progress line). Show them re-serialized,
+// parsed as agent.cpp parses them for the tool: bytes between JSON tokens
+// (a '\r' that would return the cursor and overprint the command being
+// approved) are gone, and terminal_text escapes the controls JSON allows
+// inside strings. Text that is not valid JSON, and so will be refused
+// anyway, is shown escaped as it is.
+inline std::string printable_arguments(const std::string &arguments) {
+    std::string text = arguments;
+    try {
+        text = safe_json_to_str(nlohmann::json::parse(arguments));
+    } catch (const std::exception &) {
+    }
+    return terminal_text(text);
+}
 
 class ServerToolAdapter : public agent_cpp::Tool {
     const server_tool *tool_;   // borrowed from ServerToolbox

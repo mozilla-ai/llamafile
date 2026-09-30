@@ -29,7 +29,7 @@
 #include "callbacks.h"
 #include "error.h"
 
-#include <nlohmann/json.hpp>
+#include "server_tools_adapter.h"  // printable_arguments
 
 #include <cctype>
 #include <cstdio>
@@ -40,31 +40,6 @@
 #include <unistd.h>
 
 namespace agentfile {
-
-// The arguments are model-controlled text headed for the terminal. Show
-// them re-serialized: that is what the tool will receive, and it cannot
-// carry raw control bytes (a '\r' between JSON tokens would otherwise
-// return the cursor and overprint the command being approved). Text that
-// is not valid JSON, and so will be refused anyway, gets its control
-// bytes escaped.
-inline std::string printable_arguments(const std::string &arguments) {
-    try {
-        return nlohmann::json::parse(arguments).dump(
-            -1, ' ', false, nlohmann::json::error_handler_t::replace);
-    } catch (const std::exception &) {
-    }
-    std::string out;
-    for (unsigned char c : arguments) {
-        if (c < 0x20 || c == 0x7f) {
-            char buf[8];
-            std::snprintf(buf, sizeof(buf), "\\x%02x", c);
-            out += buf;
-        } else {
-            out += (char)c;
-        }
-    }
-    return out;
-}
 
 // No answer from a terminal (none to ask on in CI or cron, or EOF at the
 // prompt): every later guarded call would go unanswered too, and the

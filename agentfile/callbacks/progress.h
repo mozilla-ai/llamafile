@@ -17,7 +17,8 @@
 //
 // ProgressCallback — prints `[tool: NAME args] -> N bytes` on stderr
 // around each tool execution, keeping stdout clean. In verbose mode also
-// prints a truncated result preview.
+// prints a truncated result preview. Model and tool text goes through
+// terminal_text: under --yes this output is the only record of a call.
 //
 
 #pragma once
@@ -25,9 +26,9 @@
 #include "callbacks.h"
 #include "tool_result.h"
 
+#include "server_tools_adapter.h"  // printable_arguments
 #include "util.h"
 
-#include <algorithm>
 #include <cstdio>
 #include <string>
 
@@ -44,14 +45,18 @@ class ProgressCallback : public agent_cpp::Callback {
     void after_llm_call(common_chat_msg &parsed_msg) override {
         if (!parsed_msg.reasoning_content.empty()) {
             std::fprintf(stderr, "%s[think] %s%s\n", dim(),
-                         parsed_msg.reasoning_content.c_str(), dim_off());
+                         terminal_text(parsed_msg.reasoning_content,
+                                       /*keep_newlines=*/true)
+                             .c_str(),
+                         dim_off());
         }
     }
 
     void before_tool_execution(std::string &tool_name,
                                std::string &arguments) override {
         std::fprintf(stderr, "%s[tool: %s %s]%s\n", dim(),
-                     tool_name.c_str(), arguments.c_str(), dim_off());
+                     tool_name.c_str(), printable_arguments(arguments).c_str(),
+                     dim_off());
     }
 
     void after_tool_execution(std::string &tool_name,
@@ -59,15 +64,18 @@ class ProgressCallback : public agent_cpp::Callback {
         if (result.has_error()) {
             std::fprintf(stderr, "%s[tool: %s -> error: %s]%s\n", dim(),
                          tool_name.c_str(),
-                         result.error().message.c_str(), dim_off());
+                         terminal_text(result.error().message).c_str(),
+                         dim_off());
         } else {
             const auto &out = result.output();
             std::fprintf(stderr, "%s[tool: %s -> %zu bytes]%s\n", dim(),
                          tool_name.c_str(), out.size(), dim_off());
             if (verbose_ && !out.empty()) {
                 constexpr size_t kPreview = 512;
-                std::fprintf(stderr, "%s  %.*s%s%s\n", dim(),
-                             (int)std::min(out.size(), kPreview), out.c_str(),
+                std::fprintf(stderr, "%s  %s%s%s\n", dim(),
+                             terminal_text(out.substr(0, kPreview),
+                                           /*keep_newlines=*/true)
+                                 .c_str(),
                              out.size() > kPreview ? "…" : "", dim_off());
             }
         }

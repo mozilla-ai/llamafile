@@ -15,9 +15,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
-// Small shared helpers for agentfile's recording callbacks: random hex
-// identifiers and wall-clock timestamps in the encodings used by the pi
-// session format (ISO 8601 + Unix ms) and OTLP (Unix nanoseconds).
+// Small shared helpers for agentfile's callbacks: terminal output
+// (dim chrome, escaping model text), random hex identifiers and
+// wall-clock timestamps in the encodings used by the pi session format
+// (ISO 8601 + Unix ms) and OTLP (Unix nanoseconds).
 //
 
 #pragma once
@@ -44,6 +45,57 @@ inline const char *dim() {
 inline const char *dim_off() {
     static const bool on = isatty(STDERR_FILENO) && !std::getenv("NO_COLOR");
     return on ? "\033[0m" : "";
+}
+
+// Model or tool text headed for the terminal. Escapes what a terminal
+// acts on or reorders instead of printing (C0 controls, DEL, C1 controls,
+// bidi controls) and bytes that are not UTF-8, so the text cannot
+// overprint, restyle or reorder what is shown around it. '\t' always
+// passes; '\n' passes only for multi-line text.
+inline std::string terminal_text(const std::string &s,
+                                 bool keep_newlines = false) {
+    std::string out;
+    out.reserve(s.size());
+    char buf[12];
+    for (size_t i = 0; i < s.size();) {
+        unsigned char c = s[i];
+        size_t n = c < 0x80 ? 1 : (c >> 5) == 0x6 ? 2 : (c >> 4) == 0xe ? 3
+                 : (c >> 3) == 0x1e ? 4 : 0;
+        uint32_t cp = n == 1 ? c : n == 2 ? c & 0x1f : n == 3 ? c & 0x0f
+                    : c & 0x07;
+        bool ok = n > 0 && i + n <= s.size();
+        for (size_t k = 1; ok && k < n; ++k) {
+            unsigned char cc = s[i + k];
+            ok = (cc & 0xc0) == 0x80;
+            cp = (cp << 6) | (cc & 0x3f);
+        }
+        // Overlong forms, surrogates and code points past U+10FFFF are
+        // not UTF-8 either.
+        ok = ok && !(n == 2 && cp < 0x80) && !(n == 3 && cp < 0x800) &&
+             !(n == 4 && (cp < 0x10000 || cp > 0x10ffff)) &&
+             !(cp >= 0xd800 && cp <= 0xdfff);
+        if (!ok) {
+            std::snprintf(buf, sizeof(buf), "\\x%02x", c);
+            out += buf;
+            ++i;
+            continue;
+        }
+        bool control = (cp < 0x20 && cp != '\t' &&
+                        !(keep_newlines && cp == '\n')) ||
+                       (cp >= 0x7f && cp <= 0x9f) || cp == 0x061c ||
+                       cp == 0x200e || cp == 0x200f ||
+                       (cp >= 0x202a && cp <= 0x202e) ||
+                       (cp >= 0x2066 && cp <= 0x2069);
+        if (control) {
+            std::snprintf(buf, sizeof(buf),
+                          cp < 0x80 ? "\\x%02x" : "\\u%04x", (unsigned)cp);
+            out += buf;
+        } else {
+            out.append(s, i, n);
+        }
+        i += n;
+    }
+    return out;
 }
 
 // n random lowercase hex characters (n/2 random bytes).
