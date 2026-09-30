@@ -70,9 +70,11 @@ inline constexpr const char *kServerToolControlKeys[] = {"runtime", "cwd",
 // between JSON tokens, such as a '\r' that would return the cursor and
 // overprint the command being approved, are gone), with the control keys
 // stripped and named, so the prompt never shows a cwd or runtime that
-// will not apply. terminal_text escapes the controls JSON allows inside
-// strings. Text that is not valid JSON, and so will be refused anyway, is
-// shown escaped as it is.
+// will not apply. A "url" also gets the scheme://host:port the http
+// client parses out of it, which is where the request goes even when the
+// text reads otherwise. terminal_text escapes the controls JSON allows
+// inside strings. Text that is not valid JSON, and so will be refused
+// anyway, is shown escaped as it is.
 inline std::string printable_arguments(const std::string &arguments) {
     std::string text = arguments;
     std::string note;
@@ -86,6 +88,17 @@ inline std::string printable_arguments(const std::string &arguments) {
                 }
             }
             if (!note.empty()) note += ")";
+            auto url = args.find("url");
+            if (url != args.end() && url->is_string()) {
+                try {
+                    auto parts = common_http_parse_url(url->get<std::string>());
+                    note += " (connects to " + parts.scheme + "://" +
+                            common_http_format_host(parts.host) + ":" +
+                            std::to_string(parts.port) + ")";
+                } catch (const std::exception &) {
+                    // http_fetch reports the bad URL itself.
+                }
+            }
         }
         text = safe_json_to_str(args);
     } catch (const std::exception &) {
