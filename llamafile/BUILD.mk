@@ -257,7 +257,8 @@ LLAMAFILE_SERVER_SUPPORT_OBJS := \
 	$(UI_GEN_OBJ)
 
 # Metal source files to embed in the executable (for runtime compilation on macOS)
-# These are extracted at runtime and compiled into ggml-metal.dylib
+# These are extracted at runtime and compiled into ggml-metal.dylib; the
+# kernels/ shaders are compiled by the Metal runtime itself (see llamafile/metal.c).
 LLAMAFILE_METAL_SOURCES := \
 	o/$(MODE)/llama.cpp/ggml/src/ggml.c.zip.o \
 	o/$(MODE)/llama.cpp/ggml/src/ggml-alloc.c.zip.o \
@@ -273,13 +274,13 @@ LLAMAFILE_METAL_SOURCES := \
 	o/$(MODE)/llama.cpp/ggml/include/ggml-cpp.h.zip.o \
 	o/$(MODE)/llama.cpp/ggml/include/ggml-metal.h.zip.o \
 	o/$(MODE)/llama.cpp/ggml/src/ggml-impl.h.zip.o \
+	o/$(MODE)/llama.cpp/ggml/src/ggml-version.h.zip.o \
 	o/$(MODE)/llama.cpp/ggml/src/ggml-common.h.zip.o \
 	o/$(MODE)/llama.cpp/ggml/src/ggml-quants.h.zip.o \
 	o/$(MODE)/llama.cpp/ggml/src/ggml-threading.h.zip.o \
 	o/$(MODE)/llama.cpp/ggml/src/ggml-backend-impl.h.zip.o \
 	o/$(MODE)/llama.cpp/ggml/src/ggml-cpu/ggml-cpu-impl.h.zip.o \
 	o/$(MODE)/llama.cpp/ggml/src/ggml-metal/ggml-metal.cpp.zip.o \
-	o/$(MODE)/llama.cpp/ggml/src/ggml-metal/ggml-metal.metal.zip.o \
 	o/$(MODE)/llama.cpp/ggml/src/ggml-metal/ggml-metal-impl.h.zip.o \
 	o/$(MODE)/llama.cpp/ggml/src/ggml-metal/ggml-metal-device.h.zip.o \
 	o/$(MODE)/llama.cpp/ggml/src/ggml-metal/ggml-metal-device.m.zip.o \
@@ -289,7 +290,34 @@ LLAMAFILE_METAL_SOURCES := \
 	o/$(MODE)/llama.cpp/ggml/src/ggml-metal/ggml-metal-common.h.zip.o \
 	o/$(MODE)/llama.cpp/ggml/src/ggml-metal/ggml-metal-common.cpp.zip.o \
 	o/$(MODE)/llama.cpp/ggml/src/ggml-metal/ggml-metal-ops.h.zip.o \
-	o/$(MODE)/llama.cpp/ggml/src/ggml-metal/ggml-metal-ops.cpp.zip.o
+	o/$(MODE)/llama.cpp/ggml/src/ggml-metal/ggml-metal-ops.cpp.zip.o \
+	o/$(MODE)/llama.cpp/ggml/src/ggml-metal/ggml-metal-fusion.h.zip.o \
+	o/$(MODE)/llama.cpp/ggml/src/ggml-metal/ggml-metal-fusion.cpp.zip.o \
+	o/$(MODE)/llama.cpp/ggml/src/ggml-metal/ggml-metal-tuning.h.zip.o \
+	o/$(MODE)/llama.cpp/ggml/src/ggml-metal/ggml-metal-tuning.cpp.zip.o \
+	o/$(MODE)/llama.cpp/ggml/src/ggml-metal/kernels/common.h.zip.o \
+	o/$(MODE)/llama.cpp/ggml/src/ggml-metal/kernels/dequantize.h.zip.o \
+	o/$(MODE)/llama.cpp/ggml/src/ggml-metal/kernels/quantize.h.zip.o \
+	o/$(MODE)/llama.cpp/ggml/src/ggml-metal/kernels/argsort.metal.zip.o \
+	o/$(MODE)/llama.cpp/ggml/src/ggml-metal/kernels/binbcast.metal.zip.o \
+	o/$(MODE)/llama.cpp/ggml/src/ggml-metal/kernels/conv.metal.zip.o \
+	o/$(MODE)/llama.cpp/ggml/src/ggml-metal/kernels/fa.metal.zip.o \
+	o/$(MODE)/llama.cpp/ggml/src/ggml-metal/kernels/gated_delta_net.metal.zip.o \
+	o/$(MODE)/llama.cpp/ggml/src/ggml-metal/kernels/misc.metal.zip.o \
+	o/$(MODE)/llama.cpp/ggml/src/ggml-metal/kernels/mul_mm.metal.zip.o \
+	o/$(MODE)/llama.cpp/ggml/src/ggml-metal/kernels/mul_mv.metal.zip.o \
+	o/$(MODE)/llama.cpp/ggml/src/ggml-metal/kernels/norm.metal.zip.o \
+	o/$(MODE)/llama.cpp/ggml/src/ggml-metal/kernels/pool.metal.zip.o \
+	o/$(MODE)/llama.cpp/ggml/src/ggml-metal/kernels/quantize.metal.zip.o \
+	o/$(MODE)/llama.cpp/ggml/src/ggml-metal/kernels/reduce.metal.zip.o \
+	o/$(MODE)/llama.cpp/ggml/src/ggml-metal/kernels/rope.metal.zip.o \
+	o/$(MODE)/llama.cpp/ggml/src/ggml-metal/kernels/softmax.metal.zip.o \
+	o/$(MODE)/llama.cpp/ggml/src/ggml-metal/kernels/solve_tri.metal.zip.o \
+	o/$(MODE)/llama.cpp/ggml/src/ggml-metal/kernels/ssm.metal.zip.o \
+	o/$(MODE)/llama.cpp/ggml/src/ggml-metal/kernels/tri.metal.zip.o \
+	o/$(MODE)/llama.cpp/ggml/src/ggml-metal/kernels/unary.metal.zip.o \
+	o/$(MODE)/llama.cpp/ggml/src/ggml-metal/kernels/upscale.metal.zip.o \
+	o/$(MODE)/llama.cpp/ggml/src/ggml-metal/kernels/wkv.metal.zip.o
 
 # Use deferred expansion (=) since this depends on variables from llama.cpp/BUILD.mk
 LLAMAFILE_DEPS = \
@@ -343,15 +371,6 @@ o/$(MODE)/llamafile/llamafile: \
 # ==============================================================================
 # Pattern rules for llamafile sources
 # ==============================================================================
-
-# metal.c needs GGML_VERSION and GGML_COMMIT for runtime Metal compilation
-# GGML_VERSION and GGML_COMMIT are inherited from build/config.mk
-o/$(MODE)/llamafile/metal.o: llamafile/metal.c
-	@mkdir -p $(@D)
-	$(CC) $(CFLAGS) $(LLAMAFILE_CPPFLAGS) \
-		-DGGML_VERSION=\"$(GGML_VERSION)\" \
-		-DGGML_COMMIT=\"$(GGML_COMMIT)\" \
-		-c -o $@ $<
 
 o/$(MODE)/llamafile/%.o: llamafile/%.c
 	@mkdir -p $(@D)

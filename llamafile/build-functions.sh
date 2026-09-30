@@ -104,8 +104,17 @@ setup_build_dir() {
 #       $2 = caller-supplied sources prepended to the list (e.g., tinyblas.cu
 #            for the default TinyBLAS build; empty for the --cublas build)
 #       $3 = NO_IQ_QUANTS (optional, "1" to exclude IQ quant MMQ templates)
-#       $4 = FA_ALL_QUANTS (optional, "1" to include all fattn-vec quant combos
-#            instead of the 3 default ones; mirrors upstream's GGML_CUDA_FA_ALL_QUANTS)
+#       $4 = FA_ALL_QUANTS (optional, "1" to compile every fattn-vec quant combo
+#            instead of the default four; mirrors upstream's
+#            GGML_CUDA_FA_QUANTS=all)
+# Sets: CUDA_SOURCES, NUM_SOURCES, CUDA_FA_DEFINES (append the last to the
+#       compiler flags -- fattn.cu does not compile without it)
+# The K-V types fattn.cu knows about, and the combinations compiled by default.
+# Both mirror ggml/CMakeLists.txt's GGML_CUDA_FA_QUANTS default and the FA_TYPES
+# list in ggml/cmake/common.cmake -- keep in sync on a llama.cpp bump.
+FA_TYPES="q4_0 q4_1 q5_0 q5_1 q8_0 bf16 f16"
+FA_DEFAULT_COMBINATIONS="q4_0-q4_0 q8_0-q8_0 f16-f16 bf16-bf16"
+
 collect_gpu_sources() {
     local ggml_cuda_dir="$1"
     local caller_sources="$2"
@@ -126,22 +135,54 @@ collect_gpu_sources() {
         [ -f "$f" ] && CUDA_SOURCES="$CUDA_SOURCES $f"
     done
 
-    # 3. fattn-vec: default to the 4 common quant combos (f16-f16, q4_0-q4_0,
-    #    q8_0-q8_0, bf16-bf16), matching upstream CMake. With FA_ALL_QUANTS=1
-    #    include all fattn-vec instances (mirrors upstream's
-    #    GGML_CUDA_FA_ALL_QUANTS opt-in).
+    # 3. fattn-vec: since b11100 fattn.cu gates every K-V combination on a
+    #    GGML_CUDA_FA_<K>_<V> macro that must be defined to 0 or 1 for *all* of
+    #    them (upstream's ggml_cuda_fattn_vec_instances() in
+    #    ggml/cmake/common.cmake emits them). Picking source files is no longer
+    #    enough: an undefined macro is a hard `identifier is undefined` error in
+    #    the `if constexpr`. So derive both the sources and the macros from one
+    #    list of combinations.
+    local fa_combinations
     if [ "$fa_all_quants" = "1" ]; then
-        for f in "$ti_dir"/fattn-vec-instance-*.cu; do
-            [ -f "$f" ] && CUDA_SOURCES="$CUDA_SOURCES $f"
+        fa_combinations=""
+        for type_v in $FA_TYPES; do
+            for type_k in $FA_TYPES; do
+                fa_combinations="$fa_combinations $type_k-$type_v"
+            done
         done
     else
-        for f in "$ti_dir"/fattn-vec-instance-f16-f16.cu \
-                 "$ti_dir"/fattn-vec-instance-q4_0-q4_0.cu \
-                 "$ti_dir"/fattn-vec-instance-q8_0-q8_0.cu \
-                 "$ti_dir"/fattn-vec-instance-bf16-bf16.cu; do
-            [ -f "$f" ] && CUDA_SOURCES="$CUDA_SOURCES $f"
-        done
+        fa_combinations="$FA_DEFAULT_COMBINATIONS"
     fi
+
+    for combination in $fa_combinations; do
+        f="$ti_dir/fattn-vec-instance-$combination.cu"
+        if [ ! -f "$f" ]; then
+            echo "Error: FlashAttention template instance not found: $f" >&2
+            return 1
+        fi
+        CUDA_SOURCES="$CUDA_SOURCES $f"
+    done
+
+    # One -D per combination, 0 or 1, for every type pair fattn.cu can ask about.
+    # No spaces in any value, so these survive the unquoted word-splitting that
+    # compile_gpu_sources_parallel does on its common_flags argument.
+    CUDA_FA_DEFINES=""
+    for type_v in $FA_TYPES; do
+        for type_k in $FA_TYPES; do
+            local compiled=0
+            case " $fa_combinations " in
+                *" $type_k-$type_v "*) compiled=1 ;;
+            esac
+            local macro
+            macro=$(echo "GGML_CUDA_FA_${type_k}_${type_v}" | tr '[:lower:]' '[:upper:]')
+            CUDA_FA_DEFINES="$CUDA_FA_DEFINES -D$macro=$compiled"
+        done
+    done
+    # Reported by ggml_backend_cuda_get_features as "FA_QUANTS" (guarded by
+    # #ifdef, so a build without it just omits the feature).
+    local fa_quants_csv
+    fa_quants_csv=$(echo $fa_combinations | tr ' ' ',')
+    CUDA_FA_DEFINES="$CUDA_FA_DEFINES -DGGML_CUDA_FA_QUANTS=\"$fa_quants_csv\""
 
     # 4. mmf instances (always included)
     for f in "$ti_dir"/mmf-*.cu; do

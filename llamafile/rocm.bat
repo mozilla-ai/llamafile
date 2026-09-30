@@ -134,6 +134,22 @@ set "COMMON_FLAGS=%COMMON_FLAGS% -I"%HIP_PATH%\include""
 set "COMMON_FLAGS=%COMMON_FLAGS% -DNDEBUG -DGGML_BUILD=1 -DGGML_SHARED=1 -DGGML_BACKEND_SHARED=1 -DGGML_BACKEND_BUILD=1 -DGGML_MULTIPLATFORM"
 set "COMMON_FLAGS=%COMMON_FLAGS% -DGGML_HIP_GRAPHS=1"
 set "COMMON_FLAGS=%COMMON_FLAGS% -DGGML_USE_HIP=1 -DGGML_USE_TINYBLAS=1 -DGGML_HIP_NO_VMM=1 -D__HIP_PLATFORM_AMD__"
+
+:: fattn.cu gates every K-V combination on a GGML_CUDA_FA_<K>_<V> macro that
+:: must be defined to 0 or 1 for all of them (since b11100; upstream emits them
+:: from ggml_cuda_fattn_vec_instances() in ggml/cmake/common.cmake). Selecting
+:: template-instance files is no longer enough -- an undefined macro is a hard
+:: error in the if constexpr. Keep this list and the default combinations in
+:: sync with FA_TYPES / FA_DEFAULT_COMBINATIONS in llamafile/build-functions.sh.
+:: (The informational GGML_CUDA_FA_QUANTS string macro is #ifdef-guarded and is
+:: not set here, to avoid quoting it through cmd.)
+set "FA_TYPES=Q4_0 Q4_1 Q5_0 Q5_1 Q8_0 BF16 F16"
+set "FA_COMBINATIONS=Q4_0-Q4_0 Q8_0-Q8_0 F16-F16 BF16-BF16"
+for %%v in (%FA_TYPES%) do for %%k in (%FA_TYPES%) do (
+    set "FA_COMPILED=0"
+    for %%c in (!FA_COMBINATIONS!) do if /i "%%c"=="%%k-%%v" set "FA_COMPILED=1"
+    set "COMMON_FLAGS=!COMMON_FLAGS! -DGGML_CUDA_FA_%%k_%%v=!FA_COMPILED!"
+)
 :: --offload-compress shrinks the fat binary (mirrors rocm.sh / #995); requires a
 :: recent ROCm HIP SDK -- drop this flag if your clang++ rejects it
 set "COMMON_FLAGS=%COMMON_FLAGS% --offload-compress"

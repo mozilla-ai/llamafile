@@ -19,6 +19,7 @@
 #include "args.h"
 #include "llamafile.h"
 
+#include <cstdio>
 #include <cstring>
 #include <vector>
 
@@ -39,6 +40,42 @@ static bool is_llamafile_flag(const char* arg) {
            strcmp(arg, "--unsecure") == 0 ||
            strcmp(arg, "--confine-reads") == 0 ||
            strcmp(arg, "--version") == 0;
+}
+
+// llama.cpp b11100 replaced --mmap/--no-mmap/--mlock/-dio/-ndio with
+// --load-mode and now rejects them, which would break existing llamafiles
+// whose .args still use them. They are dropped here and one equivalent
+// "--load-mode <mode>" is inserted where the last of them was, so an
+// explicit --load-mode keeps working and the last flag wins, as upstream.
+//
+// The mode follows the original semantics, where the flags were independent
+// settings: mmap on by default, --mlock adds locking to it (mmap+mlock, not
+// plain mlock), and direct I/O takes precedence over mmap.
+static const char* legacy_load_flag(const char* arg, bool* mmap, bool* mlock, bool* dio) {
+    if (strcmp(arg, "--mmap") == 0) {
+        *mmap = true;
+    } else if (strcmp(arg, "--no-mmap") == 0) {
+        *mmap = false;
+    } else if (strcmp(arg, "--mlock") == 0) {
+        *mlock = true;
+    } else if (strcmp(arg, "-dio") == 0 || strcmp(arg, "--direct-io") == 0) {
+        *dio = true;
+    } else if (strcmp(arg, "-ndio") == 0 || strcmp(arg, "--no-direct-io") == 0) {
+        *dio = false;
+    } else {
+        return nullptr;
+    }
+    return arg;
+}
+
+static char* legacy_load_mode(bool mmap, bool mlock, bool dio) {
+    static char kNone[] = "none", kMmap[] = "mmap", kMlock[] = "mlock",
+                kMmapMlock[] = "mmap+mlock", kDio[] = "dio";
+    if (dio)
+        return kDio;
+    if (mmap)
+        return mlock ? kMmapMlock : kMmap;
+    return mlock ? kMlock : kNone;
 }
 
 LlamafileArgs parse_llamafile_args(int argc, char** argv) {
@@ -99,8 +136,19 @@ LlamafileArgs parse_llamafile_args(int argc, char** argv) {
     // These are not recognized by llama.cpp and would cause errors
     g_filtered_argv.clear();
 
+    bool legacy_mmap = true, legacy_mlock = false, legacy_dio = false;
+    const char* last_legacy = nullptr;
+    size_t legacy_pos = 0;
+
     for (int i = 0; i < argc; ++i) {
         const char* arg = argv[i];
+
+        // Translate removed load flags (see legacy_load_flag)
+        if (const char* flag = legacy_load_flag(arg, &legacy_mmap, &legacy_mlock, &legacy_dio)) {
+            last_legacy = flag;
+            legacy_pos = g_filtered_argv.size();
+            continue;
+        }
 
         // Skip llamafile-specific flags
         if (is_llamafile_flag(arg)) {
@@ -113,6 +161,14 @@ LlamafileArgs parse_llamafile_args(int argc, char** argv) {
 
         // Keep this argument
         g_filtered_argv.push_back(argv[i]);
+    }
+
+    if (last_legacy) {
+        static char kLoadMode[] = "--load-mode";
+        char* mode = legacy_load_mode(legacy_mmap, legacy_mlock, legacy_dio);
+        fprintf(stderr, "warning: %s is no longer supported by llama.cpp; using --load-mode %s "
+                        "(see docs/cli_arguments.md)\n", last_legacy, mode);
+        g_filtered_argv.insert(g_filtered_argv.begin() + legacy_pos, {kLoadMode, mode});
     }
 
     // Null-terminate argv array (required by convention)

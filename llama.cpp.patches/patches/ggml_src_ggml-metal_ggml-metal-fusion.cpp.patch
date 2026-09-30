@@ -1,0 +1,21 @@
+diff --git a/ggml/src/ggml-metal/ggml-metal-fusion.cpp b/ggml/src/ggml-metal/ggml-metal-fusion.cpp
+--- a/llama.cpp/ggml/src/ggml-metal/ggml-metal-fusion.cpp
++++ b/llama.cpp/ggml/src/ggml-metal/ggml-metal-fusion.cpp
+@@ -717,7 +717,7 @@ static bool ggml_metal_fusion_match_raw_pattern(
+ 
+ static void ggml_metal_fusion_add_pattern_alloc_deps(
+         void * user_data,
+-        void (*add_alloc_dep)(void *, ggml_tensor *, ggml_tensor *),
++        void (GGML_CALL *add_alloc_dep)(void *, ggml_tensor *, ggml_tensor *),
+         ggml_cgraph * gf,
+         const ggml_metal_fusion * fusion,
+         int node_idx) {
+@@ -739,7 +739,7 @@ static void ggml_metal_fusion_add_pattern_alloc_deps(
+ 
+ void ggml_metal_fusion_add_alloc_deps(
+         void * user_data,
+-        void (*add_alloc_dep)(void *, ggml_tensor *, ggml_tensor *),
++        void (GGML_CALL *add_alloc_dep)(void *, ggml_tensor *, ggml_tensor *),
+         ggml_cgraph * gf) {
+     for (int i = 0; i < gf->n_nodes; ++i) {
+         const ggml_metal_fusion * best = nullptr;

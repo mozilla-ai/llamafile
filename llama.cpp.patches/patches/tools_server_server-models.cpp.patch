@@ -1,7 +1,7 @@
 diff --git a/tools/server/server-models.cpp b/tools/server/server-models.cpp
 --- a/llama.cpp/tools/server/server-models.cpp
 +++ b/llama.cpp/tools/server/server-models.cpp
-@@ -30,6 +30,7 @@
+@@ -31,6 +31,7 @@
  #include <cstring>
  
  #ifndef _WIN32
@@ -9,7 +9,34 @@ diff --git a/tools/server/server-models.cpp b/tools/server/server-models.cpp
  extern char **environ;
  #endif
  
-@@ -675,13 +676,19 @@ void server_models::load_models() {
+@@ -61,7 +62,25 @@ static void request_child_exit(server_subproc & proc) {
+ // single-threaded, watching all child processes at once
+ struct server_monitor {
+     server_monitor(server_models & models) : models(models) {
+-        th = std::thread([this]() { run(); });
++        th = std::thread([this]() {
++            // Block every signal on this thread so its waits can't be
++            // interrupted with EINTR (libcxx rethrows EINTR from a condition
++            // variable as std::system_error and std::terminates the process).
++            // Keep synchronous fault signals deliverable so real crashes still
++            // surface. SIGINT/SIGTERM belong to the main thread.
++            sigset_t block_mask;
++            sigfillset(&block_mask);
++            sigdelset(&block_mask, SIGSEGV);
++            sigdelset(&block_mask, SIGBUS);
++            sigdelset(&block_mask, SIGILL);
++            sigdelset(&block_mask, SIGFPE);
++            sigdelset(&block_mask, SIGABRT);
++            sigdelset(&block_mask, SIGSYS);
++            sigdelset(&block_mask, SIGTRAP);
++            pthread_sigmask(SIG_BLOCK, &block_mask, nullptr);
++
++            run();
++        });
+     }
+ 
+     ~server_monitor() {
+@@ -893,13 +912,19 @@ void server_models::load_models() {
          }
  
          // wait for all targeted models to reach UNLOADED; cv.wait handles unlock/relock
@@ -29,9 +56,9 @@ diff --git a/tools/server/server-models.cpp b/tools/server/server-models.cpp
 +            cv.wait_for(lk, std::chrono::seconds(30));
 +        }
  
-         // collect all threads to join in one pass while the lock is held:
-         // - monitoring threads from just-unloaded models (to_unload)
-@@ -913,9 +920,12 @@ void server_models::unload_lru() {
+         // erase models no longer in any source
+         for (auto it = mapping.begin(); it != mapping.end(); ) {
+@@ -1096,9 +1121,12 @@ void server_models::unload_lru() {
          // wait for unload to complete
          {
              std::unique_lock<std::mutex> lk(mutex);
@@ -47,7 +74,7 @@ diff --git a/tools/server/server-models.cpp b/tools/server/server-models.cpp
          }
      }
  }
-@@ -940,7 +950,12 @@ void server_models::load(const std::string & name, const load_options & opts) {
+@@ -1123,7 +1151,12 @@ void server_models::load(const std::string & name, const load_options & opts) {
      std::unique_lock<std::mutex> lk(mutex);
      // edge case: block until any in-progress reload has finished so we always load
      // against the freshest preset and a consistent mapping state
@@ -61,45 +88,30 @@ diff --git a/tools/server/server-models.cpp b/tools/server/server-models.cpp
  
      auto meta = opts.custom_meta.has_value() ? *opts.custom_meta : mapping[name].meta;
      if (meta.status != SERVER_MODEL_STATUS_UNLOADED) {
-@@ -1037,15 +1052,34 @@ void server_models::load(const std::string & name, const load_options & opts) {
-         });
- 
-         std::thread stopping_thread([&]() {
-+            // Block every signal on this thread so pthread_cond_timedwait()
-+            // can't be interrupted with EINTR (libcxx rethrows EINTR as
-+            // std::system_error and std::terminates the process). Keep
-+            // synchronous fault signals deliverable so real crashes still
-+            // surface.
-+            sigset_t block_mask;
-+            sigfillset(&block_mask);
-+            sigdelset(&block_mask, SIGSEGV);
-+            sigdelset(&block_mask, SIGBUS);
-+            sigdelset(&block_mask, SIGILL);
-+            sigdelset(&block_mask, SIGFPE);
-+            sigdelset(&block_mask, SIGABRT);
-+            sigdelset(&block_mask, SIGSYS);
-+            sigdelset(&block_mask, SIGTRAP);
-+            pthread_sigmask(SIG_BLOCK, &block_mask, nullptr);
-+
-             // thread to monitor explicit stop requests; child crash is signalled via child_proc->stopped
-             auto is_stopping = [this, &name]() {
-                 return this->stopping_models.find(name) != this->stopping_models.end();
-             };
-             {
-                 std::unique_lock<std::mutex> lk(this->mutex);
--                this->cv_stop.wait(lk, [&]() {
--                    return is_stopping() || child_proc->stopped.load(std::memory_order_acquire);
--                });
-+                // Use wait_for() instead of wait() to work around a Cosmopolitan
-+                // libc bug where untimed futex waits on XNU (macOS) expire after
-+                // ~72 minutes, causing condition_variable::wait() to throw ETIMEDOUT.
-+                while (!(is_stopping() || child_proc->stopped.load(std::memory_order_acquire))) {
-+                    this->cv_stop.wait_for(lk, std::chrono::seconds(30));
-+                }
+@@ -1283,14 +1316,20 @@ void server_models::unload_all() {
+         }
+     }
+     // wait for every child to exit, the monitor force-kills the ones that ignore the exit command
+-    cv.wait(lk, [this]() {
++    // Use wait_for() instead of wait() to work around a Cosmopolitan libc bug
++    // where untimed futex waits on XNU (macOS) expire after ~72 minutes,
++    // causing condition_variable::wait() to throw ETIMEDOUT.
++    auto all_stopped = [this]() {
+         for (const auto & [name, inst] : mapping) {
+             if (inst.meta.is_running() || inst.meta.status == SERVER_MODEL_STATUS_DOWNLOADING) {
+                 return false;
              }
-             // child crashed or finished on its own, skip graceful shutdown sequence
-             if (child_proc->stopped.load(std::memory_order_acquire)) {
-@@ -1310,16 +1344,22 @@ void server_models::wait(const std::string & name, std::function<bool(const serv
+         }
+         return true;
+-    });
++    };
++    while (!all_stopped()) {
++        cv.wait_for(lk, std::chrono::seconds(30));
++    }
+ }
+ 
+ void server_models::update_status(const std::string & name, const update_status_args & args) {
+@@ -1422,16 +1461,22 @@ void server_models::wait(const std::string & name, std::function<bool(const serv
  }
  
  void server_models::wait(std::unique_lock<std::mutex> & lk, const std::string & name, std::function<bool(const server_model_meta &)> predicate) {
@@ -129,7 +141,7 @@ diff --git a/tools/server/server-models.cpp b/tools/server/server-models.cpp
  }
  
  bool server_models::ensure_model_ready(const std::string & name, const std::function<bool()> & should_stop) {
-@@ -2347,10 +2387,10 @@ server_http_proxy::server_http_proxy(
+@@ -2448,10 +2493,10 @@ server_http_proxy::server_http_proxy(
      auto pipe = std::make_shared<server_pipe<msg_t>>();
  
      if (scheme == "https") {
