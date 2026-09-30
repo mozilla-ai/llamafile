@@ -57,20 +57,40 @@
 
 namespace agentfile {
 
+// Keys the server tools read out of params as settings (make_tools_io),
+// not as arguments, so they must never come from the model. llama-server
+// strips them in its HTTP handler before re-adding trusted values;
+// ServerToolAdapter::execute strips them the same way.
+inline constexpr const char *kServerToolControlKeys[] = {"runtime", "cwd",
+                                                         "resp_type"};
+
 // Tool-call arguments are model-controlled text headed for the terminal
-// (the confirmation prompt, the progress line). Show them re-serialized,
-// parsed as agent.cpp parses them for the tool: bytes between JSON tokens
-// (a '\r' that would return the cursor and overprint the command being
-// approved) are gone, and terminal_text escapes the controls JSON allows
-// inside strings. Text that is not valid JSON, and so will be refused
-// anyway, is shown escaped as it is.
+// (the confirmation prompt, the progress line). Show them as the tool
+// receives them: parsed as agent.cpp parses them, re-serialized (bytes
+// between JSON tokens, such as a '\r' that would return the cursor and
+// overprint the command being approved, are gone), with the control keys
+// stripped and named, so the prompt never shows a cwd or runtime that
+// will not apply. terminal_text escapes the controls JSON allows inside
+// strings. Text that is not valid JSON, and so will be refused anyway, is
+// shown escaped as it is.
 inline std::string printable_arguments(const std::string &arguments) {
     std::string text = arguments;
+    std::string note;
     try {
-        text = safe_json_to_str(nlohmann::json::parse(arguments));
+        auto args = nlohmann::json::parse(arguments);
+        if (args.is_object()) {
+            for (const char *key : kServerToolControlKeys) {
+                if (args.erase(key)) {
+                    note += (note.empty() ? " (ignored: " : ", ");
+                    note += key;
+                }
+            }
+            if (!note.empty()) note += ")";
+        }
+        text = safe_json_to_str(args);
     } catch (const std::exception &) {
     }
-    return terminal_text(text);
+    return terminal_text(text + note);
 }
 
 class ServerToolAdapter : public agent_cpp::Tool {
@@ -94,19 +114,12 @@ class ServerToolAdapter : public agent_cpp::Tool {
     }
 
     // agent.cpp speaks nlohmann::json, server tools speak ordered_json —
-    // convert at the boundary via dump/parse.
-    //
-    // NOTE: "runtime", "cwd" and "resp_type" are control keys the server tools
-    // read straight out of params (make_tools_io), not tool arguments, so
-    // they must never come from the model. llama-server strips them in its
-    // HTTP handler before re-adding trusted values; agentfile must apply
-    // the same kind of stripping here.
+    // convert at the boundary via dump/parse, and strip the control keys
+    // (kServerToolControlKeys) the model must not set.
     std::string execute(const nlohmann::json &arguments) override {
         auto params = nlohmann::ordered_json::parse(arguments.dump());
         if (params.is_object()) {
-            params.erase("runtime");
-            params.erase("cwd");
-            params.erase("resp_type");
+            for (const char *key : kServerToolControlKeys) params.erase(key);
         }
         if (!runtime_spec_.empty()) {
             params["runtime"] = runtime_spec_;
