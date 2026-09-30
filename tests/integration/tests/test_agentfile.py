@@ -254,6 +254,22 @@ def test_http_fetch_at_sign_stays_on_displayed_host(http_server, tmp_path):
     assert first.get("status") == 200, _dump(run)
 
 
+
+# std::stoi stopped at the first non-digit, so this URL connected to
+# 127.0.0.1 on the test server's port instead of being refused.
+def test_http_fetch_rejects_junk_after_port(http_server, tmp_path):
+    base, state = http_server
+    url = f"{base}.evil.invalid/"
+    run = run_agentfile(
+        f"Call http_fetch once with exactly this url, unchanged: {url} and report what happened.",
+        "http_fetch", tmp_path, extra=["--yes"])
+    fetches = run.results_for("http_fetch")
+    assert fetches, "model did not call http_fetch" + _dump(run)
+    first = json.loads(AgentRun.result_text(fetches[0]))
+    assert "invalid URL port" in first.get("error", ""), _dump(run)
+    assert not state.requests, f"a request reached the test server: {state.requests}" + _dump(run)
+
+
 # --- web_search -------------------------------------------------------------
 
 def test_web_search_snippet_cut_inside_utf8_char(http_server, tmp_path):
