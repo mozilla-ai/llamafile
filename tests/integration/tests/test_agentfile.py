@@ -148,10 +148,14 @@ def run_agentfile(prompt: str, tools: str, tmp_path: Path, extra=(), cwd=None) -
     # APE binaries need a shell launcher on macOS (kernel rejects the format).
     cmd = [*(["sh"] if os.name != "nt" else []), EXE, "-m", MODEL, "-p", prompt, "--tools", tools,
            "--session", str(session), "--no-think", *extra]
-    # No stdin and a new session (no controlling terminal): a confirmation
-    # prompt gets no answer instead of waiting on the keyboard.
+    # No stdin and no terminal, so a confirmation prompt gets no answer
+    # instead of waiting on the keyboard: a new session on POSIX; on Windows,
+    # where /dev/tty opens the console (CONIN$) and start_new_session is
+    # ignored, no console at all.
+    detach = ({"creationflags": subprocess.DETACHED_PROCESS} if os.name == "nt"
+              else {"start_new_session": True})
     proc = subprocess.run(cmd, capture_output=True, text=True, stdin=subprocess.DEVNULL,
-                          start_new_session=True, cwd=cwd or tmp_path, timeout=RUN_TIMEOUT)
+                          cwd=cwd or tmp_path, timeout=RUN_TIMEOUT, **detach)
     tool_calls, tool_results = [], []
     if session.exists():
         for line in session.read_text().splitlines():
