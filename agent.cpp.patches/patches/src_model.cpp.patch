@@ -336,7 +336,7 @@ diff --git a/src/model.cpp b/src/model.cpp
      // Tokenize the prompt
      std::vector<llama_token> prompt_tokens = tokenize(params.prompt);
      if (prompt_tokens.empty()) {
-@@ -281,8 +427,103 @@ Model::generate(const std::vector<common_chat_msg>& messages,
+@@ -281,8 +427,106 @@ Model::generate(const std::vector<common_chat_msg>& messages,
          parser_source_ = params.parser;
      }
  
@@ -353,6 +353,9 @@ diff --git a/src/model.cpp b/src/model.cpp
 +        // neither returned as the answer nor scanned for tool calls; the
 +        // recovery scan below may still lift tool calls out of the rest.
 +        LOG_WRN("[agent.cpp] %s; using heuristic recovery\n", e.what());
++        // common_log prints from a worker thread; flush so the warning
++        // lands before a confirmation prompt for a call recovered here.
++        common_log_flush(common_log_main());
 +        parse_error = e;
 +        parsed_msg.content = response;
 +        split_reasoning(params, parsed_msg);
@@ -442,7 +445,7 @@ diff --git a/src/model.cpp b/src/model.cpp
  }
  
  common_chat_msg
-@@ -311,10 +552,16 @@ Model::generate_from_tokens(const std::vector<llama_token>& all_tokens,
+@@ -311,10 +555,16 @@ Model::generate_from_tokens(const std::vector<llama_token>& all_tokens,
          common_prefix++;
      }
  
@@ -461,7 +464,7 @@ diff --git a/src/model.cpp b/src/model.cpp
          processed_tokens_.resize(common_prefix);
          n_past_ = common_prefix;
      }
-@@ -343,15 +590,15 @@ Model::generate_from_tokens(const std::vector<llama_token>& all_tokens,
+@@ -343,15 +593,15 @@ Model::generate_from_tokens(const std::vector<llama_token>& all_tokens,
          i += batch_size;
      }
  
