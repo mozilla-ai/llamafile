@@ -167,10 +167,12 @@ bool eval_string(std::string_view s, bool add_special, bool parse_special) {
     // Create bitmaps from decoded image data
     mtmd::bitmaps bitmaps;
     for (const auto &image : extraction.images) {
-        // init_from_buf now returns a wrapper {bitmap, video_ctx}; chatbot is
-        // image-only, so take the bitmap (placeholder=false loads real pixels).
+        // init_from_buf returns a wrapper {bitmap, video_ctx}; chatbot is
+        // image-only, so take the bitmap (placeholder=false loads real pixels)
+        // and the default opt (its video params go unused).
         mtmd::bitmap bmp(mtmd_helper_bitmap_init_from_buf(
-            g_mtmd, (const unsigned char *)image.data(), image.size(), false).bitmap);
+            g_mtmd, (const unsigned char *)image.data(), image.size(), false,
+            mtmd_helper_init_opt_default()).bitmap);
         if (!bmp.ptr) {
             err("failed to load image");
             return false;

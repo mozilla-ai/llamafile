@@ -9,7 +9,7 @@
 # Build process:
 #   1. Build vulkan-shaders-gen tool (C++17)
 #   2. Generate shader C++ files from GLSL compute shaders using glslc
-#   3. Compile ggml-vulkan.cpp with generated shaders
+#   3. Compile the ggml-vulkan backend sources with generated shaders
 #   4. Compile core GGML sources
 #   5. Link into ggml-vulkan.so
 #
@@ -192,7 +192,8 @@ echo ""
 FEATURES_STAMP="$BUILD_DIR/glslc-features.txt"
 if [ ! -f "$FEATURES_STAMP" ] || [ "$(cat "$FEATURES_STAMP" 2>/dev/null)" != "$GLSLC_DEFINES" ]; then
     echo "glslc feature set changed; clearing cached shader artifacts"
-    rm -f "$BUILD_DIR/vulkan-shaders-gen" "$BUILD_DIR/ggml-vulkan-shaders.hpp" "$BUILD_DIR/ggml-vulkan.o"
+    rm -f "$BUILD_DIR/vulkan-shaders-gen" "$BUILD_DIR/ggml-vulkan-shaders.hpp"
+    rm -f "$BUILD_DIR"/ggml-vulkan*.o
     rm -rf "$SHADERS_BUILD_DIR" "$SPVDIR"
     mkdir -p "$SHADERS_BUILD_DIR" "$SPVDIR"
     rm -f "$BUILD_DIR"/shader-*.o
@@ -324,23 +325,38 @@ echo "Waiting for shader C++ compilation to finish..."
 wait
 
 #
-# Phase 5: Compile ggml-vulkan.cpp
+# Phase 5: Compile the backend sources
+#
+# Since b11100 the backend is split over several translation units
+# (ggml-vulkan.cpp plus ggml-vulkan-buffers.cpp, ggml-vulkan-debug.cpp, ...),
+# so take every .cpp at the top of ggml-vulkan/ rather than naming one. The
+# shader generator under vulkan-shaders/ is built in phase 3 and excluded by
+# -maxdepth 1.
 #
 echo ""
-echo "Phase 5: Compiling ggml-vulkan.cpp..."
+echo "Phase 5: Compiling backend sources..."
 
-VULKAN_OBJ="$BUILD_DIR/ggml-vulkan.o"
-VULKAN_SRC="$GGML_VULKAN_DIR/ggml-vulkan.cpp"
+VULKAN_SRCS=$(find "$GGML_VULKAN_DIR" -maxdepth 1 -name "*.cpp" -type f | sort)
+if [ -z "$VULKAN_SRCS" ]; then
+    echo "Error: no backend sources found in $GGML_VULKAN_DIR"
+    exit 1
+fi
 
-if [ ! -f "$VULKAN_OBJ" ] || [ "$VULKAN_SRC" -nt "$VULKAN_OBJ" ] || [ "$SHADERS_HPP" -nt "$VULKAN_OBJ" ]; then
-    echo "  Compiling ggml-vulkan.cpp..."
+for src in $VULKAN_SRCS; do
+    base=$(basename "$src" .cpp)
+    obj="$BUILD_DIR/${base}.o"
+
+    if [ -f "$obj" ] && [ "$obj" -nt "$src" ] && [ "$obj" -nt "$SHADERS_HPP" ]; then
+        echo "  Skipping: $base (up to date)"
+        continue
+    fi
+
+    echo "  Compiling: $base"
     $CXX -c $CXX_FLAGS \
         -I$GGML_VULKAN_DIR \
         $SPIRV_INCLUDE \
-        -o "$VULKAN_OBJ" "$VULKAN_SRC"
-else
-    echo "  ggml-vulkan.o is up to date"
-fi
+        -o "$obj" "$src"
+done
 
 #
 # Phase 6: Compile core GGML sources

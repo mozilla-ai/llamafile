@@ -37,6 +37,27 @@ cp -r "$LLAMAFILE_FILES_DIR"/* .
 
 ../llama.cpp.patches/renames.sh
 
+# Generate the version headers that CMake's configure_file() produces. Since
+# b11100 ggml/src/ggml.c #includes "ggml-version.h" and src/llama.cpp #includes
+# "llama-version.h"; before that the same macros came from -D flags. They are
+# written next to their sources (rather than into o/) so that every consumer
+# finds them: the cosmocc make build, and llamafile/*.sh + *.bat, which compile
+# ggml.c with -I ggml/src.
+echo "Generating version headers..."
+ggml_version_major=$(grep -E 'GGML_VERSION_MAJOR [0-9]+' ggml/CMakeLists.txt | sed 's/[^0-9]*//g')
+ggml_version_minor=$(grep -E 'GGML_VERSION_MINOR [0-9]+' ggml/CMakeLists.txt | sed 's/[^0-9]*//g')
+ggml_version_patch=$(grep -E 'GGML_VERSION_PATCH [0-9]+' ggml/CMakeLists.txt | sed 's/[^0-9]*//g')
+ggml_commit=$(git rev-parse --short HEAD 2>/dev/null || echo "unknown")
+llama_version=$(git describe --tags --always 2>/dev/null || echo "unknown")
+
+sed -e "s/@GGML_VERSION@/${ggml_version_major}.${ggml_version_minor}.${ggml_version_patch}/g" \
+    -e "s/@GGML_BUILD_COMMIT@/${ggml_commit}/g" \
+    ggml/src/ggml-version.h.in > ggml/src/ggml-version.h
+
+sed -e "s/@LLAMA_VERSION@/${llama_version}/g" \
+    -e "s/@LLAMA_BUILD_COMMIT@/${ggml_commit}/g" \
+    src/llama-version.h.in > src/llama-version.h
+
 echo "Removing unnecessary files and directories..."
 # If you want to clean up the original code, add your `rm` commands here.
 # For example:

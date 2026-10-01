@@ -130,6 +130,11 @@ COMMON_FLAGS="\
 
 # Collect sources (TinyBLAS + GGML CUDA)
 collect_gpu_sources "$GGML_CUDA_DIR" "$BUILD_DIR/tinyblas.cu"
+
+# fattn.cu gates each K-V combination on a GGML_CUDA_FA_<K>_<V> macro that must
+# be defined for all of them; collect_gpu_sources derives them from the same
+# combination list it picked the template instances from.
+COMMON_FLAGS="$COMMON_FLAGS $CUDA_FA_DEFINES"
 echo "  Sources: $NUM_SOURCES .cu files"
 echo ""
 

@@ -70,23 +70,27 @@ build_gzip_mirror() {
     ( cd "$UI_DIST" && find . -type f ! -path './_gzip/*' -print0 \
         | while IFS= read -r -d '' f; do
             mkdir -p "_gzip/$(dirname "$f")"
-            gzip -9 -c "$f" > "_gzip/$f"
+            # -n: omit the timestamp, so identical assets give identical bytes
+            # (and therefore stable ETags) on every machine and every fetch.
+            gzip -9 -n -c "$f" > "_gzip/$f"
         done )
 }
 
-# Echo (one per line) any asset embed.cpp requires that is absent from the tree.
+# Echo (one per line) any asset the web UI needs at runtime that is absent from
+# the tree.
 #
-# !!! KEEP IN SYNC WITH UPSTREAM tools/ui/embed.cpp !!!
-# The list below mirrors the required_check[] table in llama.cpp/tools/ui/embed.cpp.
-# Once dist/ is non-empty, embed.cpp hard-fails the build (return 1) if any of
-# those assets is missing. If we only checked index.html here, a partial/drifted
-# tarball would pass our check but then abort the *entire* build at the embed
-# step instead of falling back to a UI-less build. So we validate the same set
-# embed.cpp does and, when it's incomplete, clear dist/ to take the UI-less path.
+# !!! KEEP IN SYNC WITH UPSTREAM scripts/ui-assets.cmake !!!
+# The list below mirrors ui_validate_assets() in llama.cpp/scripts/ui-assets.cmake,
+# which is upstream's definition of a complete asset tree. This is the only copy
+# of it on our side: ui-embed.sh embeds whatever it is given without validating,
+# so a partial or drifted tarball that slipped past this check would silently
+# produce a broken UI rather than a failed build. When the set is incomplete we
+# clear dist/ and take the UI-less path instead.
 #
-# embed.cpp is an UPSTREAM file, so it can change on a llama.cpp bump. When it
-# does (a new required asset, a renamed one), this list must be updated to match
-# -- otherwise the two checks disagree again and the build-failure bug returns.
+# ui-assets.cmake is an UPSTREAM file, so its list can change on a llama.cpp
+# bump. When it does (a new required asset, a renamed one), update this list to
+# match -- otherwise we accept a tree upstream considers incomplete, or reject
+# one it considers fine.
 ui_missing_assets() {
     local root="$1" f b
     local -a bases=()

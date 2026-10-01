@@ -241,9 +241,11 @@ int cli_main(int argc, char **argv) {
 
         // Load image bitmaps
         for (const auto &image_path : params.image) {
-            // init_from_file now returns a wrapper {bitmap, video_ctx}; chatbot
-            // is image-only, so take the bitmap (placeholder=false loads pixels).
-            mtmd::bitmap bmp(mtmd_helper_bitmap_init_from_file(mtmd_ctx, image_path.c_str(), false).bitmap);
+            // init_from_file returns a wrapper {bitmap, video_ctx}; chatbot is
+            // image-only, so take the bitmap (placeholder=false loads pixels)
+            // and the default opt (its video params go unused).
+            mtmd::bitmap bmp(mtmd_helper_bitmap_init_from_file(
+                mtmd_ctx, image_path.c_str(), false, mtmd_helper_init_opt_default()).bitmap);
             if (!bmp.ptr) {
                 fprintf(stderr, "error: failed to load image: %s\n", image_path.c_str());
                 cleanup(mtmd_ctx, sampler, ctx, model);
