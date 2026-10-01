@@ -16,8 +16,9 @@
 // limitations under the License.
 //
 // http_fetch: HTTP(S) GET built on llama.cpp's common_http_client.
-// Written as a server_tool (llama.cpp tools/server style) so it can be
-// offered upstream as-is; agentfile runs it through ServerToolAdapter.
+// Written as a server_tool (llama.cpp tools/server style), so agentfile
+// runs it through ServerToolAdapter like the upstream tools. It stays
+// here: llama.cpp keeps its server tools to minimal I/O and shell ones.
 //
 // Limits: GET only; body capped at 64 KB (the download stops there and the
 // result is marked truncated); 30s timeout;

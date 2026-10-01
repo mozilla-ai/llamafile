@@ -16,9 +16,9 @@
 // limitations under the License.
 //
 // web_search: query a SearXNG instance (https://docs.searxng.org) via its
-// JSON search API. Written as a server_tool (llama.cpp tools/server style)
-// so it can be offered upstream as-is; agentfile runs it through
-// ServerToolAdapter.
+// JSON search API. Written as a server_tool (llama.cpp tools/server style),
+// so agentfile runs it through ServerToolAdapter like the upstream tools.
+// It stays here: llama.cpp sends web search to MCP or its web UI.
 //
 // The instance base URL is deliberately NOT a tool argument — the model
 // must not choose where queries go. It comes from --searxng-url or the

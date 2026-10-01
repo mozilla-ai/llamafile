@@ -292,8 +292,7 @@ startup check naming the enabled tools that cannot work under it.
    vendored tool copies deleted — implementations now come from
    `llama.cpp/tools/server/server-tools.cpp` (gaining `get_info`,
    losing `apply_diff`, which upstream doesn't have). http_fetch and
-   web_search rewritten as `server_tool` subclasses (upstream-shaped,
-   foldable into llama.cpp by file move). Confirmations now driven by
+   web_search rewritten as `server_tool` subclasses (upstream-shaped). Confirmations now driven by
    the tools' own `permission_write` metadata instead of a hardcoded
    list. `--tools-runtime SPEC` plumbs the isolation spec in as
    `params["runtime"]` — the same mechanism llama-server's handler uses
@@ -331,8 +330,10 @@ startup check naming the enabled tools that cannot work under it.
 12. *(optional)* `--otlp-endpoint` live OTLP/HTTP-JSON export.
 
 Upstream PRs: agent.cpp patch 0002 is a strong candidate after the v0.4.0
-sync (composes with upstream #20); SearXNG web_search to llama.cpp
-server-tools deferred until the adapter proves out.
+sync (composes with upstream #20). web_search will not go to llama.cpp
+server-tools: since b11100 upstream keeps that list to minimal I/O and
+shell tools and sends web search, date/time and the like to MCP or the
+web UI.
 
 ## Strategy: tool layer & positioning (decided 2026-09-10)
 
@@ -355,10 +356,9 @@ Decisions:
    new tools, and `permission_write` (which replaces the hardcoded
    destructive-tools set in the confirmation callback).
 2. **Write agentfile-native tools as `server_tool` subclasses** (not
-   `agent_cpp::Tool`), so the adapter is the single bridge and folding a
-   tool upstream later is a file move, not a rewrite. web_search is the
-   first candidate; offering it upstream: **later**, after the adapter
-   proves out.
+   `agent_cpp::Tool`), so the adapter is the single bridge. They stay in
+   agentfile: since b11100 llama.cpp keeps its server tools to minimal
+   I/O and shell tools (web search, date/time go to MCP or the web UI).
 3. **API-drift posture**: accepted consciously — we can lock the pin or
    start vendoring at any moment if server-tools internals churn too hard.
 4. **agent.cpp: sync to v0.4.0 (63d23da)** — the delta beyond llama.cpp
