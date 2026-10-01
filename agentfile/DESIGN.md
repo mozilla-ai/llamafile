@@ -298,6 +298,9 @@ startup check naming the enabled tools that cannot work under it.
    list. `--tools-runtime SPEC` plumbs the isolation spec in as
    `params["runtime"]` — the same mechanism llama-server's handler uses
    (flag wired; not yet tested against a live podman/docker isolate).
+   llama.cpp b11100 moved `get_datetime` into its web UI (#27255);
+   agentfile keeps it as a native `server_tool` (`tools/get_datetime.h`,
+   same definition and output), since the CLI is the client there.
    json boundary note: server tools speak `nlohmann::ordered_json`,
    agent.cpp speaks `nlohmann::json`; the adapter converts via
    dump/parse. Links five extra server TUs (tools, common, queue, mcp,

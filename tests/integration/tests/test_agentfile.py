@@ -317,6 +317,16 @@ def test_tools_list_naming_nothing_is_rejected(tmp_path, spec):
     assert not run.tool_calls, _dump(run)
 
 
+
+# llama.cpp b11100 dropped get_datetime from its server tools, and the
+# read_only preset, which names it, then failed with "unknown tool".
+def test_read_only_preset_has_get_datetime(tmp_path):
+    run = run_agentfile("Use the get_datetime tool and tell me today's date.", "read_only", tmp_path)
+    assert run.proc.returncode == 0, _dump(run)
+    results = run.results_for("get_datetime")
+    assert results, "model did not call get_datetime" + _dump(run)
+    assert "result" in json.loads(AgentRun.result_text(results[0])), _dump(run)
+
 # --- --session --------------------------------------------------------------
 
 # The session recorder used a strict json dump(): a tool result with invalid

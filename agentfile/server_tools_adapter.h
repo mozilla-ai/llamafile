@@ -22,8 +22,9 @@
 //
 //   ServerToolAdapter  one agent_cpp::Tool wrapping one server_tool
 //   ServerToolbox      owns the upstream registry plus agentfile-native
-//                      tools (http_fetch, web_search) and hands out
-//                      adapters; must outlive the Agent using them
+//                      tools (get_datetime, http_fetch, web_search) and
+//                      hands out adapters; must outlive the Agent using
+//                      them
 //
 // Isolation: --tools-runtime makes tools run their file and shell
 // operations inside a sandbox instead of on the host. The spec string is
@@ -46,6 +47,7 @@
 #include "tool.h"
 #include "util.h"
 
+#include "tools/get_datetime.h"
 #include "tools/http_fetch.h"
 #include "tools/web_search.h"
 
@@ -178,6 +180,7 @@ class ServerToolbox {
                   const std::string &runtime_spec)
         : runtime_spec_(runtime_spec) {
         st_.setup({"all"}, mcp_, "");
+        st_.tools.push_back(std::make_unique<tools::GetDatetimeTool>());
         st_.tools.push_back(std::make_unique<tools::HttpFetchTool>());
         if (!searxng_url.empty()) {
             st_.tools.push_back(
