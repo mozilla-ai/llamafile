@@ -183,5 +183,5 @@ LocalScore is released under the [MIT License](LICENSE).
 ## Links
 
 - [Official Website](https://localscore.ai)
-- [GitHub Repository](localscore)
+- [GitHub Repository](https://github.com/mozilla-ai/llamafile/tree/main/localscore)
 - [Issue Tracker](https://github.com/Mozilla-Ocho/llamafile/issues)
