@@ -1,0 +1,240 @@
+// -*- mode:c++;indent-tabs-mode:nil;c-basic-offset:4;coding:utf-8 -*-
+// vi: set et ft=cpp ts=4 sts=4 sw=4 fenc=utf-8 :vi
+//
+// Copyright 2026 Mozilla.ai
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
+// Bridges llama.cpp's server tools (tools/server/server-tools.h) into
+// agent.cpp's Tool interface, so agentfile inherits the upstream tool
+// implementations — including new tools and the isolation runtimes —
+// instead of maintaining vendored copies.
+//
+//   ServerToolAdapter  one agent_cpp::Tool wrapping one server_tool
+//   ServerToolbox      owns the upstream registry plus agentfile-native
+//                      tools (get_datetime, http_fetch, web_search) and
+//                      hands out adapters; must outlive the Agent using
+//                      them
+//
+// Isolation: --tools-runtime makes tools run their file and shell
+// operations inside a sandbox instead of on the host. The spec string is
+// forwarded to every tool call as params["runtime"].
+//
+// Only sandboxes that already exist work here: start a container yourself,
+// then pass e.g. "docker-container:<name>". llama-server can additionally
+// CREATE a container on demand from a spec, but that creation logic is
+// private to llama.cpp (server-tools.cpp), so agentfile cannot reuse it.
+// Consequences: create-on-demand specs are unsupported, and a malformed
+// spec is only detected at the first tool call, not at startup.
+//
+
+#pragma once
+
+#include "server-tools.h"   // server_tool, server_tools
+#include "server-mcp.h"     // server_mcp (empty manager)
+
+#include "chat.h"
+#include "tool.h"
+#include "util.h"
+
+#include "tools/get_datetime.h"
+#include "tools/http_fetch.h"
+#include "tools/web_search.h"
+
+#include <map>
+#include <memory>
+#include <set>
+#include <string>
+#include <vector>
+
+namespace agentfile {
+
+// Keys the server tools read out of params as settings (make_tools_io),
+// not as arguments, so they must never come from the model. llama-server
+// strips them in its HTTP handler before re-adding trusted values;
+// ServerToolAdapter::execute strips them the same way.
+inline constexpr const char *kServerToolControlKeys[] = {"runtime", "cwd",
+                                                         "resp_type"};
+
+// Tool-call arguments are model-controlled text headed for the terminal
+// (the confirmation prompt, the progress line). Show them as the tool
+// receives them: parsed as agent.cpp parses them, re-serialized (bytes
+// between JSON tokens, such as a '\r' that would return the cursor and
+// overprint the command being approved, are gone), with the control keys
+// stripped and named, so the prompt never shows a cwd or runtime that
+// will not apply. A "url" also gets the scheme://host:port the http
+// client parses out of it, which is where the request goes even when the
+// text reads otherwise. terminal_text escapes the controls JSON allows
+// inside strings. Text that is not valid JSON, and so will be refused
+// anyway, is shown escaped as it is.
+inline std::string printable_arguments(const std::string &arguments) {
+    std::string text = arguments;
+    std::string note;
+    try {
+        // As execute() gets them: agent.cpp's parse, then the same
+        // dump/parse into the server tools' json.
+        auto args = json::parse(nlohmann::json::parse(arguments).dump());
+        if (args.is_object()) {
+            for (const char *key : kServerToolControlKeys) {
+                if (args.contains(key)) {
+                    args.erase(key);
+                    note += (note.empty() ? " (ignored: " : ", ");
+                    note += key;
+                }
+            }
+            if (!note.empty()) note += ")";
+            if (args.contains("url") && args.at("url").is_string()) {
+                try {
+                    auto parts = common_http_parse_url(
+                        args.at("url").get<std::string>());
+                    note += " (connects to " + parts.scheme + "://" +
+                            common_http_format_host(parts.host) + ":" +
+                            std::to_string(parts.port) + ")";
+                } catch (const std::exception &) {
+                    // http_fetch reports the bad URL itself.
+                }
+            }
+        }
+        text = safe_json_to_str(args);
+    } catch (const std::exception &) {
+    }
+    return terminal_text(text + note);
+}
+
+class ServerToolAdapter : public agent_cpp::Tool {
+    const server_tool *tool_;   // borrowed from ServerToolbox
+    std::string runtime_spec_;
+
+  public:
+    ServerToolAdapter(const server_tool *tool, std::string runtime_spec)
+        : tool_(tool), runtime_spec_(std::move(runtime_spec)) {}
+
+    std::string get_name() const override { return tool_->name; }
+
+    common_chat_tool get_definition() const override {
+        // server_tool definitions are OpenAI-shaped:
+        // {"type":"function","function":{name,description,parameters}}
+        json d = tool_->get_definition();
+        const json &f = d.at("function");
+        return {f.at("name").get<std::string>(),
+                f.at("description").get<std::string>(),
+                f.at("parameters").dump()};
+    }
+
+    // agent.cpp speaks nlohmann::json, server tools speak llama.cpp's json
+    // (common_json) — convert at the boundary via dump/parse, and strip the
+    // control keys (kServerToolControlKeys) the model must not set.
+    std::string execute(const nlohmann::json &arguments) override {
+        auto params = json::parse(arguments.dump());
+        if (params.is_object()) {
+            for (const char *key : kServerToolControlKeys) params.erase(key);
+        }
+        if (!runtime_spec_.empty()) {
+            params["runtime"] = runtime_spec_;
+        }
+        try {
+            auto result = tool_->invoke(std::move(params), nullptr);
+            // Server tools answer {"plain_text_response": text} on success
+            // and {"error": msg} on failure (tools/server/README-dev.md).
+            // Put the text itself (not the JSON wrapper) into the tool message,
+            // so the model sees plain text rather than escaped JSON.
+            if (result.is_object() && !result.contains("error") &&
+                result.contains("plain_text_response") &&
+                result.at("plain_text_response").is_string()) {
+                return result.at("plain_text_response").get<std::string>();
+            }
+            // safe_json_to_str: structured results can carry invalid UTF-8
+            // (http_fetch bodies, byte-truncated snippets); a strict dump()
+            // would throw and turn the result into an error.
+            return safe_json_to_str(result);
+        } catch (const std::exception &e) {
+            // Tools normally report failures as {"error": ...} themselves;
+            // this is the backstop for the ones that throw.
+            return safe_json_to_str(json{{"error", e.what()}});
+        }
+    }
+};
+
+class ServerToolbox {
+    server_mcp mcp_;   // default-constructed: no MCP servers
+    server_tools st_;
+    std::string runtime_spec_;
+    // Tools that exist but could not be registered, with the reason —
+    // shown by --tools validation and in the help text.
+    std::map<std::string, std::string> missing_;
+
+  public:
+    // searxng_url empty = web_search not registered.
+    // runtime_spec empty = tools run directly on the host.
+    ServerToolbox(const std::string &searxng_url,
+                  const std::string &runtime_spec)
+        : runtime_spec_(runtime_spec) {
+        st_.setup({"all"}, mcp_, "");
+        st_.tools.push_back(std::make_unique<tools::GetDatetimeTool>());
+        st_.tools.push_back(std::make_unique<tools::HttpFetchTool>());
+        if (!searxng_url.empty()) {
+            st_.tools.push_back(
+                std::make_unique<tools::WebSearchTool>(searxng_url));
+        } else {
+            missing_["web_search"] =
+                "requires a SearXNG instance: pass --searxng-url URL or "
+                "set SEARXNG_URL";
+        }
+    }
+
+    // name -> why it is not available in this configuration.
+    const std::map<std::string, std::string> &missing() const {
+        return missing_;
+    }
+
+    ServerToolbox(const ServerToolbox &) = delete;
+    ServerToolbox &operator=(const ServerToolbox &) = delete;
+
+    std::set<std::string> tool_names() const {
+        std::set<std::string> names;
+        for (const auto &t : st_.tools) names.insert(t->name);
+        return names;
+    }
+
+    // The tools in `keep` (empty = all), for both lists below.
+    std::vector<const server_tool *>
+    selected(const std::set<std::string> &keep) const {
+        std::vector<const server_tool *> out;
+        for (const auto &t : st_.tools)
+            if (keep.empty() || keep.count(t->name)) out.push_back(t.get());
+        return out;
+    }
+
+    // Tools in `keep` (empty = all) that mutate state or reach the network
+    // (permission_write) — these get a confirmation prompt unless --yes is
+    // given.
+    std::set<std::string>
+    write_tool_names(const std::set<std::string> &keep = {}) const {
+        std::set<std::string> names;
+        for (const server_tool *t : selected(keep))
+            if (t->permission_write) names.insert(t->name);
+        return names;
+    }
+
+    // Adapters for the tools in `keep` (empty = all). The toolbox must
+    // outlive the returned adapters.
+    std::vector<std::unique_ptr<agent_cpp::Tool>>
+    make_adapters(const std::set<std::string> &keep) const {
+        std::vector<std::unique_ptr<agent_cpp::Tool>> out;
+        for (const server_tool *t : selected(keep))
+            out.push_back(std::make_unique<ServerToolAdapter>(t, runtime_spec_));
+        return out;
+    }
+};
+
+} // namespace agentfile

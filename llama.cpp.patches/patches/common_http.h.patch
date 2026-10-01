@@ -1,7 +1,73 @@
 diff --git a/common/http.h b/common/http.h
 --- a/llama.cpp/common/http.h
 +++ b/llama.cpp/common/http.h
-@@ -104,7 +104,7 @@ static std::pair<httplib::Client, common_http_url> common_http_client(const std:
+@@ -40,10 +40,15 @@ static common_http_url common_http_parse_url(const std::string & url) {
+     }
+ 
+     auto rest = url.substr(scheme_end + 3);
+-    auto at_pos = rest.find('@');
++
++    // the authority ends at the first '/', '?' or '#' (RFC 3986), userinfo can only be inside it
++    auto auth_end  = rest.find_first_of("/?#");
++    auto authority = rest.substr(0, auth_end);
++    auto path      = auth_end == std::string::npos ? std::string() : rest.substr(auth_end);
++    auto at_pos    = authority.find('@');
+ 
+     if (at_pos != std::string::npos) {
+-        auto auth = rest.substr(0, at_pos);
++        auto auth = authority.substr(0, at_pos);
+         auto colon_pos = auth.find(':');
+         if (colon_pos != std::string::npos) {
+             parts.user = auth.substr(0, colon_pos);
+@@ -51,18 +56,14 @@ static common_http_url common_http_parse_url(const std::string & url) {
+         } else {
+             parts.user = auth;
+         }
+-        rest = rest.substr(at_pos + 1);
++        authority = authority.substr(at_pos + 1);
+     }
+ 
+-    auto slash_pos = rest.find('/');
++    parts.host = authority;
+ 
+-    if (slash_pos != std::string::npos) {
+-        parts.host = rest.substr(0, slash_pos);
+-        parts.path = rest.substr(slash_pos);
+-    } else {
+-        parts.host = rest;
+-        parts.path = "/";
+-    }
++    // the fragment is never sent, and a query right after the authority still needs the '/'
++    path = path.substr(0, path.find('#'));
++    parts.path = (path.empty() || path.front() != '/') ? "/" + path : path;
+ 
+     // split the authority into host and optional port, a bracketed IPv6 literal keeps its inner colons (RFC 3986)
+     std::string port_str;
+@@ -74,6 +75,8 @@ static common_http_url common_http_parse_url(const std::string & url) {
+         auto after = parts.host.substr(close + 1);
+         if (!after.empty() && after.front() == ':') {
+             port_str = after.substr(1);
++        } else if (!after.empty()) {
++            throw std::runtime_error("invalid IPv6 URL authority: " + parts.host);
+         }
+         parts.host = parts.host.substr(1, close - 1);
+     } else {
+@@ -85,7 +88,14 @@ static common_http_url common_http_parse_url(const std::string & url) {
+     }
+ 
+     if (!port_str.empty()) {
++        // digits only, so std::stoi can not stop early and ignore the rest
++        if (port_str.size() > 5 || port_str.find_first_not_of("0123456789") != std::string::npos) {
++            throw std::runtime_error("invalid URL port: " + port_str);
++        }
+         parts.port = std::stoi(port_str);
++        if (parts.port < 1 || parts.port > 65535) {
++            throw std::runtime_error("invalid URL port: " + port_str);
++        }
+     } else if (parts.scheme == "http") {
+         parts.port = 80;
+     } else if (parts.scheme == "https") {
+@@ -104,7 +114,7 @@ static std::pair<httplib::Client, common_http_url> common_http_client(const std:
          throw std::runtime_error("error: invalid URL format");
      }
  

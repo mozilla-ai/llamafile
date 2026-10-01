@@ -43,10 +43,9 @@ static bool is_llamafile_flag(const char* arg) {
 }
 
 // llama.cpp b11100 replaced --mmap/--no-mmap/--mlock/-dio/-ndio with
-// --load-mode and now rejects them, which would break existing llamafiles
-// whose .args still use them. They are dropped here and one equivalent
-// "--load-mode <mode>" is inserted where the last of them was, so an
-// explicit --load-mode keeps working and the last flag wins, as upstream.
+// --load-mode and now rejects them. If they are still provided as input,
+// the following code takes care of translating them into equivalent
+// "--load-mode <mode>".
 //
 // The mode follows the original semantics, where the flags were independent
 // settings: mmap on by default, --mlock adds locking to it (mmap+mlock, not
