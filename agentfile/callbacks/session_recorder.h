@@ -33,12 +33,11 @@
 #include "callbacks.h"
 #include "tool_result.h"
 
-#include "server-common.h"  // safe_json_to_str
+#include "server-common.h"  // json, safe_json_to_str
 #include "util.h"
 
 #include <cstdio>
 #include <deque>
-#include <nlohmann/json.hpp>
 #include <stdexcept>
 #include <string>
 #include <unistd.h>
@@ -47,7 +46,6 @@
 namespace agentfile {
 
 class SessionRecorderCallback : public agent_cpp::Callback {
-    using json = nlohmann::ordered_json;  // what safe_json_to_str takes
 
     FILE *file_;
     std::string model_name_;

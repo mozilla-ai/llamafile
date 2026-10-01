@@ -154,7 +154,7 @@ struct WebSearchTool : server_tool {
                 {"query", query},
                 {"results", results},
             };
-        } catch (const json::exception &e) {
+        } catch (const common_json_error &e) {
             return {{"error",
                      std::string("SearXNG returned unparseable JSON: ") +
                          e.what()}};

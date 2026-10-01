@@ -79,19 +79,22 @@ inline std::string printable_arguments(const std::string &arguments) {
     std::string text = arguments;
     std::string note;
     try {
-        auto args = nlohmann::json::parse(arguments);
+        // As execute() gets them: agent.cpp's parse, then the same
+        // dump/parse into the server tools' json.
+        auto args = json::parse(nlohmann::json::parse(arguments).dump());
         if (args.is_object()) {
             for (const char *key : kServerToolControlKeys) {
-                if (args.erase(key)) {
+                if (args.contains(key)) {
+                    args.erase(key);
                     note += (note.empty() ? " (ignored: " : ", ");
                     note += key;
                 }
             }
             if (!note.empty()) note += ")";
-            auto url = args.find("url");
-            if (url != args.end() && url->is_string()) {
+            if (args.contains("url") && args.at("url").is_string()) {
                 try {
-                    auto parts = common_http_parse_url(url->get<std::string>());
+                    auto parts = common_http_parse_url(
+                        args.at("url").get<std::string>());
                     note += " (connects to " + parts.scheme + "://" +
                             common_http_format_host(parts.host) + ":" +
                             std::to_string(parts.port) + ")";
@@ -119,18 +122,18 @@ class ServerToolAdapter : public agent_cpp::Tool {
     common_chat_tool get_definition() const override {
         // server_tool definitions are OpenAI-shaped:
         // {"type":"function","function":{name,description,parameters}}
-        nlohmann::ordered_json d = tool_->get_definition();
-        const nlohmann::ordered_json &f = d.at("function");
+        json d = tool_->get_definition();
+        const json &f = d.at("function");
         return {f.at("name").get<std::string>(),
                 f.at("description").get<std::string>(),
                 f.at("parameters").dump()};
     }
 
-    // agent.cpp speaks nlohmann::json, server tools speak ordered_json —
-    // convert at the boundary via dump/parse, and strip the control keys
-    // (kServerToolControlKeys) the model must not set.
+    // agent.cpp speaks nlohmann::json, server tools speak llama.cpp's json
+    // (common_json) — convert at the boundary via dump/parse, and strip the
+    // control keys (kServerToolControlKeys) the model must not set.
     std::string execute(const nlohmann::json &arguments) override {
-        auto params = nlohmann::ordered_json::parse(arguments.dump());
+        auto params = json::parse(arguments.dump());
         if (params.is_object()) {
             for (const char *key : kServerToolControlKeys) params.erase(key);
         }
@@ -143,11 +146,10 @@ class ServerToolAdapter : public agent_cpp::Tool {
             // and {"error": msg} on failure (tools/server/README-dev.md).
             // Put the text itself (not the JSON wrapper) into the tool message,
             // so the model sees plain text rather than escaped JSON.
-            if (result.is_object() && !result.contains("error")) {
-                auto it = result.find("plain_text_response");
-                if (it != result.end() && it->is_string()) {
-                    return it->get<std::string>();
-                }
+            if (result.is_object() && !result.contains("error") &&
+                result.contains("plain_text_response") &&
+                result.at("plain_text_response").is_string()) {
+                return result.at("plain_text_response").get<std::string>();
             }
             // safe_json_to_str: structured results can carry invalid UTF-8
             // (http_fetch bodies, byte-truncated snippets); a strict dump()
@@ -156,8 +158,7 @@ class ServerToolAdapter : public agent_cpp::Tool {
         } catch (const std::exception &e) {
             // Tools normally report failures as {"error": ...} themselves;
             // this is the backstop for the ones that throw.
-            return safe_json_to_str(
-                nlohmann::ordered_json{{"error", e.what()}});
+            return safe_json_to_str(json{{"error", e.what()}});
         }
     }
 };

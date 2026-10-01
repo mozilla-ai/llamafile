@@ -37,11 +37,10 @@
 #include "callbacks.h"
 #include "tool_result.h"
 
-#include "server-common.h"  // safe_json_to_str
+#include "server-common.h"  // json, safe_json_to_str
 #include "util.h"
 
 #include <cstdio>
-#include <nlohmann/json.hpp>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -49,7 +48,6 @@
 namespace agentfile {
 
 class OtlpTraceCallback : public agent_cpp::Callback {
-    using json = nlohmann::ordered_json;  // what safe_json_to_str takes
 
     struct OpenSpan {
         std::string span_id;

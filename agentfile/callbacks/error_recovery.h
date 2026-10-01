@@ -31,9 +31,8 @@
 #include "error.h"
 #include "tool_result.h"
 
-#include "server-common.h"  // safe_json_to_str
+#include "server-common.h"  // json, safe_json_to_str
 
-#include <nlohmann/json.hpp>
 #include <string>
 #include <vector>
 
@@ -57,9 +56,8 @@ class ErrorRecoveryCallback : public agent_cpp::Callback {
     void before_llm_call(std::vector<common_chat_msg> &messages) override {
         for (auto &msg : messages) {
             for (auto &tc : msg.tool_calls) {
-                if (!nlohmann::ordered_json::accept(tc.arguments)) {
-                    tc.arguments =
-                        safe_json_to_str(nlohmann::ordered_json(tc.arguments));
+                if (json::parse_no_throw(tc.arguments).is_discarded()) {
+                    tc.arguments = safe_json_to_str(json(tc.arguments));
                 }
             }
         }
@@ -77,7 +75,7 @@ class ErrorRecoveryCallback : public agent_cpp::Callback {
                                    " failed tool calls in a row; last: " +
                                    result.error().message);
         }
-        nlohmann::ordered_json err = {
+        json err = {
             {"error", true},
             {"tool", tool_name},
             {"message", result.error().message},
