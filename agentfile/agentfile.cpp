@@ -37,10 +37,6 @@
 #include <unistd.h>
 #include <vector>
 
-#ifdef COSMOCC
-#include <cosmo.h>
-#endif
-
 #include "llama.h"
 #include "chat.h"
 #include "log.h"
@@ -62,6 +58,12 @@
 #include "server_tools_adapter.h"
 
 #include <sstream>
+
+// Last, as in llama-server's server.cpp: cosmo.h defines a defer() macro
+// that breaks server_queue::defer() in server-queue.h.
+#ifdef COSMOCC
+#include <cosmo.h>
+#endif
 
 namespace {
 

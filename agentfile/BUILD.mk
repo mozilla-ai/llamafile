@@ -73,8 +73,11 @@ AGENTFILE_INCLUDES := \
 # Compiler flags
 # ==============================================================================
 
+# COSMOCC enables the cosmo_args("/zip/.args") call in agentfile.cpp, as in
+# llamafile/BUILD.mk; cosmocc itself only predefines __COSMOCC__.
 AGENTFILE_CPPFLAGS := $(AGENTFILE_INCLUDES) \
-	-DLLAMAFILE_VERSION_STRING=\"$(LLAMAFILE_VERSION_STRING)\"
+	-DLLAMAFILE_VERSION_STRING=\"$(LLAMAFILE_VERSION_STRING)\" \
+	-DCOSMOCC=1
 
 # cpp-httplib is built with its Mbed TLS backend (see the HTTPS section in
 # llama.cpp.patches/llamafile-files/BUILD.mk). The macro changes httplib
