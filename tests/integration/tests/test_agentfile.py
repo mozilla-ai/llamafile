@@ -539,8 +539,9 @@ def test_default_verbosity_has_progress_not_audit(tmp_path):
 def test_guarded_call_without_terminal_ends_run(tmp_path):
     run = run_agentfile(WRITE_PROMPT, "write_file", tmp_path)
     assert run.proc.returncode == 2, _dump(run)
-    assert "cannot confirm write_file" in run.proc.stderr, _dump(run)
-    assert run.proc.stderr.count("Allow? [y/N]") == 1, _dump(run)
+    assert run.proc.stderr.count("cannot confirm write_file") == 1, _dump(run)
+    # Nothing to ask on, so no question nobody can answer.
+    assert "Allow? [y/N]" not in run.proc.stderr, _dump(run)
     assert not (tmp_path / "note.txt").exists(), _dump(run)
 
 
