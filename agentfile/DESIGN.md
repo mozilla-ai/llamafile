@@ -134,10 +134,16 @@ of it could go upstream:
   args` audit record per destructive call.
 - Default: a progress line before and after each tool call; `--think`
   reasoning, dimmed.
-- `-v`: also truncated tool results, and llama.cpp's `common_log`
-  warnings (such as a reply the chat parser refused). Those can quote
-  model output and `common_log` prints them unescaped, hence only on
-  request.
+- `-v`: also truncated tool results; llama.cpp's own warnings and errors
+  (`llama_log`: why a model fails to load); and `common_log` warnings
+  (such as a reply the chat parser refused). `common_log` warnings can
+  quote model output and are printed unescaped, hence only on request;
+  the `llama_log` lines go through agentfile's callback and are escaped.
+- `-vv`: also llama.cpp's info log (model metadata), and everything the
+  GPU backends log. Those are DSOs that call log callbacks from native
+  code, where only llamafile's no-op callback is safe, so they cannot be
+  filtered: silent below `-vv`, their own unescaped logger at `-vv`.
+  `common_log` info stays off: it prints to stdout, where the answer goes.
 
 Model and tool text on stderr goes through `terminal_text`: under `--yes`
 these lines are the only record of a call.

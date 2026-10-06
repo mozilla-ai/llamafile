@@ -162,10 +162,11 @@ class AgentRun:
         return "".join(c.get("text", "") for c in r.get("content", []))
 
 
-def run_agentfile(prompt: str, tools: str, tmp_path: Path, extra=(), cwd=None) -> AgentRun:
+def run_agentfile(prompt: str, tools: str, tmp_path: Path, extra=(), cwd=None,
+                  model=None) -> AgentRun:
     session = tmp_path / "session.jsonl"
     # APE binaries need a shell launcher on macOS (kernel rejects the format).
-    cmd = [*(["sh"] if os.name != "nt" else []), EXE, "-m", MODEL, "-p", prompt, "--tools", tools,
+    cmd = [*(["sh"] if os.name != "nt" else []), EXE, "-m", model or MODEL, "-p", prompt, "--tools", tools,
            "--session", str(session), "--no-think", *extra]
     # No stdin and no terminal, so a confirmation prompt gets no answer
     # instead of waiting on the keyboard: a new session on POSIX; on Windows,
@@ -478,6 +479,33 @@ def test_unwritable_record_path_fails_before_load(tmp_path, flag):
     run = run_agentfile("hi", "read_only", tmp_path, extra=[flag, path])
     assert run.proc.returncode == 1, _dump(run)
     assert f"{flag}: cannot write {path}" in run.proc.stderr, _dump(run)
+
+
+# --- -v / -vv ---------------------------------------------------------------
+
+# llama.cpp's own log was silenced at every verbosity, so -v could not show
+# why a model failed to load.
+def test_verbose_shows_model_load_error(tmp_path):
+    bad = tmp_path / "bad.gguf"
+    bad.write_bytes(b"not a gguf file\n" * 64)
+    default = run_agentfile("hi", "read_only", tmp_path, model=str(bad))
+    verbose = run_agentfile("hi", "read_only", tmp_path, model=str(bad), extra=["-v"])
+    for run in (default, verbose):
+        assert run.proc.returncode == 2, _dump(run)
+        assert "unable to load model" in run.proc.stderr, _dump(run)
+    assert "error loading model" not in default.proc.stderr, _dump(default)
+    assert "llama_model_load: error loading model" in verbose.proc.stderr, _dump(verbose)
+
+
+def test_very_verbose_shows_llama_info_log(tmp_path):
+    marker = "llama_model_loader: loaded meta data"
+    verbose = run_agentfile("Reply with OK.", "read_only", tmp_path, extra=["-v"])
+    very = run_agentfile("Reply with OK.", "read_only", tmp_path, extra=["-vv"])
+    for run in (verbose, very):
+        assert run.proc.returncode == 0, _dump(run)
+        assert marker not in run.proc.stdout, "log output on stdout" + _dump(run)
+    assert marker not in verbose.proc.stderr, _dump(verbose)
+    assert marker in very.proc.stderr, _dump(very)
 
 
 # --- --quiet --yes audit ----------------------------------------------------

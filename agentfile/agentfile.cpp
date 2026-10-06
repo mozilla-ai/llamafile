@@ -73,7 +73,24 @@ namespace {
 // roughly 16-24k tokens) plus history fits comfortably.
 constexpr int kDefaultCtx = 32 * 1024;
 
-void null_log_callback(ggml_log_level, const char *, void *) {}
+// Lowest llama.cpp / ggml log level that reaches stderr: -v shows warnings
+// and errors, -vv also info. Above GGML_LOG_LEVEL_ERROR (the default) is
+// silent.
+int g_llama_log_min = GGML_LOG_LEVEL_ERROR + 1;
+
+// For llama_log_set. CONT carries on the previous message (a line printed
+// in pieces, the loading dots), so it takes that message's level. GGUF
+// metadata strings pass through here, so the text is escaped.
+void llama_log_to_stderr(ggml_log_level level, const char *text, void *) {
+    static thread_local ggml_log_level last = GGML_LOG_LEVEL_NONE;
+    if (level == GGML_LOG_LEVEL_CONT)
+        level = last;
+    else
+        last = level;
+    if (level >= g_llama_log_min && level <= GGML_LOG_LEVEL_ERROR)
+        fputs(agentfile::terminal_text(text, /*keep_newlines=*/true).c_str(),
+              stderr);
+}
 
 // The tools section of the help is generated from the toolbox so it can't
 // drift from the registered tools. searxng_url is the one parsed so far
@@ -156,8 +173,12 @@ void print_usage(const char *prog, const std::string &searxng_url) {
             "  --quiet              Don't print tool-execution progress to stderr\n"
             "                       (destructive tools run under --yes are still\n"
             "                       logged, one line each)\n"
-            "  -v, --verbose        Also print truncated tool results and\n"
-            "                       llama.cpp warnings (unescaped) to stderr\n"
+            "  -v, --verbose        Also print truncated tool results, and\n"
+            "                       llama.cpp warnings and errors (such as why a\n"
+            "                       model fails to load) to stderr; chat parser\n"
+            "                       warnings come unescaped\n"
+            "  -vv                  Like -v, plus llama.cpp's info log (model\n"
+            "                       metadata, GPU setup)\n"
             "  -h                   Show this help\n"
             "\n",
             prog, prog, kDefaultCtx);
@@ -255,7 +276,7 @@ int main(int argc, char **argv) {
     bool interactive = false;
     bool think = false;
     int n_ctx = kDefaultCtx; // tokens; 0 = model native
-    int verbosity = 1;       // 0 = --quiet, 1 = default, 2 = --verbose
+    int verbosity = 1;       // 0 = --quiet, 1 = default, 2 = -v, 3 = -vv
     int max_iterations = 0;  // 0 = no cap
     std::string tools_spec = "all";
     std::string session_path;
@@ -345,6 +366,8 @@ int main(int argc, char **argv) {
         } else if (std::strcmp(argv[i], "-v") == 0 ||
                    std::strcmp(argv[i], "--verbose") == 0) {
             verbosity = 2;
+        } else if (std::strcmp(argv[i], "-vv") == 0) {
+            verbosity = 3;
         } else if (std::strcmp(argv[i], "--max-iterations") == 0) {
             max_iterations = need_count(i);
         } else if (std::strcmp(argv[i], "-h") == 0 ||
@@ -385,18 +408,29 @@ int main(int argc, char **argv) {
         }
     }
 
-    // Silence llama.cpp / ggml logging before backend init. GPU backends are
-    // runtime-loaded DSOs with their own copy of ggml's logger, so the
-    // llamafile_*_log_set hooks must silence each one separately (they queue
-    // the callback if the backend isn't loaded yet).
-    llama_log_set(null_log_callback, nullptr);
-    llamafile_metal_log_set(llamafile_log_callback_null, nullptr);
-    llamafile_cuda_log_set(llamafile_log_callback_null, nullptr);
-    llamafile_vulkan_log_set(llamafile_log_callback_null, nullptr);
+    // Route llama.cpp / ggml logging before backend init: silent unless -v
+    // or -vv.
+    if (verbosity >= 2) {
+        g_llama_log_min =
+            verbosity >= 3 ? GGML_LOG_LEVEL_INFO : GGML_LOG_LEVEL_WARN;
+    }
+    llama_log_set(llama_log_to_stderr, nullptr);
+    // GPU backends are runtime-loaded DSOs with their own copy of ggml's
+    // logger. They call a callback from native code (with the MS ABI on
+    // Windows), where only the no-op is safe: a callback that does any work
+    // crashes. So they stay silent below -vv and print through their own
+    // logger at -vv, as llamafile --verbose does. The llamafile_*_log_set
+    // hooks queue the callback if the backend isn't loaded yet.
+    if (verbosity < 3) {
+        llamafile_metal_log_set(llamafile_log_callback_null, nullptr);
+        llamafile_cuda_log_set(llamafile_log_callback_null, nullptr);
+        llamafile_vulkan_log_set(llamafile_log_callback_null, nullptr);
+    }
     // llama.cpp common (and agent.cpp) warnings, e.g. a model reply the
     // chat parser refused, go through common_log instead. They can quote
     // model output, which common_log prints unescaped, so only -v shows
-    // them; errors always show.
+    // them; errors always show. Its info level stays off even under -vv:
+    // common_log prints info to stdout, where the answer goes.
     if (verbosity < 2)
         common_log_set_verbosity_thold(LOG_LEVEL_ERROR);
 
