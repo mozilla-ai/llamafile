@@ -26,16 +26,14 @@
 //                      hands out adapters; must outlive the Agent using
 //                      them
 //
-// Isolation: --tools-runtime makes tools run their file and shell
-// operations inside a sandbox instead of on the host. The spec string is
-// forwarded to every tool call as params["runtime"].
-//
-// Only sandboxes that already exist work here: start a container yourself,
-// then pass e.g. "docker-container:<name>". llama-server can additionally
-// CREATE a container on demand from a spec, but that creation logic is
-// private to llama.cpp (server-tools.cpp), so agentfile cannot reuse it.
-// Consequences: create-on-demand specs are unsupported, and a malformed
-// spec is only detected at the first tool call, not at startup.
+// Every call goes through server_tools::handle_post, the handler behind
+// llama-server's POST /tools, so the call handling stays upstream's: it
+// drops the keys the model must not set (cwd, runtime, resp_type), runs
+// the tool in the --tools-runtime isolate, and turns exceptions into
+// error responses. --tools-runtime takes llama-server's specs and is
+// checked at startup: "docker-container:ID" attaches to a running
+// container, "docker:IMAGE" starts one and stops it on exit (podman
+// likewise), "ssh:TARGET" runs on a remote host.
 //
 
 #pragma once
@@ -51,6 +49,7 @@
 #include "tools/http_fetch.h"
 #include "tools/web_search.h"
 
+#include <functional>
 #include <map>
 #include <memory>
 #include <set>
@@ -59,10 +58,9 @@
 
 namespace agentfile {
 
-// Keys the server tools read out of params as settings (make_tools_io),
-// not as arguments, so they must never come from the model. llama-server
-// strips them in its HTTP handler before re-adding trusted values;
-// ServerToolAdapter::execute strips them the same way.
+// Keys the server tools read out of params as settings, not arguments.
+// handle_post drops them from the model's arguments; this copy only names
+// them in the confirmation prompt.
 inline constexpr const char *kServerToolControlKeys[] = {"runtime", "cwd",
                                                          "resp_type"};
 
@@ -81,7 +79,7 @@ inline std::string printable_arguments(const std::string &arguments) {
     std::string text = arguments;
     std::string note;
     try {
-        // As execute() gets them: agent.cpp's parse, then the same
+        // As handle_post gets them: agent.cpp's parse, then the same
         // dump/parse into the server tools' json.
         auto args = json::parse(nlohmann::json::parse(arguments).dump());
         if (args.is_object()) {
@@ -112,12 +110,14 @@ inline std::string printable_arguments(const std::string &arguments) {
 }
 
 class ServerToolAdapter : public agent_cpp::Tool {
-    const server_tool *tool_;   // borrowed from ServerToolbox
-    std::string runtime_spec_;
+    // Both borrowed from ServerToolbox.
+    const server_tool *tool_;
+    const server_http_context::handler_t &handle_post_;
 
   public:
-    ServerToolAdapter(const server_tool *tool, std::string runtime_spec)
-        : tool_(tool), runtime_spec_(std::move(runtime_spec)) {}
+    ServerToolAdapter(const server_tool *tool,
+                      const server_http_context::handler_t &handle_post)
+        : tool_(tool), handle_post_(handle_post) {}
 
     std::string get_name() const override { return tool_->name; }
 
@@ -132,54 +132,51 @@ class ServerToolAdapter : public agent_cpp::Tool {
     }
 
     // agent.cpp speaks nlohmann::json, server tools speak llama.cpp's json
-    // (common_json) — convert at the boundary via dump/parse, and strip the
-    // control keys (kServerToolControlKeys) the model must not set.
+    // (common_json): the request body is the boundary between them.
     std::string execute(const nlohmann::json &arguments) override {
-        auto params = json::parse(arguments.dump());
-        if (params.is_object()) {
-            for (const char *key : kServerToolControlKeys) params.erase(key);
+        static const std::function<bool()> never_stop = [] { return false; };
+        json body = {{"tool", tool_->name},
+                     {"params", json::parse(arguments.dump())}};
+        server_http_req req{.body = body.dump(), .should_stop = never_stop};
+        auto res = handle_post_(req);
+        // The handler serializes with safe_json_to_str, which also replaces
+        // invalid UTF-8 (a Latin-1 file, a byte-truncated snippet).
+        json result = json::parse(res->data);
+        if (res->status != 200) {
+            // A thrown exception, as format_error_response shapes it: hand
+            // the model the {"error": msg} shape the tools use themselves.
+            return safe_json_to_str(
+                json{{"error", json_value(result, "message", res->data)}});
         }
-        if (!runtime_spec_.empty()) {
-            params["runtime"] = runtime_spec_;
+        // Server tools answer {"plain_text_response": text} on success and
+        // {"error": msg} on failure (tools/server/README-dev.md). Put the
+        // text itself (not the JSON wrapper) into the tool message, so the
+        // model sees plain text rather than escaped JSON.
+        if (result.is_object() && !result.contains("error") &&
+            result.contains("plain_text_response") &&
+            result.at("plain_text_response").is_string()) {
+            return result.at("plain_text_response").get<std::string>();
         }
-        try {
-            auto result = tool_->invoke(std::move(params), nullptr);
-            // Server tools answer {"plain_text_response": text} on success
-            // and {"error": msg} on failure (tools/server/README-dev.md).
-            // Put the text itself (not the JSON wrapper) into the tool message,
-            // so the model sees plain text rather than escaped JSON.
-            if (result.is_object() && !result.contains("error") &&
-                result.contains("plain_text_response") &&
-                result.at("plain_text_response").is_string()) {
-                return result.at("plain_text_response").get<std::string>();
-            }
-            // safe_json_to_str: structured results can carry invalid UTF-8
-            // (http_fetch bodies, byte-truncated snippets); a strict dump()
-            // would throw and turn the result into an error.
-            return safe_json_to_str(result);
-        } catch (const std::exception &e) {
-            // Tools normally report failures as {"error": ...} themselves;
-            // this is the backstop for the ones that throw.
-            return safe_json_to_str(json{{"error", e.what()}});
-        }
+        return res->data;
     }
 };
 
 class ServerToolbox {
     server_mcp mcp_;   // default-constructed: no MCP servers
     server_tools st_;
-    std::string runtime_spec_;
     // Tools that exist but could not be registered, with the reason —
     // shown by --tools validation and in the help text.
     std::map<std::string, std::string> missing_;
 
   public:
     // searxng_url empty = web_search not registered.
-    // runtime_spec empty = tools run directly on the host.
+    // runtime_spec empty = tools run directly on the host; otherwise a
+    // --tools-runtime spec, which setup() checks (throws if invalid) and,
+    // for "docker:IMAGE", starts a container that lives as long as the
+    // toolbox.
     ServerToolbox(const std::string &searxng_url,
-                  const std::string &runtime_spec)
-        : runtime_spec_(runtime_spec) {
-        st_.setup({"all"}, mcp_, "");
+                  const std::string &runtime_spec) {
+        st_.setup({"all"}, mcp_, runtime_spec);
         st_.tools.push_back(std::make_unique<tools::GetDatetimeTool>());
         st_.tools.push_back(std::make_unique<tools::HttpFetchTool>());
         if (!searxng_url.empty()) {
@@ -224,8 +221,8 @@ class ServerToolbox {
         std::vector<std::unique_ptr<agent_cpp::Tool>> out;
         for (const auto &t : st_.tools)
             if (names.count(t->name))
-                out.push_back(
-                    std::make_unique<ServerToolAdapter>(t.get(), runtime_spec_));
+                out.push_back(std::make_unique<ServerToolAdapter>(
+                    t.get(), st_.handle_post));
         return out;
     }
 };

@@ -369,6 +369,15 @@ def test_tools_list_naming_nothing_is_rejected(tmp_path, spec):
 
 
 
+# --tools-runtime specs went unchecked until the first tool call; llama.cpp's
+# server_tools::setup now checks them at startup.
+def test_bad_tools_runtime_fails_at_startup(tmp_path):
+    run = run_agentfile("hi", "read_only", tmp_path, extra=["--tools-runtime", "bogus:x"])
+    assert run.proc.returncode == 3, _dump(run)
+    assert "unknown tool runtime: bogus:x" in run.proc.stderr, _dump(run)
+    assert not run.tool_calls, _dump(run)
+
+
 # llama.cpp b11100 dropped get_datetime from its server tools, and the
 # read_only preset, which names it, then failed with "unknown tool".
 def test_read_only_preset_has_get_datetime(tmp_path):

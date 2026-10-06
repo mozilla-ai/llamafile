@@ -103,10 +103,12 @@ void print_tools_help(const std::string &searxng_url) {
         fprintf(stderr,
                 "  --searxng-url URL    SearXNG instance used by web_search;\n"
                 "                       also read from SEARXNG_URL\n"
-                "  --tools-runtime SPEC Run tools inside an existing container,\n"
-                "                       e.g. \"docker-container:NAME\" (default: this\n"
-                "                       host). http_fetch and web_search still connect\n"
-                "                       from this host.\n"
+                "  --tools-runtime SPEC Run tools in an isolate, as llama-server does\n"
+                "                       (default: this host): \"docker-container:ID\"\n"
+                "                       (a running container), \"docker:IMAGE\" (started\n"
+                "                       here, stopped on exit; podman likewise) or\n"
+                "                       \"ssh:TARGET\". http_fetch and web_search still\n"
+                "                       connect from this host.\n"
                 "  Tools run with this process's permissions; agentfile does not\n"
                 "  sandbox itself. The confirmation prompt is the only gate (--yes\n"
                 "  removes it); use --tools-runtime for isolation.\n");
@@ -377,13 +379,14 @@ int main(int argc, char **argv) {
 
     try {
         // Build and validate the toolset before loading the model, so a bad
-        // --tools value fails fast. A requested tool that isn't registered
-        // is an error, not a silently smaller toolset — the model would
-        // otherwise improvise with whatever tools remain.
+        // --tools or --tools-runtime value fails fast. A requested tool
+        // that isn't registered is an error, not a silently smaller
+        // toolset — the model would otherwise improvise with whatever
+        // tools remain.
         //
         // Tools come from llama.cpp's server-tools registry via
-        // ServerToolbox (plus agentfile's own http_fetch/web_search); the
-        // toolbox owns them and must outlive the Agent below.
+        // ServerToolbox (plus agentfile's native tools); the toolbox owns
+        // them and must outlive the Agent below.
         agentfile::ServerToolbox toolbox(searxng_url, tools_runtime);
         auto keep = parse_tools_flag(tools_spec, toolbox);
         if (keep.empty()) {
