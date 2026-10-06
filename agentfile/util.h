@@ -30,6 +30,7 @@
 #include <ctime>
 #include <random>
 #include <string>
+#include <termios.h>
 #include <unistd.h>
 
 namespace agentfile {
@@ -96,6 +97,39 @@ inline std::string terminal_text(const std::string &s,
         i += n;
     }
     return out;
+}
+
+// Asks the user a question on their terminal and reads one line of answer.
+// The question goes to stderr, or straight to the terminal when stderr is
+// redirected (else the user would wait on a prompt they can't see). The
+// answer comes from stdin, or from the terminal when the prompt was piped
+// in. With discard_typeahead, anything typed before the question appeared
+// is dropped, so it can't answer a question the user never saw. Returns
+// false when there is no terminal to ask, or on EOF.
+inline bool ask_terminal(const std::string &question, std::string &answer,
+                         bool discard_typeahead = false) {
+    FILE *in = isatty(STDIN_FILENO) ? stdin : std::fopen("/dev/tty", "r");
+    if (!in) return false;
+    FILE *tty_out =
+        isatty(STDERR_FILENO) ? nullptr : std::fopen("/dev/tty", "w");
+    FILE *out = tty_out ? tty_out : stderr;
+    if (discard_typeahead) tcflush(fileno(in), TCIFLUSH);
+    std::fputs(question.c_str(), out);
+    std::fflush(out);
+
+    answer.clear();
+    bool got = false;
+    char buf[4096];
+    while (std::fgets(buf, sizeof(buf), in)) {
+        got = true;
+        answer += buf;
+        if (answer.back() == '\n') break;
+    }
+    if (in != stdin) std::fclose(in);
+    if (tty_out) std::fclose(tty_out);
+    while (!answer.empty() && (answer.back() == '\n' || answer.back() == '\r'))
+        answer.pop_back();
+    return got;
 }
 
 // n random lowercase hex characters (n/2 random bytes).

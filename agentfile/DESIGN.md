@@ -54,7 +54,8 @@ One translation unit, `agentfile.cpp`, plus headers:
   iteration cap so the call the cap refuses gets no chat span. Error
   recovery comes after the observers so they record a failed call as
   failed before it is handed back to the model.
-- `util.h`: terminal escaping (`terminal_text`), ids, timestamps.
+- `util.h`: terminal escaping (`terminal_text`), asking on the terminal
+  (`ask_terminal`), ids, timestamps.
 
 The toolset is built and checked before the model loads, so a bad
 `--tools` or `--tools-runtime` value fails fast; so do unwritable
@@ -105,9 +106,10 @@ of it could go upstream:
   can't erase or restyle the tool lines above it; piped output is
   unchanged.
 - No `-p` and stdin not a tty: stdin is the prompt.
-- `-i/--interactive`: after each answer, prompt on stderr and read the
-  next message from the terminal (`/dev/tty` when stdin was a pipe).
-  Empty line or EOF ends the session. Turns reuse the same `messages`, so
+- `-i/--interactive`: after each answer, ask for the next message on the
+  terminal (`ask_terminal`: the question goes to stderr, or to `/dev/tty`
+  when stderr is redirected; the answer comes from stdin, or `/dev/tty`
+  when stdin was a pipe). Empty line or EOF ends the session. Turns reuse the same `messages`, so
   the KV prefix carries over. `--max-iterations` is a per-turn budget.
 - Parsing is **last-wins**, and every mode flag has an inverse
   (`--confirm` for `--yes`, `--no-interactive`, `--no-think`), so
@@ -121,9 +123,13 @@ of it could go upstream:
 - Exit codes: `0` ok, `1` usage error, `2` agent error, `3` other error,
   `4` `--max-iterations` reached.
   - Declining a confirmation is not an exit: the model gets
-    `{"skipped": "user declined"}` and decides how to continue.
+    `{"skipped": "declined by the user; do not retry this call"}` and
+    decides how to continue. Models do retry anyway, so three declines
+    in a row end the run (exit 2).
   - No answer at all (no terminal, or EOF at the prompt) ends the run
     (exit 2): every later guarded call would go unanswered too.
+  - The confirmation discards anything typed before it appeared, so text
+    typed ahead can't answer it.
   - A failed tool call (a tool the model doesn't have, arguments that
     are not JSON) goes back to the model as an error result. Four
     failures in a row end the run (exit 2).

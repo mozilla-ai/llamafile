@@ -198,33 +198,6 @@ bool slurp(FILE *f, std::string &out) {
     return !ferror(f);
 }
 
-// Read one interactive follow-up, prompting on stderr. When the initial
-// prompt was piped in, stdin is consumed — read from the controlling
-// terminal instead. Returns an empty string on EOF, no terminal, or an
-// empty line; the caller ends the session.
-std::string read_followup() {
-    fprintf(stderr, "%s\n> %s", agentfile::dim(), agentfile::dim_off());
-    fflush(stderr);
-
-    FILE *tty = nullptr;
-    FILE *in = stdin;
-    if (!isatty(STDIN_FILENO)) {
-        tty = fopen("/dev/tty", "r");
-        if (!tty) return "";
-        in = tty;
-    }
-    std::string line;
-    char buf[4096];
-    while (fgets(buf, sizeof(buf), in)) {
-        line += buf;
-        if (line.back() == '\n') break;
-    }
-    if (tty) fclose(tty);
-    while (!line.empty() && (line.back() == '\n' || line.back() == '\r'))
-        line.pop_back();
-    return line;
-}
-
 // --tools: "all", "read_only" (every tool without permission_write), or a
 // comma-separated list of names, which main checks against the toolbox.
 std::set<std::string> parse_tools_flag(const std::string &spec,
@@ -550,10 +523,15 @@ int main(int argc, char **argv) {
 
         // Follow-up turns reuse `messages`, so the KV-cache prefix carries
         // over and each turn only pays for what's new.
+        // An empty line, EOF or no terminal ends the session.
         while (interactive) {
             fflush(stdout);
-            std::string followup = read_followup();
-            if (followup.empty()) break;
+            std::string followup;
+            if (!agentfile::ask_terminal(std::string(agentfile::dim()) +
+                                             "\n> " + agentfile::dim_off(),
+                                         followup) ||
+                followup.empty())
+                break;
             common_chat_msg msg;
             msg.role = "user";
             msg.content = followup;

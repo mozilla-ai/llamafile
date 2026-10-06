@@ -12,6 +12,7 @@ recorded tool results (--session JSONL) and stderr, not the model's prose.
 
 import json
 import os
+import select
 import subprocess
 import threading
 import time
@@ -538,3 +539,117 @@ def test_guarded_call_without_terminal_ends_run(tmp_path):
     assert "cannot confirm write_file" in run.proc.stderr, _dump(run)
     assert run.proc.stderr.count("Allow? [y/N]") == 1, _dump(run)
     assert not (tmp_path / "note.txt").exists(), _dump(run)
+
+
+# --- the terminal: confirmation and -i (driven through a pty) ---------------
+
+posix_only = pytest.mark.skipif(os.name == "nt", reason="drives a pty")
+
+
+def _pump(fd, on_output) -> str:
+    """Read fd to EOF, calling on_output(everything so far) after each read."""
+    out = b""
+    while select.select([fd], [], [], RUN_TIMEOUT)[0]:
+        try:
+            chunk = os.read(fd, 4096)
+        except OSError:  # the pty closed
+            break
+        if not chunk:
+            break
+        out += chunk
+        on_output(out)
+    return out.decode(errors="replace")
+
+
+def _answer_prompts(master, answer: bytes):
+    answered = [0]
+
+    def on_output(text):
+        while text.count(b"Allow? [y/N]") > answered[0]:
+            os.write(master, answer + b"\n")
+            answered[0] += 1
+    return on_output
+
+
+def run_on_terminal(tmp_path, answer: bytes, typeahead: bytes = b""):
+    """WRITE_PROMPT with stdin on a pty, answering every Allow? with `answer`.
+    Returns (exit code, stderr)."""
+    import pty
+    master, slave = pty.openpty()
+    proc = subprocess.Popen(["sh", EXE, "-m", MODEL, "-p", WRITE_PROMPT, "--tools", "write_file",
+                             "--no-think"],
+                            stdin=slave, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE,
+                            cwd=tmp_path)
+    os.close(slave)
+    os.write(master, typeahead)
+    err = _pump(proc.stderr.fileno(), _answer_prompts(master, answer))
+    proc.wait(timeout=RUN_TIMEOUT)
+    os.close(master)
+    return proc.returncode, err
+
+
+@posix_only
+def test_confirmation_yes_runs_the_call(tmp_path):
+    code, err = run_on_terminal(tmp_path, b"y")
+    assert code == 0, err
+    assert (tmp_path / "note.txt").exists(), err
+
+
+# Models retry a declined call, and each retry asked again, without end.
+@posix_only
+def test_declined_calls_end_the_run(tmp_path):
+    code, err = run_on_terminal(tmp_path, b"n")
+    assert code in (0, 2), err
+    assert err.count("Allow? [y/N]") <= 3, err
+    assert not (tmp_path / "note.txt").exists(), err
+    # Nothing ran, so no result line either.
+    assert "[tool: write_file ->" not in err, err
+
+
+# The answer was read from whatever was typed before the prompt appeared.
+@posix_only
+def test_typed_ahead_text_does_not_answer_the_prompt(tmp_path):
+    code, err = run_on_terminal(tmp_path, b"n", typeahead=b"yes please\n")
+    assert not (tmp_path / "note.txt").exists(), err
+
+
+# The prompt went only to stderr, so with stderr redirected the run waited
+# on a prompt nobody could see.
+@posix_only
+def test_prompt_reaches_the_terminal_when_stderr_is_redirected(tmp_path):
+    import pty
+    log = tmp_path / "stderr.log"
+    pid, master = pty.fork()
+    if pid == 0:  # child: the pty is its controlling terminal
+        os.chdir(tmp_path)
+        os.dup2(os.open(log, os.O_WRONLY | os.O_CREAT | os.O_TRUNC), 2)
+        os.execvp("sh", ["sh", EXE, "-m", MODEL, "-p", WRITE_PROMPT, "--tools", "write_file",
+                         "--no-think"])
+    term = _pump(master, _answer_prompts(master, b"y"))
+    _, status = os.waitpid(pid, 0)
+    assert os.waitstatus_to_exitcode(status) == 0, term + log.read_text()
+    assert "Allow? [y/N]" in term, term
+    assert (tmp_path / "note.txt").exists(), term + log.read_text()
+
+
+@posix_only
+def test_interactive_follow_up_then_empty_line_ends(tmp_path):
+    import pty
+    master, slave = pty.openpty()
+    proc = subprocess.Popen(["sh", EXE, "-m", MODEL, "-p", "Reply with the single word apple.",
+                             "-i", "--tools", "read_only", "--no-think"],
+                            stdin=slave, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                            cwd=tmp_path)
+    os.close(slave)
+    sent = [0]
+
+    def on_output(text):
+        if text.count(b"\n> ") > sent[0]:
+            os.write(master, b"Now reply with the single word banana.\n" if sent[0] == 0 else b"\n")
+            sent[0] += 1
+    err = _pump(proc.stderr.fileno(), on_output)
+    proc.wait(timeout=RUN_TIMEOUT)
+    os.close(master)
+    out = proc.stdout.read().decode().lower()
+    assert proc.returncode == 0, err
+    assert "apple" in out and "banana" in out, out + err

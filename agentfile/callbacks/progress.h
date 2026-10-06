@@ -37,6 +37,7 @@ namespace agentfile {
 
 class ProgressCallback : public agent_cpp::Callback {
     bool verbose_;
+    bool running_ = false;  // false after a declined confirmation
 
   public:
     explicit ProgressCallback(bool verbose = false) : verbose_(verbose) {}
@@ -55,6 +56,7 @@ class ProgressCallback : public agent_cpp::Callback {
 
     void before_tool_execution(std::string &tool_name,
                                std::string &arguments) override {
+        running_ = true;
         std::fprintf(stderr, "%s[tool: %s %s]%s\n", dim(),
                      terminal_text(tool_name).c_str(),
                      printable_arguments(arguments).c_str(), dim_off());
@@ -62,6 +64,8 @@ class ProgressCallback : public agent_cpp::Callback {
 
     void after_tool_execution(std::string &tool_name,
                               agent_cpp::ToolResult &result) override {
+        if (!running_) return;  // declined: nothing ran
+        running_ = false;
         if (result.has_error()) {
             std::fprintf(stderr, "%s[tool: %s -> error: %s]%s\n", dim(),
                          terminal_text(tool_name).c_str(),

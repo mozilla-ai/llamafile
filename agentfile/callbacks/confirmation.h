@@ -15,13 +15,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
-// DestructiveOpsConfirmationCallback — prompts the user on stderr before
-// agentfile invokes a destructive tool. Read-only tools execute silently.
-// Under --yes the prompt is skipped; when --quiet has also silenced the
-// progress output, a one-line audit record is printed instead, so a
-// write, shell command or network call never runs without a trace.
-// Pattern inspired by agent.cpp/examples/shell/shell.cpp's
-// ShellConfirmationCallback.
+// DestructiveOpsConfirmationCallback — asks "Allow? [y/N]" before each call
+// to a guarded tool (writes, shell, network). --yes skips the question;
+// with --quiet as well, a one-line record is printed instead, so a guarded
+// call never runs without a trace.
 //
 
 #pragma once
@@ -30,20 +27,17 @@
 #include "error.h"
 
 #include "server_tools_adapter.h"  // printable_arguments
+#include "util.h"
 
 #include <cctype>
 #include <cstdio>
-#include <cstdlib>
-#include <iostream>
 #include <set>
 #include <string>
-#include <unistd.h>
 
 namespace agentfile {
 
-// No answer from a terminal (none to ask on in CI or cron, or EOF at the
-// prompt): every later guarded call would go unanswered too, and the
-// model retries them without end. Ends the run instead (main exits 2).
+// No terminal to ask on (CI, cron) or EOF at the prompt: every later call
+// would go unanswered too, so the run ends (main exits 2).
 class ConfirmationUnavailable : public agent_cpp::Error {
   public:
     explicit ConfirmationUnavailable(const std::string &tool_name)
@@ -53,13 +47,14 @@ class ConfirmationUnavailable : public agent_cpp::Error {
 };
 
 class DestructiveOpsConfirmationCallback : public agent_cpp::Callback {
+    // A model can retry a declined call again and again; this many declines
+    // in a row end the run.
+    static constexpr int kMaxDeclines = 3;
+
     bool always_yes_;
-    // Log destructive calls under --yes when nothing else will (--quiet
-    // disables the ProgressCallback that normally prints every call).
-    bool audit_;
-    // Tool names requiring confirmation. Comes from the tools' own
-    // permission_write metadata (writes, shell, network access).
-    std::set<std::string> destructive_;
+    bool audit_;                       // print a record under --yes
+    std::set<std::string> destructive_;  // tools with permission_write
+    int declines_ = 0;                 // in a row, this turn
 
   public:
     DestructiveOpsConfirmationCallback(bool always_yes,
@@ -68,43 +63,36 @@ class DestructiveOpsConfirmationCallback : public agent_cpp::Callback {
         : always_yes_(always_yes), audit_(audit),
           destructive_(std::move(destructive)) {}
 
+    void before_agent_loop(std::vector<common_chat_msg> &) override {
+        declines_ = 0;
+    }
+
     void before_tool_execution(std::string &tool_name,
                                std::string &arguments) override {
         if (!destructive_.count(tool_name)) return;
+        std::string args = printable_arguments(arguments);
         if (always_yes_) {
             if (audit_) {
                 std::fprintf(stderr, "[%s --yes] %s\n", tool_name.c_str(),
-                             printable_arguments(arguments).c_str());
+                             args.c_str());
             }
             return;
         }
-        std::fprintf(stderr, "\n[%s] %s\n", tool_name.c_str(),
-                     printable_arguments(arguments).c_str());
-        std::fprintf(stderr, "Allow? [y/N]: ");
-        std::fflush(stderr);
-
-        // When the prompt was piped in, stdin is consumed/EOF — ask on the
-        // controlling terminal instead. No terminal at all (CI, cron) ends
-        // the run; use --yes for unattended runs.
-        std::string line;
-        bool got = false;
-        if (isatty(STDIN_FILENO)) {
-            got = (bool)std::getline(std::cin, line);
-        } else if (FILE *tty = std::fopen("/dev/tty", "r")) {
-            char buf[256];
-            if (std::fgets(buf, sizeof(buf), tty)) {
-                line = buf;
-                got = true;
-            }
-            std::fclose(tty);
-        }
-        if (!got) {
+        std::string answer;
+        if (!ask_terminal("\n[" + tool_name + "] " + args +
+                              "\nAllow? [y/N]: ",
+                          answer, /*discard_typeahead=*/true)) {
             throw ConfirmationUnavailable(tool_name);
         }
-        char c = line.empty() ? 'n' : (char)std::tolower((unsigned char)line[0]);
-        if (c != 'y') {
-            throw agent_cpp::ToolExecutionSkipped("user declined");
+        if (answer.empty() || std::tolower((unsigned char)answer[0]) != 'y') {
+            if (++declines_ >= kMaxDeclines) {
+                throw agent_cpp::Error(std::to_string(declines_) +
+                                       " tool calls declined in a row");
+            }
+            throw agent_cpp::ToolExecutionSkipped(
+                "declined by the user; do not retry this call");
         }
+        declines_ = 0;
     }
 };
 
