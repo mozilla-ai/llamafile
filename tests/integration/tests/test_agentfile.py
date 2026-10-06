@@ -344,6 +344,20 @@ def test_read_only_preset_has_get_datetime(tmp_path):
     assert results, "model did not call get_datetime" + _dump(run)
     assert "result" in json.loads(AgentRun.result_text(results[0])), _dump(run)
 
+# --- -c / --max-iterations --------------------------------------------------
+
+# atoi() turned bad values into 0 ("no limit": the model's full native
+# context, or no iteration cap) or a truncated number (-c 32k -> 32).
+@pytest.mark.parametrize("flag,value", [
+    ("-c", "abc"), ("-c", "32k"), ("-c", "-1"),
+    ("--max-iterations", "abc"), ("--max-iterations", "-5"),
+])
+def test_bad_count_flag_is_rejected(tmp_path, flag, value):
+    run = run_agentfile("hi", "read_only", tmp_path, extra=[flag, value])
+    assert run.proc.returncode == 1, _dump(run)
+    assert f"{flag}: expected a non-negative integer" in run.proc.stderr, _dump(run)
+    assert not run.tool_calls, _dump(run)
+
 # --- --session --------------------------------------------------------------
 
 # The session recorder used a strict json dump(): a tool result with invalid

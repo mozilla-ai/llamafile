@@ -27,6 +27,8 @@
 //
 
 #include <algorithm>
+#include <cerrno>
+#include <climits>
 #include <csignal>
 #include <cstdio>
 #include <cstdlib>
@@ -252,6 +254,23 @@ int main(int argc, char **argv) {
         }
         return argv[++i];
     };
+    // 0 means "no limit" for -c and --max-iterations, so a typo must fail
+    // instead of becoming 0 the way atoi() would make it.
+    auto need_count = [&](int &i) -> int {
+        const char *flag = argv[i];
+        const char *s = need_value(i);
+        char *end;
+        errno = 0;
+        long v = std::strtol(s, &end, 10);
+        if (end == s || *end || errno || v < 0 || v > INT_MAX) {
+            fprintf(stderr,
+                    "agentfile: %s: expected a non-negative integer, got "
+                    "\"%s\"\n",
+                    flag, s);
+            exit(1);
+        }
+        return static_cast<int>(v);
+    };
     for (int i = 1; i < argc; ++i) {
         if (std::strcmp(argv[i], "-m") == 0) {
             model_path = need_value(i);
@@ -259,7 +278,7 @@ int main(int argc, char **argv) {
             prompt = need_value(i);
         } else if (std::strcmp(argv[i], "-c") == 0 ||
                    std::strcmp(argv[i], "--ctx-size") == 0) {
-            n_ctx = std::atoi(need_value(i));
+            n_ctx = need_count(i);
         } else if (std::strcmp(argv[i], "-s") == 0) {
             instructions = need_value(i);
         } else if (std::strcmp(argv[i], "--system-file") == 0) {
@@ -307,7 +326,7 @@ int main(int argc, char **argv) {
                    std::strcmp(argv[i], "--verbose") == 0) {
             verbosity = 2;
         } else if (std::strcmp(argv[i], "--max-iterations") == 0) {
-            max_iterations = std::atoi(need_value(i));
+            max_iterations = need_count(i);
         } else if (std::strcmp(argv[i], "-h") == 0 ||
                    std::strcmp(argv[i], "--help") == 0) {
             print_usage(argv[0]);
