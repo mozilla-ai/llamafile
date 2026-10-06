@@ -118,9 +118,10 @@ of it could go upstream:
   overridden.
 - `--system-file PATH` reads the system prompt from a file, `/zip/` paths
   included.
-- `-c/--ctx-size` defaults to `kDefaultCtx` (32768, enough for one full
-  `http_fetch` result plus history); `0` means the model's native
-  context. `-c` and `--max-iterations` take non-negative integers only.
+- `-c/--ctx-size` defaults to `kDefaultCtx` (65536, room for a few full
+  `http_fetch` results plus history). The context never exceeds the
+  model's training context, the default included; `0` asks for exactly
+  that. `-c` and `--max-iterations` take non-negative integers only.
 - Exit codes: `0` ok, `1` usage error, `2` agent error, `3` other error,
   `4` `--max-iterations` reached.
   - Declining a confirmation is not an exit: the model gets

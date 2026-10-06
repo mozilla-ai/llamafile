@@ -12,6 +12,7 @@ recorded tool results (--session JSONL) and stderr, not the model's prose.
 
 import json
 import os
+import re
 import select
 import subprocess
 import threading
@@ -456,6 +457,17 @@ def test_bad_count_flag_is_rejected(tmp_path, flag, value):
     assert run.proc.returncode == 1, _dump(run)
     assert f"{flag}: expected a non-negative integer" in run.proc.stderr, _dump(run)
     assert not run.tool_calls, _dump(run)
+
+# The context is 64K tokens by default and never more than the model's
+# maximum, an explicit -c included.
+@pytest.mark.parametrize("ctx_flag,wanted", [((), 65536), (("-c", "10000000"), 10000000)])
+def test_context_is_capped_at_model_max(tmp_path, ctx_flag, wanted):
+    run = run_agentfile("Reply with OK.", "read_only", tmp_path, extra=["-vv", *ctx_flag])
+    assert run.proc.returncode == 0, _dump(run)
+    train = re.search(r"n_ctx_train\s*=\s*(\d+)", run.proc.stderr)
+    ctx = re.search(r"llama_context: n_ctx\s*=\s*(\d+)", run.proc.stderr)
+    assert train and ctx, _dump(run)
+    assert int(ctx.group(1)) == min(wanted, int(train.group(1))), _dump(run)
 
 # --- --session --------------------------------------------------------------
 

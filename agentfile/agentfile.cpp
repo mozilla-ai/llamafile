@@ -67,9 +67,9 @@
 
 namespace {
 
-// Default context window. Sized so one full http_fetch result (64 KB body,
-// roughly 16-24k tokens) plus history fits comfortably.
-constexpr int kDefaultCtx = 32 * 1024;
+// Default context window: room for a few full http_fetch results (64 KB,
+// roughly 16-24k tokens each) plus the rest of the conversation.
+constexpr int kDefaultCtx = 64 * 1024;
 
 // Lowest llama.cpp / ggml log level that reaches stderr: -v shows warnings
 // and errors, -vv also info. Above GGML_LOG_LEVEL_ERROR (the default) is
@@ -144,9 +144,10 @@ void print_usage(const char *prog, const std::string &searxng_url) {
             "  -m PATH              Path to a GGUF model file (required)\n"
             "  -p TEXT              User prompt (read from stdin if omitted\n"
             "                       and stdin is not a terminal)\n"
-            "  -c, --ctx-size N     Context window in tokens (default: %d).\n"
-            "                       0 = the model's full native context — mind the\n"
-            "                       KV-cache memory on long-context models\n"
+            "  -c, --ctx-size N     Context window in tokens (default: %d), never\n"
+            "                       more than the model's maximum. 0 = the model's\n"
+            "                       maximum — mind the KV-cache memory on\n"
+            "                       long-context models\n"
             "  -s TEXT              System instructions (default: helpful assistant)\n"
             "  --system-file PATH   Read system instructions from a file\n"
             "                       (works with /zip/ paths in packaged agents)\n"
@@ -231,7 +232,7 @@ int main(int argc, char **argv) {
     bool always_yes = false;
     bool interactive = false;
     bool think = false;
-    int n_ctx = kDefaultCtx; // tokens; 0 = model native
+    int n_ctx = kDefaultCtx; // tokens; 0 = the model's maximum
     int verbosity = 1;       // 0 = --quiet, 1 = default, 2 = -v, 3 = -vv
     int max_iterations = 0;  // 0 = no cap
     std::string tools_spec = "all";
@@ -449,7 +450,12 @@ int main(int argc, char **argv) {
         // agent.cpp's default (-1) wraps around in llama_context's unsigned
         // n_batch and breaks context creation. 2048 is llama.cpp's default.
         cfg.n_batch = 2048;
-        cfg.n_ctx = n_ctx;  // 0 = model's native context
+        // The context never exceeds what the model was trained on; -c 0
+        // asks for exactly that.
+        int n_ctx_train = llama_model_n_ctx_train(weights->get_model());
+        if (n_ctx_train > 0 && (n_ctx == 0 || n_ctx > n_ctx_train))
+            n_ctx = n_ctx_train;
+        cfg.n_ctx = n_ctx;
         cfg.enable_thinking = think;
         auto model = agent_cpp::Model::create_with_weights(weights, cfg);
 
