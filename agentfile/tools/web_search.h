@@ -137,16 +137,19 @@ struct WebSearchTool : server_tool {
             json results = json::array();
             if (body.contains("results") && body["results"].is_array()) {
                 for (const auto &r : body["results"]) {
-                    std::string snippet = r.value("content", "");
+                    // json_value, not r.value(): a null or non-string
+                    // field must not throw away the whole result list.
+                    std::string snippet =
+                        json_value(r, "content", std::string());
                     if (snippet.size() > kMaxSnippet) {
                         snippet.resize(kMaxSnippet);
                         snippet += "…";
                     }
                     results.push_back({
-                        {"title", r.value("title", "")},
-                        {"url", r.value("url", "")},
+                        {"title", json_value(r, "title", std::string())},
+                        {"url", json_value(r, "url", std::string())},
                         {"snippet", snippet},
-                        {"engine", r.value("engine", "")},
+                        {"engine", json_value(r, "engine", std::string())},
                     });
                 }
             }

@@ -74,6 +74,13 @@ def _make_handler(state: ServerState, base_url_box: list):
                 body = {"results": [{"title": "Crème brûlée", "url": "http://example.com/",
                                      "content": "x" + "é" * SNIPPET_CAP, "engine": "mock"}]}
                 self._bytes(200, json.dumps(body).encode(), "application/json")
+            elif self.path.startswith("/nulls/search"):
+                # SearXNG JSON API (--searxng-url .../nulls) with null fields.
+                body = {"results": [{"title": None, "url": "http://example.com/a",
+                                     "content": None, "engine": None},
+                                    {"title": "Second", "url": "http://example.com/b",
+                                     "content": "ok", "engine": "mock"}]}
+                self._bytes(200, json.dumps(body).encode(), "application/json")
             elif self.path == "/sso":
                 # Relative Location whose query carries an absolute URL.
                 self._text(302, "", {"Location": "/login?next=https://example.com/x"})
@@ -320,6 +327,23 @@ def test_web_search_snippet_cut_inside_utf8_char(http_server, tmp_path):
     first = json.loads(AgentRun.result_text(searches[0]))
     assert "error" not in first, _dump(run)
     assert first["results"][0]["snippet"].endswith("…"), _dump(run)
+
+
+# A null field threw inside the result loop, and the whole search came back
+# as "SearXNG returned unparseable JSON".
+def test_web_search_null_fields_keep_results(http_server, tmp_path):
+    base, _ = http_server
+    run = run_agentfile(
+        "Use web_search to search for creme brulee and tell me the title of the second result.",
+        "web_search", tmp_path, extra=["--yes", "--searxng-url", f"{base}/nulls"])
+    searches = run.results_for("web_search")
+    assert searches, "model did not call web_search" + _dump(run)
+    first = json.loads(AgentRun.result_text(searches[0]))
+    assert "error" not in first, _dump(run)
+    results = first["results"]
+    assert len(results) == 2, _dump(run)
+    assert results[0]["title"] == "" and results[0]["snippet"] == "", _dump(run)
+    assert results[1]["title"] == "Second", _dump(run)
 
 
 # --- --tools ----------------------------------------------------------------
