@@ -18,7 +18,7 @@ fi
 
 echo "Applying patches to agent.cpp submodule..."
 
-# Copy any llamafile-specific files into the submodule root (currently none)
+# Copy the llamafile-specific files (BUILD.mk) into the submodule root
 if [ -n "$(ls -A "$LLAMAFILE_FILES_DIR" 2>/dev/null)" ]; then
     echo "Copying llamafile-files into agent.cpp..."
     cp -r "$LLAMAFILE_FILES_DIR"/* .

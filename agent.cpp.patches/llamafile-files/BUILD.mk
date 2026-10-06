@@ -53,10 +53,9 @@ AGENT_CPP_INCLUDES := \
 $(AGENT_CPP_OBJS): private CPPFLAGS += $(AGENT_CPP_INCLUDES)
 $(AGENT_CPP_OBJS): private CCFLAGS += -DNDEBUG
 
-# C++17 + RTTI (agent.cpp uses dynamic_cast for tool dispatch, exceptions)
 o/$(MODE)/agent.cpp/%.cpp.o: agent.cpp/%.cpp agent.cpp/BUILD.mk
 	@mkdir -p $(@D)
-	$(COMPILE.cc) -frtti -fexceptions -o $@ $<
+	$(COMPILE.cc) -o $@ $<
 
 # ==============================================================================
 # Combined static library
