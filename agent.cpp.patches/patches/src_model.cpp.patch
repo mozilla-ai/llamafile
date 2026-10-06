@@ -1,7 +1,7 @@
 diff --git a/src/model.cpp b/src/model.cpp
 --- a/agent.cpp/src/model.cpp
 +++ b/agent.cpp/src/model.cpp
-@@ -1,9 +1,13 @@
+@@ -1,9 +1,14 @@
  #include "model.h"
  #include "chat.h"
 +#include "sampling.h" // common_sampler (llamafile)
@@ -12,10 +12,11 @@ diff --git a/src/model.cpp b/src/model.cpp
  #include <cstdio>
  #include <fstream>
 +#include <optional>
++#include <random> // new_tool_call_id (llamafile)
  #include <sstream>
  
  namespace agent_cpp {
-@@ -78,7 +82,7 @@ Model::create_with_weights(std::shared_ptr<ModelWeights> weights,
+@@ -78,7 +83,7 @@ Model::create_with_weights(std::shared_ptr<ModelWeights> weights,
  Model::~Model()
  {
      if (sampler_ != nullptr) {
@@ -24,7 +25,7 @@ diff --git a/src/model.cpp b/src/model.cpp
      }
      if (ctx_ != nullptr) {
          llama_free(ctx_);
-@@ -90,14 +94,12 @@ Model::Model(Model&& other) noexcept
+@@ -90,14 +95,12 @@ Model::Model(Model&& other) noexcept
    : weights_(std::move(other.weights_))
    , ctx_(other.ctx_)
    , sampler_(other.sampler_)
@@ -39,7 +40,7 @@ diff --git a/src/model.cpp b/src/model.cpp
      other.n_past_ = 0;
  }
  
-@@ -106,7 +108,7 @@ Model::operator=(Model&& other) noexcept
+@@ -106,7 +109,7 @@ Model::operator=(Model&& other) noexcept
  {
      if (this != &other) {
          if (sampler_ != nullptr) {
@@ -48,7 +49,7 @@ diff --git a/src/model.cpp b/src/model.cpp
          }
          if (ctx_ != nullptr) {
              llama_free(ctx_);
-@@ -115,19 +117,51 @@ Model::operator=(Model&& other) noexcept
+@@ -115,19 +118,51 @@ Model::operator=(Model&& other) noexcept
          weights_ = std::move(other.weights_);
          ctx_ = other.ctx_;
          sampler_ = other.sampler_;
@@ -102,7 +103,7 @@ diff --git a/src/model.cpp b/src/model.cpp
  void
  Model::initialize_context(const ModelConfig& model_config)
  {
-@@ -146,57 +180,37 @@ Model::initialize_context(const ModelConfig& model_config)
+@@ -146,57 +181,37 @@ Model::initialize_context(const ModelConfig& model_config)
          throw ModelError("failed to create llama context");
      }
  
@@ -177,7 +178,7 @@ diff --git a/src/model.cpp b/src/model.cpp
                         true) < 0) {
          return {}; // Return empty vector on failure
      }
-@@ -234,6 +248,9 @@ parse_with_parser(const common_peg_arena& parser,
+@@ -234,6 +249,9 @@ parse_with_parser(const common_peg_arena& parser,
      // (ggml-org/llama.cpp#18675). Without them tool calls stay as raw text.
      syntax.generation_prompt = params.generation_prompt;
      syntax.parse_tool_calls = true;
@@ -187,7 +188,7 @@ diff --git a/src/model.cpp b/src/model.cpp
  
      try {
          auto parsed_msg =
-@@ -249,6 +266,49 @@ parse_with_parser(const common_peg_arena& parser,
+@@ -249,6 +267,62 @@ parse_with_parser(const common_peg_arena& parser,
      }
  }
  
@@ -234,10 +235,23 @@ diff --git a/src/model.cpp b/src/model.cpp
 +    }
 +}
 +
++/// llamafile: an id for a tool call the chat parser left without one.
++std::string
++new_tool_call_id()
++{
++    static std::mt19937 rng{ std::random_device{}() };
++    static const char hex[] = "0123456789abcdef";
++    std::string id = "call_";
++    for (int i = 0; i < 8; ++i) {
++        id += hex[rng() % 16];
++    }
++    return id;
++}
++
  }
  
  common_chat_msg
-@@ -261,11 +321,97 @@ Model::generate(const std::vector<common_chat_msg>& messages,
+@@ -261,11 +335,97 @@ Model::generate(const std::vector<common_chat_msg>& messages,
      inputs.tools = tools;
      inputs.tool_choice = COMMON_CHAT_TOOL_CHOICE_AUTO;
      inputs.add_generation_prompt = true;
@@ -336,7 +350,7 @@ diff --git a/src/model.cpp b/src/model.cpp
      // Tokenize the prompt
      std::vector<llama_token> prompt_tokens = tokenize(params.prompt);
      if (prompt_tokens.empty()) {
-@@ -281,8 +427,106 @@ Model::generate(const std::vector<common_chat_msg>& messages,
+@@ -281,8 +441,114 @@ Model::generate(const std::vector<common_chat_msg>& messages,
          parser_source_ = params.parser;
      }
  
@@ -440,12 +454,20 @@ diff --git a/src/model.cpp b/src/model.cpp
 +        parsed_msg.content.find("<tool_call>") != std::string::npos) {
 +        throw *parse_error;
 +    }
++    // llamafile: every tool call gets an id, as llama-server gives them, so
++    // the tool result can name the call it answers. Some templates' parsers
++    // leave ids empty, and so does the recovery above.
++    for (auto& call : parsed_msg.tool_calls) {
++        if (call.id.empty()) {
++            call.id = new_tool_call_id();
++        }
++    }
 +    parsed_msg.role = "assistant";
 +    return parsed_msg;
  }
  
  common_chat_msg
-@@ -311,10 +555,16 @@ Model::generate_from_tokens(const std::vector<llama_token>& all_tokens,
+@@ -311,10 +577,16 @@ Model::generate_from_tokens(const std::vector<llama_token>& all_tokens,
          common_prefix++;
      }
  
@@ -464,7 +486,7 @@ diff --git a/src/model.cpp b/src/model.cpp
          processed_tokens_.resize(common_prefix);
          n_past_ = common_prefix;
      }
-@@ -343,15 +593,15 @@ Model::generate_from_tokens(const std::vector<llama_token>& all_tokens,
+@@ -343,15 +615,15 @@ Model::generate_from_tokens(const std::vector<llama_token>& all_tokens,
          i += batch_size;
      }
  

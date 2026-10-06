@@ -430,9 +430,6 @@ int main(int argc, char **argv) {
             model_name.erase(0, slash + 1);
 
         std::vector<std::unique_ptr<agent_cpp::Callback>> callbacks;
-        // The session recorder goes first: it assigns ids to tool calls
-        // whose chat template omitted them, and later callbacks (and the
-        // conversation itself) should see those ids.
         if (!session_path.empty()) {
             callbacks.emplace_back(
                 std::make_unique<agentfile::SessionRecorderCallback>(

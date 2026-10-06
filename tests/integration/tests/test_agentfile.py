@@ -416,6 +416,20 @@ def test_session_records_latin1_file(tmp_path):
     assert "Caf" in text and "�" in text, _dump(run)
 
 
+# Missing tool-call ids were assigned by the session recorder, so the prompt
+# changed with --session. Model::generate assigns them now; the recorder
+# only records them.
+def test_session_tool_calls_have_paired_ids(tmp_path):
+    (tmp_path / "menu.txt").write_text("soup")
+    run = run_agentfile("Use read_file to read menu.txt and tell me what it says.",
+                        "read_file", tmp_path)
+    assert run.proc.returncode == 0, _dump(run)
+    assert run.tool_calls and run.tool_results, _dump(run)
+    call_ids = [c.get("id") for c in run.tool_calls]
+    assert all(call_ids), f"tool call without an id: {call_ids}" + _dump(run)
+    assert [r.get("toolCallId") for r in run.tool_results] == call_ids, _dump(run)
+
+
 # --- --quiet --yes audit ----------------------------------------------------
 
 WRITE_PROMPT = ("Use the write_file tool to create a file named note.txt in the "

@@ -97,14 +97,8 @@ class SessionRecorderCallback : public agent_cpp::Callback {
     }
 
     void after_llm_call(common_chat_msg &parsed_msg) override {
-        // Some chat templates omit tool-call ids. Assign them here — the
-        // mutation propagates into the conversation (run_loop pushes
-        // parsed_msg after callbacks), keeping the session file consistent
-        // with what the model sees on the next turn.
-        for (auto &tc : parsed_msg.tool_calls) {
-            if (tc.id.empty()) tc.id = "call_" + random_hex(8);
-        }
-
+        // Tool calls carry ids: Model::generate assigns any the chat
+        // template's parser left empty.
         json content = json::array();
         if (!parsed_msg.reasoning_content.empty()) {
             content.push_back(
