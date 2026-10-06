@@ -32,6 +32,7 @@
 #include <cpp-httplib/httplib.h>
 #include "http.h"   // common_http_client, common_http_parse_url
 
+#include <cctype>
 #include <string>
 
 namespace agentfile {
@@ -71,12 +72,23 @@ struct HttpFetchTool : server_tool {
         };
     }
 
+    // True if loc starts with an RFC 3986 scheme (ALPHA *( ALPHA / DIGIT /
+    // "+" / "-" / "." ) ":"), i.e. is absolute. A "://" further on, as in
+    // /login?next=https://x, does not count.
+    static bool has_scheme(const std::string &loc) {
+        size_t end = loc.find_first_not_of(
+            "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
+            "0123456789+-.");
+        return end != std::string::npos && end > 0 && loc[end] == ':' &&
+               std::isalpha(static_cast<unsigned char>(loc[0]));
+    }
+
     // Resolve a Location header against the request URL (RFC 3986-lite:
     // absolute, scheme-relative, host-relative, query-only, or
     // path-relative).
     static std::string resolve_location(const common_http_url &parts,
                                         const std::string &loc) {
-        if (loc.find("://") != std::string::npos) return loc;
+        if (has_scheme(loc)) return loc;
         if (loc.rfind("//", 0) == 0) return parts.scheme + ":" + loc;
         std::string origin = parts.scheme + "://" +
                              common_http_format_host(parts.host) + ":" +

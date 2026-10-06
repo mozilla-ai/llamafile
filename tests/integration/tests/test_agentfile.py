@@ -74,6 +74,9 @@ def _make_handler(state: ServerState, base_url_box: list):
                 body = {"results": [{"title": "Crème brûlée", "url": "http://example.com/",
                                      "content": "x" + "é" * SNIPPET_CAP, "engine": "mock"}]}
                 self._bytes(200, json.dumps(body).encode(), "application/json")
+            elif self.path == "/sso":
+                # Relative Location whose query carries an absolute URL.
+                self._text(302, "", {"Location": "/login?next=https://example.com/x"})
             elif self.path.startswith("/?ref="):
                 self._text(200, "at-ok")
             elif self.path.startswith("/?next="):
@@ -289,6 +292,20 @@ def test_http_fetch_relative_redirect_after_query(http_server, tmp_path):
     first = json.loads(AgentRun.result_text(fetches[0]))
     assert first.get("status") == 302, _dump(run)
     assert first.get("redirect_to") == f"{base}/login", _dump(run)
+
+
+# resolve_location took any Location containing "://" as absolute, so this
+# relative redirect came back as a bare path the model could not fetch.
+def test_http_fetch_relative_redirect_with_url_in_query(http_server, tmp_path):
+    base, _ = http_server
+    run = run_agentfile(
+        f"Call http_fetch once with exactly this url, unchanged: {base}/sso and report the status code.",
+        "http_fetch", tmp_path, extra=["--yes"])
+    fetches = run.results_for("http_fetch")
+    assert fetches, "model did not call http_fetch" + _dump(run)
+    first = json.loads(AgentRun.result_text(fetches[0]))
+    assert first.get("status") == 302, _dump(run)
+    assert first.get("redirect_to") == f"{base}/login?next=https://example.com/x", _dump(run)
 
 # --- web_search -------------------------------------------------------------
 
