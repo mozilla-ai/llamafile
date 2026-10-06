@@ -346,6 +346,16 @@ def test_web_search_null_fields_keep_results(http_server, tmp_path):
     assert results[1]["title"] == "Second", _dump(run)
 
 
+# print_tools_help read only SEARXNG_URL, so --searxng-url (on the command
+# line or in a packaged agent's .args) still listed web_search as unavailable.
+def test_help_honors_searxng_url_flag(tmp_path, monkeypatch):
+    monkeypatch.delenv("SEARXNG_URL", raising=False)
+    run = run_agentfile("hi", "all", tmp_path, extra=["--searxng-url", "http://127.0.0.1:9", "-h"])
+    assert run.proc.returncode == 0, _dump(run)
+    assert "web_search" in run.proc.stderr, _dump(run)
+    assert "unavailable: web_search" not in run.proc.stderr, _dump(run)
+
+
 # --- --tools ----------------------------------------------------------------
 
 # An empty keep-set means "all tools" to make_adapters, so a list naming

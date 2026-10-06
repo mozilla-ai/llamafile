@@ -76,12 +76,12 @@ constexpr int kDefaultCtx = 32 * 1024;
 void null_log_callback(ggml_log_level, const char *, void *) {}
 
 // The tools section of the help is generated from the toolbox so it can't
-// drift from the registered tools. SEARXNG_URL is honored so a configured
-// environment (or packaged agent) shows its true availability.
-void print_tools_help() {
+// drift from the registered tools. searxng_url is the one parsed so far
+// (SEARXNG_URL, then --searxng-url, including a packaged agent's), so
+// web_search shows its true availability.
+void print_tools_help(const std::string &searxng_url) {
     try {
-        const char *env = std::getenv("SEARXNG_URL");
-        agentfile::ServerToolbox toolbox(env ? env : "", "");
+        agentfile::ServerToolbox toolbox(searxng_url, "");
         auto guarded = toolbox.write_tool_names();
         std::string ro, wr;
         for (const auto &name : toolbox.tool_names()) {
@@ -115,7 +115,7 @@ void print_tools_help() {
     }
 }
 
-void print_usage(const char *prog) {
+void print_usage(const char *prog, const std::string &searxng_url) {
     fprintf(stderr,
             "agentfile — agentic CLI on top of agent.cpp + llama.cpp\n"
             "\n"
@@ -157,7 +157,7 @@ void print_usage(const char *prog) {
             "  -h                   Show this help\n"
             "\n",
             prog, prog, kDefaultCtx);
-    print_tools_help();
+    print_tools_help(searxng_url);
     fprintf(stderr,
             "\n"
             "Exit codes: 0 ok, 1 usage error, 2 agent error, 3 other error,\n"
@@ -329,11 +329,11 @@ int main(int argc, char **argv) {
             max_iterations = need_count(i);
         } else if (std::strcmp(argv[i], "-h") == 0 ||
                    std::strcmp(argv[i], "--help") == 0) {
-            print_usage(argv[0]);
+            print_usage(argv[0], searxng_url);
             return 0;
         } else {
             fprintf(stderr, "agentfile: unknown argument: %s\n\n", argv[i]);
-            print_usage(argv[0]);
+            print_usage(argv[0], searxng_url);
             return 1;
         }
     }
@@ -350,7 +350,7 @@ int main(int argc, char **argv) {
     }
 
     if (model_path.empty() || prompt.empty()) {
-        print_usage(argv[0]);
+        print_usage(argv[0], searxng_url);
         return 1;
     }
 
