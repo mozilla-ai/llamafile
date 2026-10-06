@@ -47,14 +47,15 @@ class ConfirmationUnavailable : public agent_cpp::Error {
 };
 
 class DestructiveOpsConfirmationCallback : public agent_cpp::Callback {
-    // A model can retry a declined call again and again; this many declines
-    // in a row end the run.
+    // A model can retry a declined call again and again: this many replies
+    // in a row with a declined call end the run.
     static constexpr int kMaxDeclines = 3;
 
     bool always_yes_;
     bool audit_;                       // print a record under --yes
     std::set<std::string> destructive_;  // tools with permission_write
-    int declines_ = 0;                 // in a row, this turn
+    int declines_ = 0;                 // replies in a row, this turn
+    bool declined_in_reply_ = false;
 
   public:
     DestructiveOpsConfirmationCallback(bool always_yes,
@@ -65,6 +66,10 @@ class DestructiveOpsConfirmationCallback : public agent_cpp::Callback {
 
     void before_agent_loop(std::vector<common_chat_msg> &) override {
         declines_ = 0;
+    }
+
+    void after_llm_call(common_chat_msg &) override {
+        declined_in_reply_ = false;
     }
 
     void before_tool_execution(std::string &tool_name,
@@ -85,10 +90,12 @@ class DestructiveOpsConfirmationCallback : public agent_cpp::Callback {
             throw ConfirmationUnavailable(tool_name);
         }
         if (answer.empty() || std::tolower((unsigned char)answer[0]) != 'y') {
-            if (++declines_ >= kMaxDeclines) {
-                throw agent_cpp::Error(std::to_string(declines_) +
-                                       " tool calls declined in a row");
+            if (!declined_in_reply_ && ++declines_ >= kMaxDeclines) {
+                throw agent_cpp::Error("tool calls declined in " +
+                                       std::to_string(declines_) +
+                                       " replies in a row");
             }
+            declined_in_reply_ = true;
             throw agent_cpp::ToolExecutionSkipped(
                 "declined by the user; do not retry this call");
         }

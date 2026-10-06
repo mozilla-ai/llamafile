@@ -96,18 +96,18 @@ inline std::string terminal_text(const std::string &s,
 }
 
 // Asks the user a question on their terminal and reads one line of answer.
-// The question goes to stderr, or straight to the terminal when stderr is
-// redirected (else the user would wait on a prompt they can't see). The
-// answer comes from stdin, or from the terminal when the prompt was piped
-// in. With discard_typeahead, anything typed before the question appeared
-// is dropped, so it can't answer a question the user never saw. Returns
-// false when there is no terminal to ask, or on EOF.
+// The answer comes from stdin, or from /dev/tty when the prompt was piped
+// in. The question goes to stderr, or, when stderr is redirected, to the
+// terminal the answer comes from (else the user would wait on a question
+// they can't see). With discard_typeahead, anything typed before the
+// question appeared is dropped, so it can't answer a question the user
+// never saw. Returns false when there is no terminal to ask, or on EOF.
 inline bool ask_terminal(const std::string &question, std::string &answer,
                          bool discard_typeahead = false) {
     FILE *in = isatty(STDIN_FILENO) ? stdin : std::fopen("/dev/tty", "r");
     if (!in) return false;
-    FILE *tty_out =
-        isatty(STDERR_FILENO) ? nullptr : std::fopen("/dev/tty", "w");
+    const char *in_tty = isatty(STDERR_FILENO) ? nullptr : ttyname(fileno(in));
+    FILE *tty_out = in_tty ? std::fopen(in_tty, "w") : nullptr;
     FILE *out = tty_out ? tty_out : stderr;
     if (discard_typeahead) tcflush(fileno(in), TCIFLUSH);
     std::fputs(question.c_str(), out);

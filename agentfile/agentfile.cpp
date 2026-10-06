@@ -369,8 +369,7 @@ int main(int argc, char **argv) {
         llamafile_vulkan_log_set(llamafile_log_callback_null, nullptr);
     }
     // common_log (llama.cpp common, agent.cpp) prints model text unescaped,
-    // so its warnings only show with -v. Its info level stays off: it goes
-    // to stdout, where the answer goes.
+    // so only its errors show unless -v.
     if (verbosity < 2)
         common_log_set_verbosity_thold(LOG_LEVEL_ERROR);
 

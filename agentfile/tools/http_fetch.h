@@ -84,18 +84,18 @@ struct HttpFetchTool : server_tool {
                std::isalpha(static_cast<unsigned char>(loc[0]));
     }
 
-    // Whether a Content-Type says the body is binary (an image, a PDF, an
-    // archive): escaped into the result, 64 KB of it would take more tokens
-    // than the default context holds. With no type, or the generic
-    // octet-stream, the body decides: a NUL byte marks it binary.
+    // Binary content isn't returned: escaped into the result, 64 KB of it
+    // would take more tokens than the default context holds. Images, audio,
+    // video, fonts and PDFs are known from their Content-Type (SVG, being
+    // XML, is text); any other body counts as binary once a NUL byte shows.
     static bool is_binary_type(const std::string &content_type) {
-        std::string t = content_type.substr(0, content_type.find(';'));
+        std::string t = content_type;
         for (auto &c : t) c = std::tolower(static_cast<unsigned char>(c));
-        if (t.empty() || t.find("octet-stream") != std::string::npos)
-            return false;
-        for (const char *text : {"text/", "json", "xml", "javascript", "yaml"})
-            if (t.find(text) != std::string::npos) return false;
-        return true;
+        if (t.find("xml") != std::string::npos) return false;
+        for (const char *bin :
+             {"image/", "audio/", "video/", "font/", "application/pdf"})
+            if (t.rfind(bin, 0) == 0) return true;
+        return false;
     }
 
     // Resolve a Location header against the request URL (RFC 3986-lite:
@@ -188,7 +188,7 @@ struct HttpFetchTool : server_tool {
             }
             out["status"] = status;
             out["headers"] = resp_headers;
-            if (binary) {
+            if (binary && !out.contains("redirect_to")) {
                 auto type = headers.find("Content-Type");
                 std::string what = type != headers.end() ? type->second
                                                          : "no Content-Type";

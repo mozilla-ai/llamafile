@@ -107,6 +107,8 @@ def _make_handler(state: ServerState, base_url_box: list):
                 self._stream("text/plain", b"x")
             elif self.path == "/photo.png":
                 self._stream("image/png", b"\x89")
+            elif self.path == "/config.toml":
+                self._bytes(200, b'name = "agentfile"\n', "application/toml")
             elif self.path == "/blob":
                 # No telling type: the NUL bytes mark it binary.
                 self._bytes(200, b"%PDF-1.7\n" + bytes(range(256)) * 64,
@@ -265,6 +267,18 @@ def test_http_fetch_sniffs_untyped_binary(http_server, tmp_path):
     assert first.get("status") == 200, _dump(run)
     assert "body" not in first, _dump(run)
     assert "Binary content (application/octet-stream)" in first.get("note", ""), _dump(run)
+
+
+# Text served under a type that isn't text/* is still text.
+def test_http_fetch_returns_text_with_other_types(http_server, tmp_path):
+    base, _ = http_server
+    run = run_agentfile(
+        f"Use the http_fetch tool to fetch {base}/config.toml and tell me the name it sets.",
+        "http_fetch", tmp_path, extra=["--yes"])
+    fetches = run.results_for("http_fetch")
+    assert fetches, "model did not call http_fetch" + _dump(run)
+    first = json.loads(AgentRun.result_text(fetches[0]))
+    assert 'name = "agentfile"' in first.get("body", ""), _dump(run)
 
 
 # Tool results used to go through a strict json dump(), so a body with
@@ -565,95 +579,80 @@ def _pump(fd, on_output) -> str:
     return out.decode(errors="replace")
 
 
-def _answer_prompts(master, answer: bytes):
+def run_on_terminal(tmp_path, args, on_terminal, typeahead=b"", stderr_on_terminal=False):
+    """Run agentfile in its own session with stdin on a pty; stderr goes to
+    a file unless stderr_on_terminal. on_terminal(master, text so far)
+    answers what agentfile asks on the pty. Returns (exit code, terminal
+    text, stdout, stderr)."""
+    import pty
+    master, slave = pty.openpty()
+    log = tmp_path / "stderr.log"
+    with open(log, "wb") as err:
+        proc = subprocess.Popen(["sh", EXE, "-m", MODEL, "--no-think", *args],
+                                stdin=slave, stdout=subprocess.PIPE,
+                                stderr=slave if stderr_on_terminal else err,
+                                cwd=tmp_path, start_new_session=True)
+    os.close(slave)
+    os.write(master, typeahead)
+    term = _pump(master, lambda text: on_terminal(master, text))
+    proc.wait(timeout=RUN_TIMEOUT)
+    os.close(master)
+    return (proc.returncode, term, proc.stdout.read().decode(errors="replace"),
+            log.read_text(errors="replace"))
+
+
+def answer_every_prompt(answer: bytes):
     answered = [0]
 
-    def on_output(text):
+    def on_terminal(master, text):
         while text.count(b"Allow? [y/N]") > answered[0]:
             os.write(master, answer + b"\n")
             answered[0] += 1
-    return on_output
+    return on_terminal
 
 
-def run_on_terminal(tmp_path, answer: bytes, typeahead: bytes = b""):
-    """WRITE_PROMPT with stdin on a pty, answering every Allow? with `answer`.
-    Returns (exit code, stderr)."""
-    import pty
-    master, slave = pty.openpty()
-    proc = subprocess.Popen(["sh", EXE, "-m", MODEL, "-p", WRITE_PROMPT, "--tools", "write_file",
-                             "--no-think"],
-                            stdin=slave, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE,
-                            cwd=tmp_path)
-    os.close(slave)
-    os.write(master, typeahead)
-    err = _pump(proc.stderr.fileno(), _answer_prompts(master, answer))
-    proc.wait(timeout=RUN_TIMEOUT)
-    os.close(master)
-    return proc.returncode, err
+WRITE_ARGS = ["-p", WRITE_PROMPT, "--tools", "write_file"]
 
 
+# With stderr redirected, the question used to go there, and the run waited
+# on a question nobody could see. It goes to the terminal now.
 @posix_only
 def test_confirmation_yes_runs_the_call(tmp_path):
-    code, err = run_on_terminal(tmp_path, b"y")
-    assert code == 0, err
-    assert (tmp_path / "note.txt").exists(), err
+    code, term, _, err = run_on_terminal(tmp_path, WRITE_ARGS, answer_every_prompt(b"y"))
+    assert code == 0, term + err
+    assert "Allow? [y/N]" in term and "Allow?" not in err, term + err
+    assert (tmp_path / "note.txt").exists(), term + err
 
 
 # Models retry a declined call, and each retry asked again, without end.
 @posix_only
 def test_declined_calls_end_the_run(tmp_path):
-    code, err = run_on_terminal(tmp_path, b"n")
-    assert code in (0, 2), err
-    assert err.count("Allow? [y/N]") <= 3, err
-    assert not (tmp_path / "note.txt").exists(), err
+    code, term, _, err = run_on_terminal(tmp_path, WRITE_ARGS, answer_every_prompt(b"n"))
+    assert code in (0, 2), term + err
+    assert term.count("Allow? [y/N]") <= 3, term + err
+    assert not (tmp_path / "note.txt").exists(), term + err
     # Nothing ran, so no result line either.
     assert "[tool: write_file ->" not in err, err
 
 
-# The answer was read from whatever was typed before the prompt appeared.
+# The answer was read from whatever was typed before the question appeared.
 @posix_only
 def test_typed_ahead_text_does_not_answer_the_prompt(tmp_path):
-    code, err = run_on_terminal(tmp_path, b"n", typeahead=b"yes please\n")
-    assert not (tmp_path / "note.txt").exists(), err
-
-
-# The prompt went only to stderr, so with stderr redirected the run waited
-# on a prompt nobody could see.
-@posix_only
-def test_prompt_reaches_the_terminal_when_stderr_is_redirected(tmp_path):
-    import pty
-    log = tmp_path / "stderr.log"
-    pid, master = pty.fork()
-    if pid == 0:  # child: the pty is its controlling terminal
-        os.chdir(tmp_path)
-        os.dup2(os.open(log, os.O_WRONLY | os.O_CREAT | os.O_TRUNC), 2)
-        os.execvp("sh", ["sh", EXE, "-m", MODEL, "-p", WRITE_PROMPT, "--tools", "write_file",
-                         "--no-think"])
-    term = _pump(master, _answer_prompts(master, b"y"))
-    _, status = os.waitpid(pid, 0)
-    assert os.waitstatus_to_exitcode(status) == 0, term + log.read_text()
-    assert "Allow? [y/N]" in term, term
-    assert (tmp_path / "note.txt").exists(), term + log.read_text()
+    code, term, _, err = run_on_terminal(tmp_path, WRITE_ARGS, answer_every_prompt(b"n"),
+                                         typeahead=b"yes please\n")
+    assert not (tmp_path / "note.txt").exists(), term + err
 
 
 @posix_only
 def test_interactive_follow_up_then_empty_line_ends(tmp_path):
-    import pty
-    master, slave = pty.openpty()
-    proc = subprocess.Popen(["sh", EXE, "-m", MODEL, "-p", "Reply with the single word apple.",
-                             "-i", "--tools", "read_only", "--no-think"],
-                            stdin=slave, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                            cwd=tmp_path)
-    os.close(slave)
     sent = [0]
 
-    def on_output(text):
+    def on_terminal(master, text):
         if text.count(b"\n> ") > sent[0]:
             os.write(master, b"Now reply with the single word banana.\n" if sent[0] == 0 else b"\n")
             sent[0] += 1
-    err = _pump(proc.stderr.fileno(), on_output)
-    proc.wait(timeout=RUN_TIMEOUT)
-    os.close(master)
-    out = proc.stdout.read().decode().lower()
-    assert proc.returncode == 0, err
-    assert "apple" in out and "banana" in out, out + err
+    code, term, out, _ = run_on_terminal(
+        tmp_path, ["-p", "Reply with the single word apple.", "-i", "--tools", "read_only"],
+        on_terminal, stderr_on_terminal=True)
+    assert code == 0, term
+    assert "apple" in out.lower() and "banana" in out.lower(), out + term

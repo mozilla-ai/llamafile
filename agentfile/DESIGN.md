@@ -107,9 +107,9 @@ of it could go upstream:
   unchanged.
 - No `-p` and stdin not a tty: stdin is the prompt.
 - `-i/--interactive`: after each answer, ask for the next message on the
-  terminal (`ask_terminal`: the question goes to stderr, or to `/dev/tty`
-  when stderr is redirected; the answer comes from stdin, or `/dev/tty`
-  when stdin was a pipe). Empty line or EOF ends the session, and so does
+  terminal (`ask_terminal`: the answer comes from stdin, or `/dev/tty`
+  when stdin was a pipe; the question goes to stderr, or to that same
+  terminal when stderr is redirected). Empty line or EOF ends the session, and so does
   an error in a follow-up turn, with the same exit code as a one-shot run. Turns reuse the same `messages`, so
   the KV prefix carries over. `--max-iterations` is a per-turn budget.
 - Parsing is **last-wins**, and every mode flag has an inverse
@@ -142,15 +142,14 @@ of it could go upstream:
 - Default: a progress line before and after each tool call; `--think`
   reasoning, dimmed.
 - `-v`: also truncated tool results; llama.cpp's own warnings and errors
-  (`llama_log`: why a model fails to load); and `common_log` warnings
-  (such as a reply the chat parser refused). `common_log` warnings can
-  quote model output and are printed unescaped, hence only on request;
+  (`llama_log`: why a model fails to load); and `common_log` messages
+  below errors (such as a reply the chat parser refused). `common_log`
+  can quote model output and prints it unescaped, hence only on request;
   the `llama_log` lines go through agentfile's callback and are escaped.
 - `-vv`: also llama.cpp's info log (model metadata), and everything the
   GPU backends log. Those are DSOs that call log callbacks from native
   code, where only llamafile's no-op callback is safe, so they cannot be
   filtered: silent below `-vv`, their own unescaped logger at `-vv`.
-  `common_log` info stays off: it prints to stdout, where the answer goes.
 
 Model and tool text on stderr goes through `terminal_text`: under `--yes`
 these lines are the only record of a call.
@@ -201,9 +200,9 @@ there, the result says `truncated`). 30 s timeout. Redirects are reported
 as `redirect_to`, not followed, so every fetched URL is one the model asked
 for and the confirmation prompt showed. The prompt also names the host the
 URL connects to. The model gets the raw body: no HTML-to-text. A binary
-body (by `Content-Type`, or a NUL byte when the type is missing or
-`application/octet-stream`) stops the download and is not returned: the
-result has status, headers and a note instead, since escaped binary would
+body (an image, audio, video, font or PDF by its `Content-Type`, or any
+body with a NUL byte) stops the download and is not returned: the result
+has status, headers and a note instead, since escaped binary would
 overflow the context.
 
 ### web_search (SearXNG)
