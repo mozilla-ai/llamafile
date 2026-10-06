@@ -116,11 +116,8 @@ struct WebSearchTool : server_tool {
             auto res = cli.Get(parts.path,
                                httplib::Headers{{"Accept", "application/json"}});
             if (!res) {
-                int err = errno;
                 return {{"error", "request failed: " +
-                                      httplib::to_string(res.error()) +
-                                      " (errno " + std::to_string(err) +
-                                      ": " + strerror(err) + ")"}};
+                                      httplib::to_string(res.error())}};
             }
             if (res->status == 403) {
                 return {{"error",
