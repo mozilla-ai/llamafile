@@ -36,6 +36,7 @@
 #include <memory>
 #include <set>
 #include <string>
+#include <sys/stat.h>
 #include <unistd.h>
 #include <vector>
 
@@ -222,6 +223,20 @@ std::set<std::string> parse_tools_flag(const std::string &spec,
     return names;
 }
 
+// Whether fopen(path, "w") can succeed: an existing file must be writable,
+// a new one needs a writable directory. Lets --session and --trace fail
+// before the model loads, without creating anything.
+bool can_write(const std::string &path) {
+    struct stat st;
+    if (stat(path.c_str(), &st) == 0)
+        return !S_ISDIR(st.st_mode) && access(path.c_str(), W_OK) == 0;
+    size_t slash = path.find_last_of('/');
+    std::string dir = slash == std::string::npos ? "."
+                      : slash == 0               ? "/"
+                                                 : path.substr(0, slash);
+    return access(dir.c_str(), W_OK | X_OK) == 0;
+}
+
 } // namespace
 
 int main(int argc, char **argv) {
@@ -356,6 +371,17 @@ int main(int argc, char **argv) {
     if (model_path.empty() || prompt.empty()) {
         print_usage(argv[0], searxng_url);
         return 1;
+    }
+
+    // The recorders open their files once the model has loaded; check the
+    // paths now, so a typo fails before a multi-GB load.
+    for (const auto &[flag, path] : {std::pair{"--session", &session_path},
+                                     std::pair{"--trace", &trace_path}}) {
+        if (!path->empty() && !can_write(*path)) {
+            fprintf(stderr, "agentfile: %s: cannot write %s\n", flag,
+                    path->c_str());
+            return 1;
+        }
     }
 
     // Silence llama.cpp / ggml logging before backend init. GPU backends are

@@ -430,6 +430,16 @@ def test_session_tool_calls_have_paired_ids(tmp_path):
     assert [r.get("toolCallId") for r in run.tool_results] == call_ids, _dump(run)
 
 
+# The recorders open their files after the model loads, so a bad path used
+# to fail only after the whole load.
+@pytest.mark.parametrize("flag", ["--session", "--trace"])
+def test_unwritable_record_path_fails_before_load(tmp_path, flag):
+    path = str(tmp_path / "missing-dir" / "out.jsonl")
+    run = run_agentfile("hi", "read_only", tmp_path, extra=[flag, path])
+    assert run.proc.returncode == 1, _dump(run)
+    assert f"{flag}: cannot write {path}" in run.proc.stderr, _dump(run)
+
+
 # --- --quiet --yes audit ----------------------------------------------------
 
 WRITE_PROMPT = ("Use the write_file tool to create a file named note.txt in the "
