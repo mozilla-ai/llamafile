@@ -471,6 +471,13 @@ int main(int argc, char **argv) {
             callbacks.emplace_back(
                 std::make_unique<agentfile::ProgressCallback>(verbosity > 1));
         }
+        // The cap goes before the trace, so the call it refuses never
+        // opens a chat span.
+        if (max_iterations > 0) {
+            callbacks.emplace_back(
+                std::make_unique<agentfile::MaxIterationsCallback>(
+                    max_iterations));
+        }
         // The trace callback goes after the confirmation prompt so tool
         // spans measure execution, not the time the user spent deciding.
         if (!trace_path.empty()) {
@@ -484,11 +491,6 @@ int main(int argc, char **argv) {
         // progress, session and trace still record the call as failed.
         callbacks.emplace_back(
             std::make_unique<agentfile::ErrorRecoveryCallback>());
-        if (max_iterations > 0) {
-            callbacks.emplace_back(
-                std::make_unique<agentfile::MaxIterationsCallback>(
-                    max_iterations));
-        }
         agent_cpp::Agent agent(std::move(model), std::move(tools),
                                std::move(callbacks), instructions);
 
@@ -528,10 +530,14 @@ int main(int argc, char **argv) {
         fprintf(stderr, "%s\n", e.what());
         return 4;
     } catch (const agent_cpp::Error &e) {
-        fprintf(stderr, "agentfile error: %s\n", e.what());
+        // Error text can quote the model or a tool (an unknown tool name,
+        // a tool's error), so it is escaped like the other stderr lines.
+        fprintf(stderr, "agentfile error: %s\n",
+                agentfile::terminal_text(e.what()).c_str());
         return 2;
     } catch (const std::exception &e) {
-        fprintf(stderr, "error: %s\n", e.what());
+        fprintf(stderr, "error: %s\n",
+                agentfile::terminal_text(e.what()).c_str());
         return 3;
     }
 

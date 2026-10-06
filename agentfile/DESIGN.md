@@ -48,9 +48,10 @@ One translation unit, `agentfile.cpp`, plus headers:
   and shell tools, and sends date/time and web search to MCP or the web
   UI.
 - `callbacks/`: agent.cpp callbacks, registered in this order:
-  session recorder, confirmation, progress, trace, error recovery,
-  iteration cap. The trace comes after the confirmation so tool spans
-  measure execution, not the time the user spent deciding. Error
+  session recorder, confirmation, progress, iteration cap, trace, error
+  recovery. The trace comes after the confirmation so tool spans
+  measure execution, not the time the user spent deciding, and after the
+  iteration cap so the call the cap refuses gets no chat span. Error
   recovery comes after the observers so they record a failed call as
   failed before it is handed back to the model.
 - `util.h`: terminal escaping (`terminal_text`), ids, timestamps.

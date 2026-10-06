@@ -48,6 +48,7 @@ The zip is structured as follows.
 llamafile-<version>
 |-- README.md
 |-- bin
+|   |-- agentfile
 |   |-- diffusionfile
 |   |-- llamafile
 |   |-- transcribefile
@@ -79,6 +80,7 @@ The following binaries are part of the release:
 - `whisperfile`
 - `diffusionfile`
 - `transcribefile`
+- `agentfile`
 
 You can use the script to create the appropriately named binaries:
 
