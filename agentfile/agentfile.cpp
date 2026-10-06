@@ -156,7 +156,8 @@ void print_usage(const char *prog, const std::string &searxng_url) {
             "  --quiet              Don't print tool-execution progress to stderr\n"
             "                       (destructive tools run under --yes are still\n"
             "                       logged, one line each)\n"
-            "  -v, --verbose        Also print truncated tool results to stderr\n"
+            "  -v, --verbose        Also print truncated tool results and\n"
+            "                       llama.cpp warnings (unescaped) to stderr\n"
             "  -h                   Show this help\n"
             "\n",
             prog, prog, kDefaultCtx);
@@ -393,9 +394,10 @@ int main(int argc, char **argv) {
     llamafile_cuda_log_set(llamafile_log_callback_null, nullptr);
     llamafile_vulkan_log_set(llamafile_log_callback_null, nullptr);
     // llama.cpp common (and agent.cpp) warnings, e.g. a model reply the
-    // chat parser refused, go through common_log instead: keep them unless
-    // --quiet, which only leaves errors.
-    if (verbosity == 0)
+    // chat parser refused, go through common_log instead. They can quote
+    // model output, which common_log prints unescaped, so only -v shows
+    // them; errors always show.
+    if (verbosity < 2)
         common_log_set_verbosity_thold(LOG_LEVEL_ERROR);
 
     // Initialize llamafile GPU backends (Metal, CUDA, Vulkan, ROCm).
@@ -496,9 +498,19 @@ int main(int argc, char **argv) {
         user_msg.content = prompt;
         messages.push_back(std::move(user_msg));
 
-        std::string reply = agent.run_loop(messages);
-        fputs(reply.c_str(), stdout);
-        fputc('\n', stdout);
+        // The answer goes to stdout as is when piped, and escaped on a
+        // terminal, where it could otherwise erase or restyle the tool
+        // lines printed above it.
+        const bool stdout_tty = isatty(STDOUT_FILENO);
+        auto print_reply = [&](const std::string &reply) {
+            std::string out = stdout_tty
+                ? agentfile::terminal_text(reply, /*keep_newlines=*/true)
+                : reply;
+            out += '\n';
+            fwrite(out.data(), 1, out.size(), stdout);
+        };
+
+        print_reply(agent.run_loop(messages));
 
         // Follow-up turns reuse `messages`, so the KV-cache prefix carries
         // over and each turn only pays for what's new.
@@ -510,9 +522,7 @@ int main(int argc, char **argv) {
             msg.role = "user";
             msg.content = followup;
             messages.push_back(std::move(msg));
-            reply = agent.run_loop(messages);
-            fputs(reply.c_str(), stdout);
-            fputc('\n', stdout);
+            print_reply(agent.run_loop(messages));
         }
     } catch (const agentfile::MaxIterationsExceeded &e) {
         fprintf(stderr, "%s\n", e.what());
