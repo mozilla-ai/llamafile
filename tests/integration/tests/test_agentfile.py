@@ -103,23 +103,32 @@ def _make_handler(state: ServerState, base_url_box: list):
             elif self.path == "/small":
                 self._text(200, "hello from small")
             elif self.path == "/big":
-                self.send_response(200)
-                self.send_header("Content-Type", "text/plain")
-                self.send_header("Content-Length", str(BIG_TOTAL))
-                self.end_headers()
-                sent = 0
-                try:
-                    while sent < BIG_TOTAL:
-                        chunk = b"x" * min(BIG_CHUNK, BIG_TOTAL - sent)
-                        self.wfile.write(chunk)
-                        self.wfile.flush()
-                        sent += len(chunk)
-                        state.big_bytes_sent = sent
-                        time.sleep(BIG_DELAY)
-                except (BrokenPipeError, ConnectionResetError):
-                    state.big_disconnected = True
+                self._stream("text/plain", b"x")
+            elif self.path == "/photo.png":
+                self._stream("image/png", b"\x89")
+            elif self.path == "/blob":
+                # No telling type: the NUL bytes mark it binary.
+                self._bytes(200, b"%PDF-1.7\n" + bytes(range(256)) * 64,
+                            "application/octet-stream")
             else:
                 self._text(404, "not found")
+
+        def _stream(self, ctype: str, byte: bytes):
+            self.send_response(200)
+            self.send_header("Content-Type", ctype)
+            self.send_header("Content-Length", str(BIG_TOTAL))
+            self.end_headers()
+            sent = 0
+            try:
+                while sent < BIG_TOTAL:
+                    chunk = byte * min(BIG_CHUNK, BIG_TOTAL - sent)
+                    self.wfile.write(chunk)
+                    self.wfile.flush()
+                    sent += len(chunk)
+                    state.big_bytes_sent = sent
+                    time.sleep(BIG_DELAY)
+            except (BrokenPipeError, ConnectionResetError):
+                state.big_disconnected = True
 
     return Handler
 
@@ -223,6 +232,37 @@ def test_http_fetch_stops_reading_at_cap(http_server, tmp_path):
     # The download must stop at the cap instead of buffering the whole body.
     assert state.big_bytes_sent <= BIG_TOTAL // 2, (
         f"server sent {state.big_bytes_sent} of {BIG_TOTAL} bytes; client did not abort at the cap")
+
+
+# A binary body went to the model escaped into the JSON result, and 64 KB of
+# an image or a PDF takes more tokens than the default context holds.
+def test_http_fetch_skips_binary_type(http_server, tmp_path):
+    base, state = http_server
+    run = run_agentfile(
+        f"Use the http_fetch tool to fetch {base}/photo.png and tell me its content type.",
+        "http_fetch", tmp_path, extra=["--yes"])
+    fetches = run.results_for("http_fetch")
+    assert fetches, "model did not call http_fetch" + _dump(run)
+    first = json.loads(AgentRun.result_text(fetches[0]))
+    assert first.get("status") == 200, _dump(run)
+    assert "body" not in first, _dump(run)
+    assert "Binary content (image/png)" in first.get("note", ""), _dump(run)
+    # The Content-Type is enough: the download stops before the body.
+    assert state.big_bytes_sent <= BIG_TOTAL // 2, (
+        f"server sent {state.big_bytes_sent} of {BIG_TOTAL} bytes; client did not abort")
+
+
+def test_http_fetch_sniffs_untyped_binary(http_server, tmp_path):
+    base, _ = http_server
+    run = run_agentfile(
+        f"Use the http_fetch tool to fetch {base}/blob and tell me its content type.",
+        "http_fetch", tmp_path, extra=["--yes"])
+    fetches = run.results_for("http_fetch")
+    assert fetches, "model did not call http_fetch" + _dump(run)
+    first = json.loads(AgentRun.result_text(fetches[0]))
+    assert first.get("status") == 200, _dump(run)
+    assert "body" not in first, _dump(run)
+    assert "Binary content (application/octet-stream)" in first.get("note", ""), _dump(run)
 
 
 # Tool results used to go through a strict json dump(), so a body with

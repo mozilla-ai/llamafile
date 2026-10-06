@@ -21,8 +21,8 @@
 // here: llama.cpp keeps its server tools to minimal I/O and shell ones.
 //
 // Limits: GET only; body capped at 64 KB (the download stops there and the
-// result is marked truncated); 30s timeout;
-// redirects are reported (redirect_to), not followed.
+// result is marked truncated); text only (a binary body is not returned);
+// 30s timeout; redirects are reported (redirect_to), not followed.
 //
 
 #pragma once
@@ -33,6 +33,7 @@
 #include "http.h"   // common_http_client, common_http_parse_url
 
 #include <cctype>
+#include <cstring>
 #include <string>
 
 namespace agentfile {
@@ -56,7 +57,8 @@ struct HttpFetchTool : server_tool {
                 {"name", name},
                 {"description",
                  "Fetch a URL with HTTP GET and return status + headers + "
-                 "body. Response body is capped at 64 KB. Redirects are not "
+                 "body. Response body is capped at 64 KB; binary content "
+                 "(images, PDFs, archives) is not returned. Redirects are not "
                  "followed automatically: a 3xx response carries redirect_to; "
                  "call http_fetch again with that URL to retrieve the content. "
                  "Use sparingly — this tool grants the model network access."},
@@ -81,6 +83,34 @@ struct HttpFetchTool : server_tool {
             "0123456789+-.");
         return end != std::string::npos && end > 0 && loc[end] == ':' &&
                std::isalpha(static_cast<unsigned char>(loc[0]));
+    }
+
+    // Whether a Content-Type rules the body out as binary (an image, a PDF,
+    // an archive). Escaped into the JSON result, 64 KB of binary takes more
+    // tokens than the default context holds. No type, or the generic
+    // application/octet-stream, is left to the body: a NUL byte in it
+    // marks it binary.
+    static bool is_binary_type(const std::string &content_type) {
+        std::string t = content_type.substr(0, content_type.find(';'));
+        for (auto &c : t) c = std::tolower(static_cast<unsigned char>(c));
+        while (!t.empty() && t.back() == ' ') t.pop_back();
+        auto ends_with = [&](const char *s) {
+            size_t n = std::strlen(s);
+            return t.size() >= n && t.compare(t.size() - n, n, s) == 0;
+        };
+        if (t.empty() || t == "application/octet-stream") return false;
+        if (t.rfind("text/", 0) == 0 || ends_with("+json") ||
+            ends_with("+xml"))
+            return false;
+        for (const char *text : {"application/json", "application/xml",
+                                 "application/javascript",
+                                 "application/x-javascript",
+                                 "application/ecmascript",
+                                 "application/x-ndjson", "application/yaml",
+                                 "application/x-yaml", "application/toml",
+                                 "application/sql", "application/graphql"})
+            if (t == text) return false;
+        return true;
     }
 
     // Resolve a Location header against the request URL (RFC 3986-lite:
@@ -121,18 +151,25 @@ struct HttpFetchTool : server_tool {
             // Stream the body and stop reading at the cap, instead of
             // buffering whatever the server sends (httplib would accept up
             // to CPPHTTPLIB_PAYLOAD_MAX_LENGTH) and truncating afterwards.
+            // A binary body stops the download as soon as it is known.
             int status = 0;
             httplib::Headers headers;
             std::string body;
             bool truncated = false;
+            bool binary = false;
             auto res = cli.Get(
                 parts.path,
                 [&](const httplib::Response &r) {
                     status = r.status;
                     headers = r.headers;
-                    return true;
+                    binary = is_binary_type(r.get_header_value("Content-Type"));
+                    return !binary;
                 },
                 [&](const char *data, size_t n) {
+                    if (std::memchr(data, 0, n)) {
+                        binary = true;
+                        return false;
+                    }
                     size_t room = kMaxBody - body.size();
                     if (n > room) {
                         body.append(data, room);
@@ -144,7 +181,7 @@ struct HttpFetchTool : server_tool {
                 });
             // Aborting the read ourselves surfaces as a failed Result, but
             // the status and headers already arrived before the body.
-            if (!res && !truncated) {
+            if (!res && !truncated && !binary) {
                 return {{"error", "request failed: " +
                                       httplib::to_string(res.error())}};
             }
@@ -166,6 +203,14 @@ struct HttpFetchTool : server_tool {
             }
             out["status"] = status;
             out["headers"] = resp_headers;
+            if (binary) {
+                auto type = headers.find("Content-Type");
+                std::string what = type != headers.end() ? type->second
+                                                         : "no Content-Type";
+                out["note"] = "Binary content (" + what +
+                              ") not returned: http_fetch returns text only.";
+                return out;
+            }
             out["body"] = body;
             out["truncated"] = truncated;
             return out;

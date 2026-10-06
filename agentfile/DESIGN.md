@@ -187,7 +187,11 @@ GET only. The body is capped at `kMaxBody` (64 KB; the download stops
 there, the result says `truncated`). 30 s timeout. Redirects are reported
 as `redirect_to`, not followed, so every fetched URL is one the model asked
 for and the confirmation prompt showed. The prompt also names the host the
-URL connects to. The model gets the raw body: no HTML-to-text.
+URL connects to. The model gets the raw body: no HTML-to-text. A binary
+body (by `Content-Type`, or a NUL byte when the type is missing or
+`application/octet-stream`) stops the download and is not returned: the
+result has status, headers and a note instead, since escaped binary would
+overflow the context.
 
 ### web_search (SearXNG)
 
