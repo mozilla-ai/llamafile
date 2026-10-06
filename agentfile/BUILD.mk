@@ -31,13 +31,10 @@ AGENTFILE_HDRS := $(wildcard agentfile/*.h) \
 	$(wildcard agentfile/callbacks/*.h) \
 	$(wildcard agentfile/tools/*.h)
 
-# External headers whose ABI leaks into agentfile objects: agent.cpp's
-# list (agent.cpp/src, llama.cpp common/include/ggml, nlohmann) plus the
-# server, mtmd, vendored and llamafile headers agentfile.cpp also reaches.
-# Submodule bumps rewrite these without touching agentfile sources; without
-# this dependency the old agentfile.o gets linked against new objects and
-# fails with undefined or mismatched symbols (seen 2026-09-10: httplib's
-# Headers container type changed).
+# Headers from other projects that agentfile.cpp includes (agent.cpp's
+# list plus server, mtmd, vendored and llamafile ones). A submodule bump
+# changes them without touching agentfile sources, and a stale agentfile.o
+# then fails to link against the new objects.
 AGENTFILE_EXT_HDRS := \
 	$(AGENT_CPP_DEP_HDRS) \
 	$(wildcard llama.cpp/tools/server/server-*.h) \

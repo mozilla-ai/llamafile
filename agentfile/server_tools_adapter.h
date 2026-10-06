@@ -16,24 +16,18 @@
 // limitations under the License.
 //
 // Bridges llama.cpp's server tools (tools/server/server-tools.h) into
-// agent.cpp's Tool interface, so agentfile inherits the upstream tool
-// implementations — including new tools and the isolation runtimes —
-// instead of maintaining vendored copies.
+// agent.cpp's Tool interface, so agentfile uses the upstream tools and
+// their isolation runtimes instead of keeping its own copies.
 //
-//   ServerToolAdapter  one agent_cpp::Tool wrapping one server_tool
-//   ServerToolbox      owns the upstream registry plus agentfile-native
-//                      tools (get_datetime, http_fetch, web_search) and
-//                      hands out adapters; must outlive the Agent using
-//                      them
+//   ServerToolAdapter  wraps one server_tool as an agent_cpp::Tool
+//   ServerToolbox      owns the tools, upstream and agentfile's own
+//                      (get_datetime, http_fetch, web_search); must
+//                      outlive the Agent that uses them
 //
 // Every call goes through server_tools::handle_post, the handler behind
-// llama-server's POST /tools, so the call handling stays upstream's: it
-// drops the keys the model must not set (cwd, runtime, resp_type), runs
-// the tool in the --tools-runtime isolate, and turns exceptions into
-// error responses. --tools-runtime takes llama-server's specs and is
-// checked at startup: "docker-container:ID" attaches to a running
-// container, "docker:IMAGE" starts one and stops it on exit (podman
-// likewise), "ssh:TARGET" runs on a remote host.
+// llama-server's POST /tools: it drops the keys the model must not set
+// (cwd, runtime, resp_type), runs the tool in the --tools-runtime isolate
+// if one is set, and turns exceptions into error responses.
 //
 
 #pragma once
@@ -58,39 +52,23 @@
 
 namespace agentfile {
 
-// Keys the server tools read out of params as settings, not arguments.
-// handle_post drops them from the model's arguments; this copy only names
-// them in the confirmation prompt.
-inline constexpr const char *kServerToolControlKeys[] = {"runtime", "cwd",
-                                                         "resp_type"};
-
-// Tool-call arguments are model-controlled text headed for the terminal
-// (the confirmation prompt, the progress line). Show them as the tool
-// receives them: parsed as agent.cpp parses them, re-serialized (bytes
-// between JSON tokens, such as a '\r' that would return the cursor and
-// overprint the command being approved, are gone), with the control keys
-// stripped and named, so the prompt never shows a cwd or runtime that
-// will not apply. A "url" also gets the scheme://host:port the http
-// client parses out of it, which is where the request goes even when the
-// text reads otherwise. terminal_text escapes the controls JSON allows
-// inside strings. Text that is not valid JSON, and so will be refused
-// anyway, is shown escaped as it is.
+// Tool-call arguments as the confirmation prompt and progress line show
+// them: as the tool will get them (re-serialized, without the keys
+// handle_post drops) and escaped for the terminal, so model text can't
+// hide or fake part of the line. A "url" also shows the host and port the
+// request really goes to (http://a.example@b.example/ goes to b.example).
+// Arguments that aren't JSON are shown escaped, as they are.
 inline std::string printable_arguments(const std::string &arguments) {
     std::string text = arguments;
     std::string note;
     try {
-        // As handle_post gets them: agent.cpp's parse, then the same
-        // dump/parse into the server tools' json.
+        // Parsed the way the call parses them: agent.cpp's json, then the
+        // server tools' json.
         auto args = json::parse(nlohmann::json::parse(arguments).dump());
         if (args.is_object()) {
-            for (const char *key : kServerToolControlKeys) {
-                if (args.contains(key)) {
-                    args.erase(key);
-                    note += (note.empty() ? " (ignored: " : ", ");
-                    note += key;
-                }
+            for (const char *key : {"cwd", "runtime", "resp_type"}) {
+                if (args.contains(key)) args.erase(key);
             }
-            if (!note.empty()) note += ")";
             if (args.contains("url") && args.at("url").is_string()) {
                 try {
                     auto parts = common_http_parse_url(
@@ -143,15 +121,13 @@ class ServerToolAdapter : public agent_cpp::Tool {
         // invalid UTF-8 (a Latin-1 file, a byte-truncated snippet).
         json result = json::parse(res->data);
         if (res->status != 200) {
-            // A thrown exception, as format_error_response shapes it: hand
-            // the model the {"error": msg} shape the tools use themselves.
+            // A tool threw (bad arguments, say): pass the message on in the
+            // {"error": msg} shape the tools use themselves.
             return safe_json_to_str(
                 json{{"error", json_value(result, "message", res->data)}});
         }
-        // Server tools answer {"plain_text_response": text} on success and
-        // {"error": msg} on failure (tools/server/README-dev.md). Put the
-        // text itself (not the JSON wrapper) into the tool message, so the
-        // model sees plain text rather than escaped JSON.
+        // Hand a {"plain_text_response": text} result on as the text
+        // itself, not as escaped JSON.
         if (result.is_object() && !result.contains("error") &&
             result.contains("plain_text_response") &&
             result.at("plain_text_response").is_string()) {

@@ -90,10 +90,9 @@ void llama_log_to_stderr(ggml_log_level level, const char *text, void *) {
               stderr);
 }
 
-// The tools section of the help is generated from the toolbox so it can't
-// drift from the registered tools. searxng_url is the one parsed so far
-// (SEARXNG_URL, then --searxng-url, including a packaged agent's), so
-// web_search shows its true availability.
+// The tools part of the help comes from the toolbox, so it always matches
+// the registered tools. searxng_url is the value parsed so far, so
+// web_search shows as available when it is.
 void print_tools_help(const std::string &searxng_url) {
     try {
         agentfile::ServerToolbox toolbox(searxng_url, "");
@@ -242,9 +241,9 @@ int main(int argc, char **argv) {
     std::string tools_runtime;
     if (const char *env = std::getenv("SEARXNG_URL")) searxng_url = env;
 
-    // Parsing is strictly last-wins and every mode flag has an inverse, so
-    // defaults baked into a packaged agent's /zip/.args (which cosmo_args
-    // prepends before the real command line) can always be overridden.
+    // The last flag wins and every mode flag has an inverse, so a packaged
+    // agent's defaults (/zip/.args, which cosmo_args puts first) can always
+    // be overridden.
     auto need_value = [&](int &i) -> const char * {
         if (i + 1 >= argc) {
             fprintf(stderr, "agentfile: %s requires a value\n", argv[i]);
@@ -253,7 +252,7 @@ int main(int argc, char **argv) {
         return argv[++i];
     };
     // 0 means "no limit" for -c and --max-iterations, so a typo must fail
-    // instead of becoming 0 the way atoi() would make it.
+    // instead of becoming 0, as it would with atoi().
     auto need_count = [&](int &i) -> int {
         const char *flag = argv[i];
         const char *s = need_value(i);
@@ -354,29 +353,24 @@ int main(int argc, char **argv) {
         return 1;
     }
 
-    // Route llama.cpp / ggml logging before backend init: silent unless -v
-    // or -vv.
+    // Logging, set before the backends start. llama.cpp's own log: silent
+    // unless -v (warnings, errors) or -vv (also info).
     if (verbosity >= 2) {
         g_llama_log_min =
             verbosity >= 3 ? GGML_LOG_LEVEL_INFO : GGML_LOG_LEVEL_WARN;
     }
     llama_log_set(llama_log_to_stderr, nullptr);
-    // GPU backends are runtime-loaded DSOs with their own copy of ggml's
-    // logger. They call a callback from native code (with the MS ABI on
-    // Windows), where only the no-op is safe: a callback that does any work
-    // crashes. So they stay silent below -vv and print through their own
-    // logger at -vv, as llamafile --verbose does. The llamafile_*_log_set
-    // hooks queue the callback if the backend isn't loaded yet.
+    // The GPU backends are separate libraries with their own logger. Their
+    // callback runs as native code, where only llamafile's no-op is safe,
+    // so they are either silent or (at -vv) print everything themselves.
     if (verbosity < 3) {
         llamafile_metal_log_set(llamafile_log_callback_null, nullptr);
         llamafile_cuda_log_set(llamafile_log_callback_null, nullptr);
         llamafile_vulkan_log_set(llamafile_log_callback_null, nullptr);
     }
-    // llama.cpp common (and agent.cpp) warnings, e.g. a model reply the
-    // chat parser refused, go through common_log instead. They can quote
-    // model output, which common_log prints unescaped, so only -v shows
-    // them; errors always show. Its info level stays off even under -vv:
-    // common_log prints info to stdout, where the answer goes.
+    // common_log (llama.cpp common, agent.cpp) prints model text unescaped,
+    // so its warnings only show with -v. Its info level stays off: it goes
+    // to stdout, where the answer goes.
     if (verbosity < 2)
         common_log_set_verbosity_thold(LOG_LEVEL_ERROR);
 
@@ -470,8 +464,7 @@ int main(int argc, char **argv) {
         messages.push_back(std::move(user_msg));
 
         // The answer goes to stdout as is when piped, and escaped on a
-        // terminal, where it could otherwise erase or restyle the tool
-        // lines printed above it.
+        // terminal, where it could otherwise rewrite the lines above it.
         const bool stdout_tty = isatty(STDOUT_FILENO);
         auto print_reply = [&](const std::string &reply) {
             std::string out = stdout_tty
@@ -483,9 +476,8 @@ int main(int argc, char **argv) {
 
         print_reply(agent.run_loop(messages));
 
-        // Follow-up turns reuse `messages`, so the KV-cache prefix carries
-        // over and each turn only pays for what's new.
-        // An empty line, EOF or no terminal ends the session.
+        // Follow-up turns reuse `messages`, so the cached prefix carries
+        // over. An empty line, EOF or no terminal ends the session.
         while (interactive) {
             fflush(stdout);
             std::string followup;

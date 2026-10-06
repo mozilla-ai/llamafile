@@ -15,10 +15,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
-// Small shared helpers for agentfile's callbacks: terminal output
-// (dim chrome, escaping model text), random hex identifiers and
-// wall-clock timestamps in the encodings used by the pi session format
-// (ISO 8601 + Unix ms) and OTLP (Unix nanoseconds).
+// Small shared helpers: terminal output and input, random ids, and the
+// timestamps the session (ISO 8601, Unix ms) and trace (Unix ns) use.
 //
 
 #pragma once
@@ -35,10 +33,8 @@
 
 namespace agentfile {
 
-// ANSI dim on/off codes for stderr chrome (progress lines, prompts), so it
-// reads visually distinct from the model's answer on stdout. These wrap the
-// text but never replace it: when stderr is redirected to a file/pipe or
-// NO_COLOR is set, both return "" and the exact same text prints unstyled.
+// Dim style for the stderr lines (progress, prompts), so they stand apart
+// from the answer. Empty when stderr isn't a terminal or NO_COLOR is set.
 inline const char *dim() {
     static const bool on = isatty(STDERR_FILENO) && !std::getenv("NO_COLOR");
     return on ? "\033[2m" : "";
@@ -169,11 +165,7 @@ inline std::string iso8601_now() {
     int64_t ms = unix_ms_now();
     time_t secs = (time_t)(ms / 1000);
     struct tm tm_utc;
-#ifdef _WIN32
-    gmtime_s(&tm_utc, &secs);
-#else
     gmtime_r(&secs, &tm_utc);
-#endif
     char buf[40];
     std::snprintf(buf, sizeof(buf), "%04d-%02d-%02dT%02d:%02d:%02d.%03dZ",
                   tm_utc.tm_year + 1900, tm_utc.tm_mon + 1, tm_utc.tm_mday,

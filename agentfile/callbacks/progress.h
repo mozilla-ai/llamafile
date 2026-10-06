@@ -15,11 +15,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
-// ProgressCallback — prints `[tool: NAME args] -> N bytes` on stderr
-// around each tool execution, keeping stdout clean. In verbose mode also
-// prints a truncated result preview. Model and tool text, the tool name
-// included, goes through terminal_text: under --yes this output is the only
-// record of a call.
+// ProgressCallback — prints a line on stderr before and after each tool
+// call, and with -v a preview of the result. Model and tool text is
+// escaped: under --yes these lines are the only record of a call.
 //
 
 #pragma once

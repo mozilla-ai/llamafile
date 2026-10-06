@@ -15,17 +15,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
-// SessionRecorderCallback — records the conversation as a pi session file
-// (https://pi.dev, session-format v3): a JSONL file whose first line is a
-// session header and whose remaining lines are tree-linked message entries.
-// agentfile histories are linear, so each entry's parentId is simply the
-// previous entry's id.
-//
-// Schema reference: pi/packages/coding-agent/docs/session-format.md (v3).
-// The resulting file can be opened with `pi /import <file>`.
-//
-// Token usage is recorded as zeros: agent.cpp's Model does not currently
-// expose per-call token counts to callbacks.
+// SessionRecorderCallback — records the conversation in pi's session format
+// (https://pi.dev, pi/packages/coding-agent/docs/session-format.md, v3): a
+// header line, then one line per message. The history is linear, so each
+// entry's parent is the previous one. Token counts are zero: agent.cpp
+// doesn't report them.
 //
 
 #pragma once
@@ -50,10 +44,9 @@ class SessionRecorderCallback : public agent_cpp::Callback {
     FILE *file_;
     std::string model_name_;
     std::string parent_id_;               // last entry id; empty = root
-    // Ids of tool calls awaiting results. The loop executes calls strictly
-    // in order, so the front id always belongs to the next result.
+    // Tool calls run in order, so the front id belongs to the next result.
     std::deque<std::string> pending_tool_calls_;
-    size_t seen_messages_ = 0;            // high-water mark into `messages`
+    size_t seen_messages_ = 0;            // messages already recorded
 
   public:
     SessionRecorderCallback(const std::string &path,
@@ -82,9 +75,8 @@ class SessionRecorderCallback : public agent_cpp::Callback {
     SessionRecorderCallback &operator=(const SessionRecorderCallback &) = delete;
 
     void before_agent_loop(std::vector<common_chat_msg> &messages) override {
-        // Record user messages not yet seen (the system prompt is not a pi
-        // message role; assistant/tool entries are recorded by their own
-        // hooks). Works across repeated run_loop calls (interactive mode).
+        // New user messages; the other roles are recorded by their own
+        // hooks, and pi has no system message.
         for (size_t i = seen_messages_; i < messages.size(); ++i) {
             if (messages[i].role != "user") continue;
             append_message({
@@ -97,8 +89,6 @@ class SessionRecorderCallback : public agent_cpp::Callback {
     }
 
     void after_llm_call(common_chat_msg &parsed_msg) override {
-        // Tool calls carry ids: Model::generate assigns any the chat
-        // template's parser left empty.
         json content = json::array();
         if (!parsed_msg.reasoning_content.empty()) {
             content.push_back(
@@ -146,8 +136,6 @@ class SessionRecorderCallback : public agent_cpp::Callback {
 
     void after_tool_execution(std::string &tool_name,
                               agent_cpp::ToolResult &result) override {
-        // run_loop executes tool calls strictly in order, so the front of
-        // the pending queue is the call this result belongs to.
         std::string call_id;
         if (!pending_tool_calls_.empty()) {
             call_id = pending_tool_calls_.front();
@@ -181,8 +169,8 @@ class SessionRecorderCallback : public agent_cpp::Callback {
         parent_id_ = id;
     }
 
-    // Tool output can be any bytes (a Latin-1 file, a truncated page):
-    // safe_json_to_str replaces invalid UTF-8 where dump() would throw.
+    // Tool output can be any bytes: safe_json_to_str replaces invalid UTF-8
+    // where dump() would throw.
     void write_line(const json &j) {
         std::string line = safe_json_to_str(j);
         std::fwrite(line.data(), 1, line.size(), file_);

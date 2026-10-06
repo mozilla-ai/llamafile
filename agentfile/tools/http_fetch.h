@@ -15,10 +15,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
-// http_fetch: HTTP(S) GET built on llama.cpp's common_http_client.
-// Written as a server_tool (llama.cpp tools/server style), so agentfile
-// runs it through ServerToolAdapter like the upstream tools. It stays
-// here: llama.cpp keeps its server tools to minimal I/O and shell ones.
+// http_fetch: HTTP(S) GET on llama.cpp's common_http_client. A server_tool,
+// run through ServerToolAdapter like the upstream tools; it lives here
+// because llama.cpp keeps its server tools to file and shell I/O.
 //
 // Limits: GET only; body capped at 64 KB (the download stops there and the
 // result is marked truncated); text only (a binary body is not returned);
@@ -33,7 +32,7 @@
 #include "http.h"   // common_http_client, common_http_parse_url
 
 #include <cctype>
-#include <cstring>
+#include <cstring>  // memchr
 #include <string>
 
 namespace agentfile {
@@ -85,31 +84,17 @@ struct HttpFetchTool : server_tool {
                std::isalpha(static_cast<unsigned char>(loc[0]));
     }
 
-    // Whether a Content-Type rules the body out as binary (an image, a PDF,
-    // an archive). Escaped into the JSON result, 64 KB of binary takes more
-    // tokens than the default context holds. No type, or the generic
-    // application/octet-stream, is left to the body: a NUL byte in it
-    // marks it binary.
+    // Whether a Content-Type says the body is binary (an image, a PDF, an
+    // archive): escaped into the result, 64 KB of it would take more tokens
+    // than the default context holds. With no type, or the generic
+    // octet-stream, the body decides: a NUL byte marks it binary.
     static bool is_binary_type(const std::string &content_type) {
         std::string t = content_type.substr(0, content_type.find(';'));
         for (auto &c : t) c = std::tolower(static_cast<unsigned char>(c));
-        while (!t.empty() && t.back() == ' ') t.pop_back();
-        auto ends_with = [&](const char *s) {
-            size_t n = std::strlen(s);
-            return t.size() >= n && t.compare(t.size() - n, n, s) == 0;
-        };
-        if (t.empty() || t == "application/octet-stream") return false;
-        if (t.rfind("text/", 0) == 0 || ends_with("+json") ||
-            ends_with("+xml"))
+        if (t.empty() || t.find("octet-stream") != std::string::npos)
             return false;
-        for (const char *text : {"application/json", "application/xml",
-                                 "application/javascript",
-                                 "application/x-javascript",
-                                 "application/ecmascript",
-                                 "application/x-ndjson", "application/yaml",
-                                 "application/x-yaml", "application/toml",
-                                 "application/sql", "application/graphql"})
-            if (t == text) return false;
+        for (const char *text : {"text/", "json", "xml", "javascript", "yaml"})
+            if (t.find(text) != std::string::npos) return false;
         return true;
     }
 

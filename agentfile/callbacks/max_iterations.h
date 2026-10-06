@@ -15,9 +15,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
-// MaxIterationsCallback — throws MaxIterationsExceeded when a turn makes
-// more than N LLM calls. Pairs with --max-iterations; main maps the
-// exception to its own exit code.
+// MaxIterationsCallback — --max-iterations: ends the run when a turn makes
+// more than N LLM calls.
 //
 
 #pragma once
@@ -43,8 +42,7 @@ class MaxIterationsCallback : public agent_cpp::Callback {
   public:
     explicit MaxIterationsCallback(int max) : max_(max) {}
 
-    // The cap is per user turn: each run_loop invocation (one-shot run, or
-    // one --interactive follow-up) gets a fresh budget.
+    // The cap is per turn: each -i follow-up starts again from zero.
     void before_agent_loop(std::vector<common_chat_msg> & /*messages*/) override {
         count_ = 0;
     }

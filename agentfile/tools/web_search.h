@@ -15,19 +15,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
-// web_search: query a SearXNG instance (https://docs.searxng.org) via its
-// JSON search API. Written as a server_tool (llama.cpp tools/server style),
-// so agentfile runs it through ServerToolAdapter like the upstream tools.
-// It stays here: llama.cpp sends web search to MCP or its web UI.
+// web_search: queries a SearXNG instance (https://docs.searxng.org) through
+// its JSON API. A server_tool, run through ServerToolAdapter like the
+// upstream tools; it lives here because llama.cpp leaves web search to MCP
+// or its web UI.
 //
-// The instance base URL is deliberately NOT a tool argument — the model
-// must not choose where queries go. It comes from --searxng-url or the
-// SEARXNG_URL environment variable; when neither is set the tool is not
-// registered at all.
-//
-// The instance must enable `json` under `search: formats:` in its
-// settings.yml (SearXNG answers 403 otherwise; most public instances
-// don't — self-hosted is the expected deployment).
+// The instance is not a tool argument, so the model can't choose where
+// queries go: it comes from --searxng-url or SEARXNG_URL, and without
+// either the tool isn't registered. The instance must enable `json` under
+// `search: formats:` in settings.yml (public ones usually don't).
 //
 
 #pragma once

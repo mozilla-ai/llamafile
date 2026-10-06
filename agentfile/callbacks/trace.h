@@ -15,21 +15,17 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
-// OtlpTraceCallback — writes spans in the OTLP/JSON encoding, one
-// ExportTraceServiceRequest per line. This is the standard OTLP wire format
-// in its JSON flavor: the OpenTelemetry Collector ingests these files
-// directly via the `otlpjsonfile` receiver, no SDK required on our side.
+// OtlpTraceCallback — records spans as OTLP/JSON, one
+// ExportTraceServiceRequest per line: the format the OpenTelemetry
+// Collector's `otlpjsonfile` receiver reads. Spans and GenAI attributes
+// follow agent.cpp's examples/tracing:
 //
-// Span structure and GenAI semconv attributes mirror agent.cpp's
-// examples/tracing OpenTelemetryCallbacks:
+//   invoke_agent <agent>      one per turn
+//   ├── chat <model>          per LLM call
+//   └── execute_tool <tool>   per tool call
 //
-//   invoke_agent <agent>            (root)
-//   ├── chat <model>                per LLM call
-//   └── execute_tool <tool>         per tool execution
-//
-// A span's request line is written when the span ends; the root span is
-// written by after_agent_loop, or by the destructor (with error status) if
-// the loop terminated by exception.
+// A span is written when it ends. Spans still open when the run fails are
+// closed by the destructor, with an error status.
 //
 
 #pragma once
@@ -76,8 +72,6 @@ class OtlpTraceCallback : public agent_cpp::Callback {
     }
 
     ~OtlpTraceCallback() override {
-        // Loop terminated by exception: close whatever is still open so the
-        // trace file stays a complete, ingestible record.
         if (chat_.open) end_chat("error", "aborted", "aborted");
         if (tool_.open) {
             end_span(tool_, "execute_tool " + tool_name_, tool_attributes(),
@@ -118,8 +112,8 @@ class OtlpTraceCallback : public agent_cpp::Callback {
 
     void after_tool_execution(std::string &tool_name,
                               agent_cpp::ToolResult &result) override {
-        // If an earlier callback skipped the tool, before_tool_execution
-        // never ran here; synthesize a zero-length span.
+        // A declined call never reached before_tool_execution: give it a
+        // zero-length span.
         if (!tool_.open) {
             tool_name_ = tool_name;
             start(tool_);
@@ -213,9 +207,8 @@ class OtlpTraceCallback : public agent_cpp::Callback {
                                   {"spans", json::array({span})}}})}}})},
         };
 
-        // safe_json_to_str never throws on invalid UTF-8 (a model path or
-        // error message can carry it): this also runs from the destructor,
-        // where a throw is std::terminate.
+        // safe_json_to_str doesn't throw on invalid UTF-8: this also runs
+        // from the destructor, where a throw would abort.
         std::string line = safe_json_to_str(request);
         std::fwrite(line.data(), 1, line.size(), file_);
         std::fputc('\n', file_);

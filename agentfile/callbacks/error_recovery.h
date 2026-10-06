@@ -15,14 +15,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
-// ErrorRecoveryCallback — hands a failed tool call back to the model as
-// {"error": true, "tool": ..., "message": ...}, so it can fix the call
-// (bad arguments, a tool it doesn't have) instead of run_loop ending the
-// run. Same result shape as agent.cpp's
-// examples/shared/error_recovery_callback.h, serialized with
-// safe_json_to_str: the message can quote invalid UTF-8 from the model's
-// arguments. A model that keeps failing gets kMaxConsecutiveFailures
-// errors back; the next failure ends the run (main exits 2).
+// ErrorRecoveryCallback — hands a failed tool call (a tool the model doesn't
+// have, arguments that aren't JSON) back to the model as {"error": true,
+// "tool": ..., "message": ...}, so it can fix the call instead of the run
+// ending. After kMaxConsecutiveFailures in a row, the next failure ends the
+// run (main exits 2).
 //
 
 #pragma once
@@ -39,8 +36,8 @@
 namespace agentfile {
 
 class ErrorRecoveryCallback : public agent_cpp::Callback {
-    // Failed tool calls in a row. Without a cap, a model that keeps calling
-    // a tool it doesn't have loops until the context fills.
+    // Without a cap, a model that keeps calling a tool it doesn't have
+    // loops until the context fills.
     static constexpr int kMaxConsecutiveFailures = 3;
     int failures_ = 0;
 
@@ -49,10 +46,8 @@ class ErrorRecoveryCallback : public agent_cpp::Callback {
         failures_ = 0;
     }
 
-    // A call whose arguments are not JSON stays in the history after its
-    // error is handed back, and chat templates that take arguments as an
-    // object refuse to render it. Store such arguments as a JSON string:
-    // templates print it as the model wrote it.
+    // A call whose arguments aren't JSON stays in the history, and chat
+    // templates can't render it: store such arguments as a JSON string.
     void before_llm_call(std::vector<common_chat_msg> &messages) override {
         for (auto &msg : messages) {
             for (auto &tc : msg.tool_calls) {

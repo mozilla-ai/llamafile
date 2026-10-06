@@ -109,7 +109,8 @@ of it could go upstream:
 - `-i/--interactive`: after each answer, ask for the next message on the
   terminal (`ask_terminal`: the question goes to stderr, or to `/dev/tty`
   when stderr is redirected; the answer comes from stdin, or `/dev/tty`
-  when stdin was a pipe). Empty line or EOF ends the session. Turns reuse the same `messages`, so
+  when stdin was a pipe). Empty line or EOF ends the session, and so does
+  an error in a follow-up turn, with the same exit code as a one-shot run. Turns reuse the same `messages`, so
   the KV prefix carries over. `--max-iterations` is a per-turn budget.
 - Parsing is **last-wins**, and every mode flag has an inverse
   (`--confirm` for `--yes`, `--no-interactive`, `--no-think`), so
