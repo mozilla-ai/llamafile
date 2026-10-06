@@ -26,7 +26,6 @@
 // callbacks/. Answers go to stdout; everything else goes to stderr.
 //
 
-#include <algorithm>
 #include <cerrno>
 #include <climits>
 #include <csignal>
@@ -36,7 +35,6 @@
 #include <memory>
 #include <set>
 #include <string>
-#include <sys/stat.h>
 #include <unistd.h>
 #include <vector>
 
@@ -218,20 +216,6 @@ std::set<std::string> parse_tools_flag(const std::string &spec,
     return names;
 }
 
-// Whether fopen(path, "w") can succeed: an existing file must be writable,
-// a new one needs a writable directory. Lets --session and --trace fail
-// before the model loads, without creating anything.
-bool can_write(const std::string &path) {
-    struct stat st;
-    if (stat(path.c_str(), &st) == 0)
-        return !S_ISDIR(st.st_mode) && access(path.c_str(), W_OK) == 0;
-    size_t slash = path.find_last_of('/');
-    std::string dir = slash == std::string::npos ? "."
-                      : slash == 0               ? "/"
-                                                 : path.substr(0, slash);
-    return access(dir.c_str(), W_OK | X_OK) == 0;
-}
-
 } // namespace
 
 int main(int argc, char **argv) {
@@ -370,17 +354,6 @@ int main(int argc, char **argv) {
         return 1;
     }
 
-    // The recorders open their files once the model has loaded; check the
-    // paths now, so a typo fails before a multi-GB load.
-    for (const auto &[flag, path] : {std::pair{"--session", &session_path},
-                                     std::pair{"--trace", &trace_path}}) {
-        if (!path->empty() && !can_write(*path)) {
-            fprintf(stderr, "agentfile: %s: cannot write %s\n", flag,
-                    path->c_str());
-            return 1;
-        }
-    }
-
     // Route llama.cpp / ggml logging before backend init: silent unless -v
     // or -vv.
     if (verbosity >= 2) {
@@ -407,21 +380,11 @@ int main(int argc, char **argv) {
     if (verbosity < 2)
         common_log_set_verbosity_thold(LOG_LEVEL_ERROR);
 
-    // Initialize llamafile GPU backends (Metal, CUDA, Vulkan, ROCm).
-    // This is also what triggers backend registration.
-    llamafile_has_gpu();
-    llama_backend_init();
-
     try {
-        // Build and validate the toolset before loading the model, so a bad
-        // --tools or --tools-runtime value fails fast. A requested tool
-        // that isn't registered is an error, not a silently smaller
-        // toolset — the model would otherwise improvise with whatever
-        // tools remain.
-        //
-        // Tools come from llama.cpp's server-tools registry via
-        // ServerToolbox (plus agentfile's native tools); the toolbox owns
-        // them and must outlive the Agent below.
+        // Whatever a bad flag can break is set up before the slow part (GPU
+        // init, model load): the toolset first, then the record files. A
+        // requested tool that isn't available is an error, not a smaller
+        // toolset the model would improvise with.
         agentfile::ServerToolbox toolbox(searxng_url, tools_runtime);
         auto keep = parse_tools_flag(tools_spec, toolbox);
         if (keep.empty()) {
@@ -446,24 +409,16 @@ int main(int argc, char **argv) {
         }
         auto tools = toolbox.make_adapters(keep);
 
-        auto weights = agent_cpp::ModelWeights::create(model_path);
-
-        agent_cpp::ModelConfig cfg;  // defaults: temp=0, top_p=1, top_k=0
-        // agent.cpp's default (-1) wraps to ~4 billion in llama_context's
-        // unsigned n_batch and kills context creation, so always set one.
-        // 2048 matches llama.cpp's default; llamafile's TUI uses 256 for
-        // finer prefill progress display, which agentfile doesn't have.
-        cfg.n_batch = 2048;
-        cfg.n_ctx = n_ctx;  // 0 = model's native context
-        cfg.enable_thinking = think;
-        auto model = agent_cpp::Model::create_with_weights(weights, cfg);
-
         // Model name for session/trace records: the GGUF basename.
         std::string model_name = model_path;
         if (auto slash = model_name.find_last_of('/');
             slash != std::string::npos)
             model_name.erase(0, slash + 1);
 
+        // Order matters: the trace goes after the confirmation (tool spans
+        // time the tool, not the user deciding) and after the iteration cap
+        // (a refused call opens no span); error recovery goes last, so the
+        // others record a failed call as failed.
         std::vector<std::unique_ptr<agent_cpp::Callback>> callbacks;
         if (!session_path.empty()) {
             callbacks.emplace_back(
@@ -478,26 +433,33 @@ int main(int argc, char **argv) {
             callbacks.emplace_back(
                 std::make_unique<agentfile::ProgressCallback>(verbosity > 1));
         }
-        // The cap goes before the trace, so the call it refuses never
-        // opens a chat span.
         if (max_iterations > 0) {
             callbacks.emplace_back(
                 std::make_unique<agentfile::MaxIterationsCallback>(
                     max_iterations));
         }
-        // The trace callback goes after the confirmation prompt so tool
-        // spans measure execution, not the time the user spent deciding.
         if (!trace_path.empty()) {
             callbacks.emplace_back(
                 std::make_unique<agentfile::OtlpTraceCallback>(trace_path,
                                                                model_name));
         }
-        // A tool error left unhandled makes run_loop throw and ends the
-        // run; hand it to the model instead, so it can fix the call (bad
-        // arguments, a tool it doesn't have). Goes after the observers so
-        // progress, session and trace still record the call as failed.
         callbacks.emplace_back(
             std::make_unique<agentfile::ErrorRecoveryCallback>());
+
+        // Initialize llamafile GPU backends (Metal, CUDA, Vulkan, ROCm),
+        // which also registers them.
+        llamafile_has_gpu();
+        llama_backend_init();
+
+        auto weights = agent_cpp::ModelWeights::create(model_path);
+        agent_cpp::ModelConfig cfg;  // defaults: temp=0, top_p=1, top_k=0
+        // agent.cpp's default (-1) wraps around in llama_context's unsigned
+        // n_batch and breaks context creation. 2048 is llama.cpp's default.
+        cfg.n_batch = 2048;
+        cfg.n_ctx = n_ctx;  // 0 = model's native context
+        cfg.enable_thinking = think;
+        auto model = agent_cpp::Model::create_with_weights(weights, cfg);
+
         agent_cpp::Agent agent(std::move(model), std::move(tools),
                                std::move(callbacks), instructions);
 

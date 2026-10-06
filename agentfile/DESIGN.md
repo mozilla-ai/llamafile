@@ -57,9 +57,9 @@ One translation unit, `agentfile.cpp`, plus headers:
 - `util.h`: terminal escaping (`terminal_text`), asking on the terminal
   (`ask_terminal`), ids, timestamps.
 
-The toolset is built and checked before the model loads, so a bad
-`--tools` or `--tools-runtime` value fails fast; so do unwritable
-`--session`/`--trace` paths.
+The toolset and the record files are set up before GPU init and the
+model load, so a bad `--tools`, `--tools-runtime`, `--session` or
+`--trace` value fails at once.
 
 ### agent.cpp patches
 
