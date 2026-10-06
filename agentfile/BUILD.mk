@@ -87,6 +87,12 @@ AGENTFILE_CPPFLAGS += \
 	-DCPPHTTPLIB_MBEDTLS_SUPPORT \
 	-isystem third_party/mbedtls/include
 
+# common/subproc.h (reached through server-common.h) switches subprocess_s
+# between its real and dummy definition on LLAMA_SUBPROCESS. The server and
+# common objects linked below are built with it (see the subprocess section
+# in llama.cpp.patches/llamafile-files/BUILD.mk), so agentfile must agree.
+AGENTFILE_CPPFLAGS += -DLLAMA_SUBPROCESS
+
 o/$(MODE)/agentfile/%.o: agentfile/%.cpp agentfile/BUILD.mk $(AGENTFILE_HDRS) $(AGENTFILE_EXT_HDRS)
 	@mkdir -p $(@D)
 	$(COMPILE.cc) $(AGENTFILE_CPPFLAGS) -o $@ $<
