@@ -41,6 +41,7 @@
 
 #include "llama.h"
 #include "chat.h"
+#include "common.h"
 #include "log.h"
 
 #include "agent.h"
@@ -58,8 +59,6 @@
 #include "callbacks/session_recorder.h"
 #include "callbacks/trace.h"
 #include "server_tools_adapter.h"
-
-#include <sstream>
 
 // Last, as in llama-server's server.cpp: cosmo.h defines a defer() macro
 // that breaks server_queue::defer() in server-queue.h.
@@ -82,9 +81,10 @@ void null_log_callback(ggml_log_level, const char *, void *) {}
 void print_tools_help(const std::string &searxng_url) {
     try {
         agentfile::ServerToolbox toolbox(searxng_url, "");
-        auto guarded = toolbox.write_tool_names();
+        auto names = toolbox.tool_names();
+        auto guarded = toolbox.write_tool_names(names);
         std::string ro, wr;
-        for (const auto &name : toolbox.tool_names()) {
+        for (const auto &name : names) {
             std::string &dst = guarded.count(name) ? wr : ro;
             dst += (dst.empty() ? "" : ", ") + name;
         }
@@ -200,22 +200,24 @@ std::string read_followup() {
     return line;
 }
 
-std::set<std::string> parse_tools_flag(const std::string &spec) {
-    if (spec == "all") return {};
-    if (spec == "read_only") {
-        return {"read_file", "file_glob_search", "grep_search",
-                "get_datetime", "get_info"};
+// --tools: "all", "read_only" (every tool without permission_write), or a
+// comma-separated list of names, which main checks against the toolbox.
+std::set<std::string> parse_tools_flag(const std::string &spec,
+                                       const agentfile::ServerToolbox &toolbox) {
+    std::set<std::string> names;
+    if (spec == "all" || spec == "read_only") {
+        names = toolbox.tool_names();
+        if (spec == "read_only") {
+            for (const auto &name : toolbox.write_tool_names(names))
+                names.erase(name);
+        }
+        return names;
     }
-    std::set<std::string> out;
-    std::stringstream ss(spec);
-    std::string item;
-    while (std::getline(ss, item, ',')) {
-        size_t a = item.find_first_not_of(" \t");
-        size_t b = item.find_last_not_of(" \t");
-        if (a != std::string::npos && b != std::string::npos)
-            out.insert(item.substr(a, b - a + 1));
+    for (const auto &item : string_split<std::string>(spec, ',')) {
+        std::string name = string_strip(item);
+        if (!name.empty()) names.insert(name);
     }
-    return out;
+    return names;
 }
 
 } // namespace
@@ -383,10 +385,8 @@ int main(int argc, char **argv) {
         // ServerToolbox (plus agentfile's own http_fetch/web_search); the
         // toolbox owns them and must outlive the Agent below.
         agentfile::ServerToolbox toolbox(searxng_url, tools_runtime);
-        auto keep = parse_tools_flag(tools_spec);
-        // An empty set means "all tools" to make_adapters, so a list that
-        // names nothing (--tools "", ",", " ") must not reach it.
-        if (keep.empty() && tools_spec != "all") {
+        auto keep = parse_tools_flag(tools_spec, toolbox);
+        if (keep.empty()) {
             fprintf(stderr, "agentfile: --tools: no tool names in \"%s\"\n",
                     tools_spec.c_str());
             return 1;
