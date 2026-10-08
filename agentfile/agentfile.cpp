@@ -104,8 +104,10 @@ void print_tools_help(const std::string &searxng_url) {
             dst += (dst.empty() ? "" : ", ") + name;
         }
         fprintf(stderr,
-                "Tools (choose with --tools LIST, \"all\" or \"read_only\"; "
-                "default: all):\n"
+                "Tools (choose with --tools LIST, \"all\", \"read_only\" or "
+                "\"none\"; default: none —\n"
+                "tools cost context and widen the attack surface, so they "
+                "are opt-in):\n"
                 "  read-only:  %s\n"
                 "  guarded:    %s\n"
                 "              (ask confirmation before each call; --yes skips,\n"
@@ -151,7 +153,8 @@ void print_usage(const char *prog, const std::string &searxng_url) {
             "  -s TEXT              System instructions (default: helpful assistant)\n"
             "  --system-file PATH   Read system instructions from a file\n"
             "                       (works with /zip/ paths in packaged agents)\n"
-            "  --tools LIST         Tools the model may use (see Tools below)\n"
+            "  --tools LIST         Tools the model may use (default: none;\n"
+            "                       see Tools below)\n"
             "  --session FILE       Record the conversation as a pi session\n"
             "                       (https://pi.dev, session-format v3 JSONL;\n"
             "                       overwrites FILE)\n"
@@ -196,11 +199,14 @@ bool slurp(FILE *f, std::string &out) {
     return !ferror(f);
 }
 
-// --tools: "all", "read_only" (every tool without permission_write), or a
-// comma-separated list of names, which main checks against the toolbox.
+// --tools: "none" (the default: tools cost context and widen the attack
+// surface, so they are opt-in), "all", "read_only" (every tool without
+// permission_write), or a comma-separated list of names, which main checks
+// against the toolbox.
 std::set<std::string> parse_tools_flag(const std::string &spec,
                                        const agentfile::ServerToolbox &toolbox) {
     std::set<std::string> names;
+    if (spec == "none") return names;
     if (spec == "all" || spec == "read_only") {
         names = toolbox.tool_names();
         if (spec == "read_only") {
@@ -235,7 +241,7 @@ int main(int argc, char **argv) {
     int n_ctx = kDefaultCtx; // tokens; 0 = the model's maximum
     int verbosity = 1;       // 0 = --quiet, 1 = default, 2 = -v, 3 = -vv
     int max_iterations = 0;  // 0 = no cap
-    std::string tools_spec = "all";
+    std::string tools_spec = "none";
     std::string session_path;
     std::string trace_path;
     std::string searxng_url;
@@ -381,7 +387,7 @@ int main(int argc, char **argv) {
         // toolset the model would improvise with.
         agentfile::ServerToolbox toolbox(searxng_url, tools_runtime);
         auto keep = parse_tools_flag(tools_spec, toolbox);
-        if (keep.empty()) {
+        if (keep.empty() && tools_spec != "none") {
             fprintf(stderr, "agentfile: --tools: no tool names in \"%s\"\n",
                     tools_spec.c_str());
             return 1;
