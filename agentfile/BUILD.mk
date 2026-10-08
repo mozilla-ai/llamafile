@@ -27,7 +27,11 @@ PKGS += AGENTFILE
 AGENTFILE_SRCS_CPP := \
 	agentfile/agentfile.cpp
 
-AGENTFILE_HDRS := $(wildcard agentfile/*.h) \
+# _DEP_HDRS, not _HDRS: deps.mk collects $(PKG)_SRCS/_HDRS/_INCS for
+# mkdeps, which would scan these headers and warn about includes it cannot
+# resolve (agent.cpp and llama.cpp declare no header lists). Like
+# AGENT_CPP_DEP_HDRS, this list only triggers recompiles.
+AGENTFILE_DEP_HDRS := $(wildcard agentfile/*.h) \
 	$(wildcard agentfile/callbacks/*.h) \
 	$(wildcard agentfile/tools/*.h)
 
@@ -93,7 +97,7 @@ AGENTFILE_CPPFLAGS += \
 # in llama.cpp.patches/llamafile-files/BUILD.mk), so agentfile must agree.
 AGENTFILE_CPPFLAGS += -DLLAMA_SUBPROCESS
 
-o/$(MODE)/agentfile/%.o: agentfile/%.cpp agentfile/BUILD.mk $(AGENTFILE_HDRS) $(AGENTFILE_EXT_HDRS)
+o/$(MODE)/agentfile/%.o: agentfile/%.cpp agentfile/BUILD.mk $(AGENTFILE_DEP_HDRS) $(AGENTFILE_EXT_HDRS)
 	@mkdir -p $(@D)
 	$(COMPILE.cc) $(AGENTFILE_CPPFLAGS) -o $@ $<
 
