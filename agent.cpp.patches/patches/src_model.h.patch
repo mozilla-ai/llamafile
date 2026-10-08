@@ -1,10 +1,10 @@
 diff --git a/src/model.h b/src/model.h
 --- a/agent.cpp/src/model.h
 +++ b/agent.cpp/src/model.h
-@@ -36,6 +36,10 @@ struct ModelConfig
-     // Optional GBNF grammar and root rule name
-     std::string grammar;
-     std::string grammar_root = "root";
+@@ -49,6 +49,10 @@ struct ModelConfig
+     // loaded from the shared ModelWeights' base model, so different Model
+     // instances sharing the same weights can each carry their own set.
+     std::vector<LoraAdapterConfig> loras;
 +    // llamafile: ask the chat template to enable model reasoning
 +    // (<think> blocks). Off by default: agent turns favor latency, and
 +    // reasoning is extracted to reasoning_content when it appears anyway.
@@ -12,7 +12,7 @@ diff --git a/src/model.h b/src/model.h
  };
  
  /// Reads a GBNF file into a string for ModelConfig::grammar
-@@ -206,10 +210,10 @@ class Model
+@@ -225,10 +229,10 @@ class Model
  
      std::shared_ptr<ModelWeights> weights_;
      llama_context* ctx_ = nullptr;
@@ -24,6 +24,6 @@ diff --git a/src/model.h b/src/model.h
 +    // llama_sampler chain, so chat-template tool-call grammars and the
 +    // user's GBNF grammar both constrain sampling).
 +    struct common_sampler* sampler_ = nullptr;
-     std::vector<llama_token> processed_tokens_; // Track tokens in KV cache
-     int n_past_ = 0;                            // Track position in KV cache
-     ModelConfig config_;
+     // Owning handles for this Model's LoRA adapters, in ModelConfig::loras
+     // order. Set on this Model's context only, so different Model instances
+     // sharing the same ModelWeights can carry independent adapters.

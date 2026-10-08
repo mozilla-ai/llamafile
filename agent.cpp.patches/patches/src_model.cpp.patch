@@ -25,14 +25,15 @@ diff --git a/src/model.cpp b/src/model.cpp
      }
      if (ctx_ != nullptr) {
          llama_free(ctx_);
-@@ -90,14 +95,12 @@ Model::Model(Model&& other) noexcept
+@@ -93,7 +98,6 @@ Model::Model(Model&& other) noexcept
    : weights_(std::move(other.weights_))
    , ctx_(other.ctx_)
    , sampler_(other.sampler_)
 -  , grammar_sampler_(other.grammar_sampler_)
+   , loras_(std::move(other.loras_))
    , processed_tokens_(std::move(other.processed_tokens_))
    , n_past_(other.n_past_)
-   , config_(other.config_)
+@@ -101,7 +105,6 @@ Model::Model(Model&& other) noexcept
  {
      other.ctx_ = nullptr;
      other.sampler_ = nullptr;
@@ -40,7 +41,7 @@ diff --git a/src/model.cpp b/src/model.cpp
      other.n_past_ = 0;
  }
  
-@@ -106,7 +109,7 @@ Model::operator=(Model&& other) noexcept
+@@ -110,7 +113,7 @@ Model::operator=(Model&& other) noexcept
  {
      if (this != &other) {
          if (sampler_ != nullptr) {
@@ -49,14 +50,15 @@ diff --git a/src/model.cpp b/src/model.cpp
          }
          if (ctx_ != nullptr) {
              llama_free(ctx_);
-@@ -115,19 +118,51 @@ Model::operator=(Model&& other) noexcept
+@@ -122,7 +125,6 @@ Model::operator=(Model&& other) noexcept
          weights_ = std::move(other.weights_);
          ctx_ = other.ctx_;
          sampler_ = other.sampler_;
 -        grammar_sampler_ = other.grammar_sampler_;
+         loras_ = std::move(other.loras_);
          processed_tokens_ = std::move(other.processed_tokens_);
          n_past_ = other.n_past_;
-         config_ = other.config_;
+@@ -130,12 +132,45 @@ Model::operator=(Model&& other) noexcept
  
          other.ctx_ = nullptr;
          other.sampler_ = nullptr;
@@ -103,8 +105,8 @@ diff --git a/src/model.cpp b/src/model.cpp
  void
  Model::initialize_context(const ModelConfig& model_config)
  {
-@@ -146,57 +181,37 @@ Model::initialize_context(const ModelConfig& model_config)
-         throw ModelError("failed to create llama context");
+@@ -173,57 +208,37 @@ Model::initialize_context(const ModelConfig& model_config)
+         }
      }
  
 -    sampler_ = llama_sampler_chain_init(llama_sampler_chain_default_params());
@@ -178,7 +180,7 @@ diff --git a/src/model.cpp b/src/model.cpp
                         true) < 0) {
          return {}; // Return empty vector on failure
      }
-@@ -234,6 +249,9 @@ parse_with_parser(const common_peg_arena& parser,
+@@ -261,6 +276,9 @@ parse_with_parser(const common_peg_arena& parser,
      // (ggml-org/llama.cpp#18675). Without them tool calls stay as raw text.
      syntax.generation_prompt = params.generation_prompt;
      syntax.parse_tool_calls = true;
@@ -188,7 +190,7 @@ diff --git a/src/model.cpp b/src/model.cpp
  
      try {
          auto parsed_msg =
-@@ -249,6 +267,62 @@ parse_with_parser(const common_peg_arena& parser,
+@@ -276,6 +294,62 @@ parse_with_parser(const common_peg_arena& parser,
      }
  }
  
@@ -251,7 +253,7 @@ diff --git a/src/model.cpp b/src/model.cpp
  }
  
  common_chat_msg
-@@ -261,11 +335,97 @@ Model::generate(const std::vector<common_chat_msg>& messages,
+@@ -288,11 +362,97 @@ Model::generate(const std::vector<common_chat_msg>& messages,
      inputs.tools = tools;
      inputs.tool_choice = COMMON_CHAT_TOOL_CHOICE_AUTO;
      inputs.add_generation_prompt = true;
@@ -350,7 +352,7 @@ diff --git a/src/model.cpp b/src/model.cpp
      // Tokenize the prompt
      std::vector<llama_token> prompt_tokens = tokenize(params.prompt);
      if (prompt_tokens.empty()) {
-@@ -281,8 +441,114 @@ Model::generate(const std::vector<common_chat_msg>& messages,
+@@ -308,8 +468,114 @@ Model::generate(const std::vector<common_chat_msg>& messages,
          parser_source_ = params.parser;
      }
  
@@ -467,7 +469,7 @@ diff --git a/src/model.cpp b/src/model.cpp
  }
  
  common_chat_msg
-@@ -311,10 +577,16 @@ Model::generate_from_tokens(const std::vector<llama_token>& all_tokens,
+@@ -338,10 +604,16 @@ Model::generate_from_tokens(const std::vector<llama_token>& all_tokens,
          common_prefix++;
      }
  
@@ -486,7 +488,7 @@ diff --git a/src/model.cpp b/src/model.cpp
          processed_tokens_.resize(common_prefix);
          n_past_ = common_prefix;
      }
-@@ -343,15 +615,15 @@ Model::generate_from_tokens(const std::vector<llama_token>& all_tokens,
+@@ -370,15 +642,15 @@ Model::generate_from_tokens(const std::vector<llama_token>& all_tokens,
          i += batch_size;
      }
  
