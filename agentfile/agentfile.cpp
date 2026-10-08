@@ -408,6 +408,14 @@ int main(int argc, char **argv) {
             }
         }
         auto tools = toolbox.make_adapters(keep);
+        if (verbosity > 1) {
+            std::string roster;
+            for (const auto &name : keep)
+                roster += (roster.empty() ? "" : ", ") + name;
+            fprintf(stderr, "%s[tools: %s]%s\n", agentfile::dim(),
+                    roster.empty() ? "none" : roster.c_str(),
+                    agentfile::dim_off());
+        }
 
         // Model name for session/trace records: the GGUF basename.
         std::string model_name = model_path;

@@ -170,7 +170,9 @@ def run_agentfile(prompt: str, tools: str, tmp_path: Path, extra=(), cwd=None,
                   model=None) -> AgentRun:
     session = tmp_path / "session.jsonl"
     # APE binaries need a shell launcher on macOS (kernel rejects the format).
-    cmd = [*(["sh"] if os.name != "nt" else []), EXE, "-m", model or MODEL, "-p", prompt, "--tools", tools,
+    # tools=None omits the flag entirely, to exercise the default.
+    cmd = [*(["sh"] if os.name != "nt" else []), EXE, "-m", model or MODEL, "-p", prompt,
+           *([] if tools is None else ["--tools", tools]),
            "--session", str(session), "--no-think", *extra]
     # No stdin and no terminal, so a confirmation prompt gets no answer
     # instead of waiting on the keyboard: a new session on POSIX; on Windows,
@@ -424,6 +426,27 @@ def test_tools_list_naming_nothing_is_rejected(tmp_path, spec):
     assert "--tools: no tool names" in run.proc.stderr, _dump(run)
     assert not run.tool_calls, _dump(run)
 
+
+
+# Tools are opt-in: without --tools the model gets none (they cost context
+# and widen the attack surface). The -v roster line is the contract.
+def test_tools_default_is_none(tmp_path):
+    run = run_agentfile("What is 2 plus 2? Answer with just the number.",
+                        None, tmp_path, extra=["-v"])
+    assert run.proc.returncode == 0, _dump(run)
+    assert "[tools: none]" in run.proc.stderr, _dump(run)
+    assert "[tool: " not in run.proc.stderr, _dump(run)
+    assert not run.tool_results, _dump(run)
+
+
+def test_tools_roster_lists_enabled_tools(tmp_path):
+    run = run_agentfile("What is 2 plus 2? Answer with just the number.",
+                        "read_only", tmp_path, extra=["-v"])
+    assert run.proc.returncode == 0, _dump(run)
+    roster = [l for l in run.proc.stderr.splitlines() if "[tools: " in l]
+    assert roster, _dump(run)
+    assert "read_file" in roster[0], _dump(run)
+    assert "write_file" not in roster[0], _dump(run)
 
 
 # --tools-runtime specs went unchecked until the first tool call; llama.cpp's
