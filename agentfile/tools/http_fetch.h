@@ -1,0 +1,209 @@
+// -*- mode:c++;indent-tabs-mode:nil;c-basic-offset:4;coding:utf-8 -*-
+// vi: set et ft=cpp ts=4 sts=4 sw=4 fenc=utf-8 :vi
+//
+// Copyright 2026 Mozilla.ai
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
+// http_fetch: HTTP(S) GET on llama.cpp's common_http_client. A server_tool,
+// run through ServerToolAdapter like the upstream tools; it lives here
+// because llama.cpp keeps its server tools to file and shell I/O.
+//
+// Limits: GET only; body capped at 64 KB (the download stops there and the
+// result is marked truncated); text only (a binary body is not returned);
+// 30s timeout; redirects are reported (redirect_to), not followed.
+//
+
+#pragma once
+
+#include "server-tools.h"
+
+#include <cpp-httplib/httplib.h>
+#include "http.h"   // common_http_client, common_http_parse_url
+
+#include <cctype>
+#include <cstring>  // memchr
+#include <string>
+
+namespace agentfile {
+namespace tools {
+
+struct HttpFetchTool : server_tool {
+    static constexpr size_t kMaxBody = 64 * 1024;
+    static constexpr int    kTimeoutSeconds = 30;
+
+    HttpFetchTool() {
+        name = "http_fetch";
+        display_name = "Fetch URL";
+        // Network access: confirm before running (unless --yes).
+        permission_write = true;
+    }
+
+    json get_definition() const override {
+        return {
+            {"type", "function"},
+            {"function", {
+                {"name", name},
+                {"description",
+                 "Fetch a URL with HTTP GET and return status + headers + "
+                 "body. Response body is capped at 64 KB; binary content "
+                 "(images, PDFs, archives) is not returned. Redirects are not "
+                 "followed automatically: a 3xx response carries redirect_to; "
+                 "call http_fetch again with that URL to retrieve the content. "
+                 "Use sparingly — this tool grants the model network access."},
+                {"parameters", {
+                    {"type", "object"},
+                    {"properties", {
+                        {"url", {{"type", "string"},
+                                 {"description", "HTTP or HTTPS URL to fetch"}}},
+                    }},
+                    {"required", json::array({"url"})},
+                }},
+            }},
+        };
+    }
+
+    // True if loc starts with an RFC 3986 scheme (ALPHA *( ALPHA / DIGIT /
+    // "+" / "-" / "." ) ":"), i.e. is absolute. A "://" further on, as in
+    // /login?next=https://x, does not count.
+    static bool has_scheme(const std::string &loc) {
+        size_t end = loc.find_first_not_of(
+            "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
+            "0123456789+-.");
+        return end != std::string::npos && end > 0 && loc[end] == ':' &&
+               std::isalpha(static_cast<unsigned char>(loc[0]));
+    }
+
+    // Binary content isn't returned: escaped into the result, 64 KB of it
+    // would take more tokens than the default context holds. Images, audio,
+    // video, fonts and PDFs are known from their Content-Type (SVG, being
+    // XML, is text); any other body counts as binary once a NUL byte shows.
+    static bool is_binary_type(const std::string &content_type) {
+        std::string t = content_type;
+        for (auto &c : t) c = std::tolower(static_cast<unsigned char>(c));
+        if (t.find("xml") != std::string::npos) return false;
+        for (const char *bin :
+             {"image/", "audio/", "video/", "font/", "application/pdf"})
+            if (t.rfind(bin, 0) == 0) return true;
+        return false;
+    }
+
+    // Resolve a Location header against the request URL (RFC 3986-lite:
+    // absolute, scheme-relative, host-relative, query-only, or
+    // path-relative).
+    static std::string resolve_location(const common_http_url &parts,
+                                        const std::string &loc) {
+        if (has_scheme(loc)) return loc;
+        if (loc.rfind("//", 0) == 0) return parts.scheme + ":" + loc;
+        std::string origin = parts.scheme + "://" +
+                             common_http_format_host(parts.host) + ":" +
+                             std::to_string(parts.port);
+        if (!loc.empty() && loc[0] == '/') return origin + loc;
+        // The request's query is not part of its directory: a '/' inside
+        // it must not become the base of a relative Location.
+        std::string path = parts.path.substr(0, parts.path.find('?'));
+        if (!loc.empty() && loc[0] == '?') return origin + path + loc;
+        std::string dir = path.substr(0, path.rfind('/') + 1);
+        if (dir.empty()) dir = "/";
+        return origin + dir + loc;
+    }
+
+    json invoke(json params, server_tool::stream *) const override {
+        if (!params.contains("url")) {
+            return {{"error", "missing required parameter: url"}};
+        }
+        std::string url = params.at("url").get<std::string>();
+
+        try {
+            auto [cli, parts] = common_http_client(url);
+            // Report redirects instead of following them, so every URL that
+            // gets fetched is one the model asked for by name — and one the
+            // confirmation prompt showed the user.
+            cli.set_follow_location(false);
+            cli.set_read_timeout(kTimeoutSeconds, 0);
+            cli.set_connection_timeout(kTimeoutSeconds, 0);
+
+            // Stream the body and stop reading at the cap, instead of
+            // buffering whatever the server sends (httplib would accept up
+            // to CPPHTTPLIB_PAYLOAD_MAX_LENGTH) and truncating afterwards.
+            // A binary body stops the download as soon as it is known.
+            int status = 0;
+            httplib::Headers headers;
+            std::string body;
+            bool truncated = false;
+            bool binary = false;
+            auto res = cli.Get(
+                parts.path,
+                [&](const httplib::Response &r) {
+                    status = r.status;
+                    headers = r.headers;
+                    binary = is_binary_type(r.get_header_value("Content-Type"));
+                    return !binary;
+                },
+                [&](const char *data, size_t n) {
+                    if (std::memchr(data, 0, n)) {
+                        binary = true;
+                        return false;
+                    }
+                    size_t room = kMaxBody - body.size();
+                    if (n > room) {
+                        body.append(data, room);
+                        truncated = true;
+                        return false;  // abort the download at the cap
+                    }
+                    body.append(data, n);
+                    return true;
+                });
+            // Aborting the read ourselves surfaces as a failed Result, but
+            // the status and headers already arrived before the body.
+            if (!res && !truncated && !binary) {
+                return {{"error", "request failed: " +
+                                      httplib::to_string(res.error())}};
+            }
+
+            json resp_headers = json::object();
+            for (const auto &h : headers) {
+                resp_headers[h.first] = h.second;
+            }
+
+            json out = json::object();
+            // Lead with the redirect so the model sees it before the
+            // headers/body noise.
+            auto loc = headers.find("Location");
+            if (status >= 300 && status < 400 && loc != headers.end()) {
+                out["redirect_to"] = resolve_location(parts, loc->second);
+                out["note"] = "Redirect, not followed automatically. The "
+                              "content is at redirect_to; call http_fetch "
+                              "with that URL to retrieve it.";
+            }
+            out["status"] = status;
+            out["headers"] = resp_headers;
+            if (binary && !out.contains("redirect_to")) {
+                auto type = headers.find("Content-Type");
+                std::string what = type != headers.end() ? type->second
+                                                         : "no Content-Type";
+                out["note"] = "Binary content (" + what +
+                              ") not returned: http_fetch returns text only.";
+                return out;
+            }
+            out["body"] = body;
+            out["truncated"] = truncated;
+            return out;
+        } catch (const std::exception &e) {
+            return {{"error", std::string("http_fetch failed: ") + e.what()}};
+        }
+    }
+};
+
+} // namespace tools
+} // namespace agentfile

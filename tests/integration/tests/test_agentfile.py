@@ -1,0 +1,693 @@
+"""Ad hoc integration tests for agentfile.
+
+Run from tests/integration, unsandboxed (they bind a loopback HTTP server):
+
+  AGENTFILE_EXECUTABLE=$PWD/../../o/agentfile/agentfile \
+  AGENTFILE_MODEL=~/ggufs/Qwen3.5-9B-Q5_K_S.gguf \
+  uv run pytest tests/test_agentfile.py -v
+
+The model drives the tool calls at temperature 0, so assertions target the
+recorded tool results (--session JSONL) and stderr, not the model's prose.
+"""
+
+import json
+import os
+import re
+import select
+import subprocess
+import threading
+import time
+from dataclasses import dataclass, field
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
+
+import pytest
+
+EXE = os.environ.get("AGENTFILE_EXECUTABLE")
+MODEL = os.path.expanduser(os.environ.get("AGENTFILE_MODEL", ""))
+
+pytestmark = pytest.mark.skipif(
+    not EXE or not MODEL,
+    reason="set AGENTFILE_EXECUTABLE and AGENTFILE_MODEL to run agentfile tests",
+)
+
+CAP = 64 * 1024              # http_fetch body cap (kMaxBody)
+BIG_TOTAL = 256 * 1024       # /big body size: > CAP, small enough to be quick
+BIG_CHUNK = 16 * 1024
+BIG_DELAY = 0.1              # per chunk, so an early abort is measurable
+SECRET = "secret-token-7f3a9"
+RUN_TIMEOUT = 300
+LATIN1_TEXT = "Café crème brûlée costs 4 euros"
+SNIPPET_CAP = 512            # web_search snippet clip (kMaxSnippet)
+
+
+@dataclass
+class ServerState:
+    requests: list = field(default_factory=list)
+    big_bytes_sent: int = 0
+    big_disconnected: bool = False
+
+
+def _make_handler(state: ServerState, base_url_box: list):
+    class Handler(BaseHTTPRequestHandler):
+        protocol_version = "HTTP/1.1"
+
+        def log_message(self, *_):
+            pass
+
+        def _bytes(self, code: int, data: bytes, ctype: str = "text/plain",
+                   extra: dict | None = None):
+            self.send_response(code)
+            self.send_header("Content-Type", ctype)
+            self.send_header("Content-Length", str(len(data)))
+            for k, v in (extra or {}).items():
+                self.send_header(k, v)
+            self.end_headers()
+            self.wfile.write(data)
+
+        def _text(self, code: int, body: str, extra: dict | None = None):
+            self._bytes(code, body.encode(), extra=extra)
+
+        def do_GET(self):
+            state.requests.append(self.path)
+            if self.path.startswith("/search"):
+                # SearXNG JSON API. The snippet is cut at SNIPPET_CAP bytes,
+                # which lands inside a two-byte "é" (odd offset).
+                body = {"results": [{"title": "Crème brûlée", "url": "http://example.com/",
+                                     "content": "x" + "é" * SNIPPET_CAP, "engine": "mock"}]}
+                self._bytes(200, json.dumps(body).encode(), "application/json")
+            elif self.path.startswith("/nulls/search"):
+                # SearXNG JSON API (--searxng-url .../nulls) with null fields.
+                body = {"results": [{"title": None, "url": "http://example.com/a",
+                                     "content": None, "engine": None},
+                                    {"title": "Second", "url": "http://example.com/b",
+                                     "content": "ok", "engine": "mock"}]}
+                self._bytes(200, json.dumps(body).encode(), "application/json")
+            elif self.path == "/sso":
+                # Relative Location whose query carries an absolute URL.
+                self._text(302, "", {"Location": "/login?next=https://example.com/x"})
+            elif self.path.startswith("/?ref="):
+                self._text(200, "at-ok")
+            elif self.path.startswith("/?next="):
+                # Relative Location: resolves against "/", not a '/' in the query.
+                self._text(302, "", {"Location": "login"})
+            elif self.path == "/latin1":
+                self._bytes(200, LATIN1_TEXT.encode("latin-1"),
+                            "text/plain; charset=iso-8859-1")
+            elif self.path == "/cut":
+                # UTF-8, with a two-byte "é" straddling the CAP boundary.
+                self._bytes(200, b"x" * (CAP - 1) + "é".encode() * 8,
+                            "text/plain; charset=utf-8")
+            elif self.path == "/redir":
+                self._text(302, "", {"Location": base_url_box[0] + "/target"})
+            elif self.path == "/target":
+                self._text(200, SECRET)
+            elif self.path == "/small":
+                self._text(200, "hello from small")
+            elif self.path == "/big":
+                self._stream("text/plain", b"x")
+            elif self.path == "/photo.png":
+                self._stream("image/png", b"\x89")
+            elif self.path == "/config.toml":
+                self._bytes(200, b'name = "agentfile"\n', "application/toml")
+            elif self.path == "/blob":
+                # No telling type: the NUL bytes mark it binary.
+                self._bytes(200, b"%PDF-1.7\n" + bytes(range(256)) * 64,
+                            "application/octet-stream")
+            else:
+                self._text(404, "not found")
+
+        def _stream(self, ctype: str, byte: bytes):
+            self.send_response(200)
+            self.send_header("Content-Type", ctype)
+            self.send_header("Content-Length", str(BIG_TOTAL))
+            self.end_headers()
+            sent = 0
+            try:
+                while sent < BIG_TOTAL:
+                    chunk = byte * min(BIG_CHUNK, BIG_TOTAL - sent)
+                    self.wfile.write(chunk)
+                    self.wfile.flush()
+                    sent += len(chunk)
+                    state.big_bytes_sent = sent
+                    time.sleep(BIG_DELAY)
+            except (BrokenPipeError, ConnectionResetError):
+                state.big_disconnected = True
+
+    return Handler
+
+
+@pytest.fixture
+def http_server():
+    state = ServerState()
+    base_url_box = [""]
+    srv = ThreadingHTTPServer(("127.0.0.1", 0), _make_handler(state, base_url_box))
+    base_url_box[0] = f"http://127.0.0.1:{srv.server_address[1]}"
+    t = threading.Thread(target=srv.serve_forever, daemon=True)
+    t.start()
+    try:
+        yield base_url_box[0], state
+    finally:
+        srv.shutdown()
+        srv.server_close()
+
+
+@dataclass
+class AgentRun:
+    proc: subprocess.CompletedProcess
+    tool_calls: list
+    tool_results: list
+
+    def results_for(self, tool: str) -> list:
+        return [r for r in self.tool_results if r.get("toolName") == tool]
+
+    @staticmethod
+    def result_text(r: dict) -> str:
+        return "".join(c.get("text", "") for c in r.get("content", []))
+
+
+def run_agentfile(prompt: str, tools: str, tmp_path: Path, extra=(), cwd=None,
+                  model=None) -> AgentRun:
+    session = tmp_path / "session.jsonl"
+    # APE binaries need a shell launcher on macOS (kernel rejects the format).
+    # tools=None omits the flag entirely, to exercise the default.
+    cmd = [*(["sh"] if os.name != "nt" else []), EXE, "-m", model or MODEL, "-p", prompt,
+           *([] if tools is None else ["--tools", tools]),
+           "--session", str(session), "--no-think", *extra]
+    # No stdin and no terminal, so a confirmation prompt gets no answer
+    # instead of waiting on the keyboard: a new session on POSIX; on Windows,
+    # where /dev/tty opens the console (CONIN$) and start_new_session is
+    # ignored, no console at all.
+    detach = ({"creationflags": subprocess.DETACHED_PROCESS} if os.name == "nt"
+              else {"start_new_session": True})
+    proc = subprocess.run(cmd, capture_output=True, text=True, stdin=subprocess.DEVNULL,
+                          cwd=cwd or tmp_path, timeout=RUN_TIMEOUT, **detach)
+    tool_calls, tool_results = [], []
+    if session.exists():
+        for line in session.read_text().splitlines():
+            if not line.strip():
+                continue
+            entry = json.loads(line)
+            if entry.get("type") != "message":
+                continue
+            msg = entry.get("message", entry)
+            if msg.get("role") == "assistant":
+                tool_calls += [c for c in msg.get("content", []) if c.get("type") == "toolCall"]
+            elif msg.get("role") == "toolResult":
+                tool_results.append(msg)
+    return AgentRun(proc, tool_calls, tool_results)
+
+
+def _dump(run: AgentRun) -> str:
+    return (f"\nexit={run.proc.returncode}\n--- stdout\n{run.proc.stdout}"
+            f"\n--- stderr\n{run.proc.stderr}\n--- tool results\n"
+            + "\n".join(AgentRun.result_text(r)[:500] for r in run.tool_results))
+
+
+# --- http_fetch -------------------------------------------------------------
+
+def test_http_fetch_reports_redirect_without_following(http_server, tmp_path):
+    base, state = http_server
+    run = run_agentfile(
+        f"Fetch {base}/redir with http_fetch and reply with the text content of the page.",
+        "http_fetch", tmp_path, extra=["--yes"])
+    fetches = run.results_for("http_fetch")
+    assert fetches, "model did not call http_fetch" + _dump(run)
+    first = json.loads(AgentRun.result_text(fetches[0]))
+    assert first.get("status") == 302, _dump(run)
+    assert first.get("redirect_to", "").endswith("/target"), _dump(run)
+    assert "/redir" in state.requests
+    # The redirect is reported, not followed: the model has to fetch the
+    # target itself in a second call (which is what the confirmation prompt
+    # would gate in an interactive run).
+    assert "/target" in state.requests, "model did not follow up on the reported redirect" + _dump(run)
+    if SECRET not in run.proc.stdout:
+        pytest.xfail("model fetched the target but did not quote it (prose check, non-fatal)")
+
+
+def test_http_fetch_stops_reading_at_cap(http_server, tmp_path):
+    base, state = http_server
+    run = run_agentfile(
+        f"Use the http_fetch tool to fetch {base}/big and tell me whether the body was truncated.",
+        "http_fetch", tmp_path, extra=["--yes"])
+    fetches = run.results_for("http_fetch")
+    assert fetches, "model did not call http_fetch" + _dump(run)
+    first = json.loads(AgentRun.result_text(fetches[0]))
+    assert first.get("status") == 200, _dump(run)
+    assert first.get("truncated") is True, _dump(run)
+    assert len(first.get("body", "")) == CAP, _dump(run)
+    # The download must stop at the cap instead of buffering the whole body.
+    assert state.big_bytes_sent <= BIG_TOTAL // 2, (
+        f"server sent {state.big_bytes_sent} of {BIG_TOTAL} bytes; client did not abort at the cap")
+
+
+# A binary body went to the model escaped into the JSON result, and 64 KB of
+# an image or a PDF takes more tokens than the default context holds.
+def test_http_fetch_skips_binary_type(http_server, tmp_path):
+    base, state = http_server
+    run = run_agentfile(
+        f"Use the http_fetch tool to fetch {base}/photo.png and tell me its content type.",
+        "http_fetch", tmp_path, extra=["--yes"])
+    fetches = run.results_for("http_fetch")
+    assert fetches, "model did not call http_fetch" + _dump(run)
+    first = json.loads(AgentRun.result_text(fetches[0]))
+    assert first.get("status") == 200, _dump(run)
+    assert "body" not in first, _dump(run)
+    assert "Binary content (image/png)" in first.get("note", ""), _dump(run)
+    # The Content-Type is enough: the download stops before the body.
+    assert state.big_bytes_sent <= BIG_TOTAL // 2, (
+        f"server sent {state.big_bytes_sent} of {BIG_TOTAL} bytes; client did not abort")
+
+
+def test_http_fetch_sniffs_untyped_binary(http_server, tmp_path):
+    base, _ = http_server
+    run = run_agentfile(
+        f"Use the http_fetch tool to fetch {base}/blob and tell me its content type.",
+        "http_fetch", tmp_path, extra=["--yes"])
+    fetches = run.results_for("http_fetch")
+    assert fetches, "model did not call http_fetch" + _dump(run)
+    first = json.loads(AgentRun.result_text(fetches[0]))
+    assert first.get("status") == 200, _dump(run)
+    assert "body" not in first, _dump(run)
+    assert "Binary content (application/octet-stream)" in first.get("note", ""), _dump(run)
+
+
+# Text served under a type that isn't text/* is still text.
+def test_http_fetch_returns_text_with_other_types(http_server, tmp_path):
+    base, _ = http_server
+    run = run_agentfile(
+        f"Use the http_fetch tool to fetch {base}/config.toml and tell me the name it sets.",
+        "http_fetch", tmp_path, extra=["--yes"])
+    fetches = run.results_for("http_fetch")
+    assert fetches, "model did not call http_fetch" + _dump(run)
+    first = json.loads(AgentRun.result_text(fetches[0]))
+    assert 'name = "agentfile"' in first.get("body", ""), _dump(run)
+
+
+# Tool results used to go through a strict json dump(), so a body with
+# invalid UTF-8 reached the model as a type_error.316 message instead.
+def test_http_fetch_latin1_page_is_returned(http_server, tmp_path):
+    base, _ = http_server
+    run = run_agentfile(
+        f"Fetch {base}/latin1 with http_fetch and tell me what the page says.",
+        "http_fetch", tmp_path, extra=["--yes"])
+    fetches = run.results_for("http_fetch")
+    assert fetches, "model did not call http_fetch" + _dump(run)
+    first = json.loads(AgentRun.result_text(fetches[0]))
+    assert "error" not in first, _dump(run)
+    assert first.get("status") == 200, _dump(run)
+    assert "Caf" in first.get("body", ""), _dump(run)
+
+
+def test_http_fetch_cap_inside_utf8_char(http_server, tmp_path):
+    base, _ = http_server
+    run = run_agentfile(
+        f"Use the http_fetch tool to fetch {base}/cut and tell me whether the body was truncated.",
+        "http_fetch", tmp_path, extra=["--yes"])
+    fetches = run.results_for("http_fetch")
+    assert fetches, "model did not call http_fetch" + _dump(run)
+    first = json.loads(AgentRun.result_text(fetches[0]))
+    assert "error" not in first, _dump(run)
+    assert first.get("status") == 200, _dump(run)
+    assert first.get("truncated") is True, _dump(run)
+
+
+# common_http_parse_url took the first '@' anywhere after the scheme as the
+# end of the userinfo, so this URL connected to 127.0.0.2 while the
+# confirmation prompt showed 127.0.0.1.
+def test_http_fetch_at_sign_stays_on_displayed_host(http_server, tmp_path):
+    base, state = http_server
+    port = base.rsplit(":", 1)[1]
+    url = f"{base}/?ref=a@127.0.0.2:{port}/"
+    run = run_agentfile(
+        f"Call http_fetch once with exactly this url, unchanged: {url} and report the status code.",
+        "http_fetch", tmp_path, extra=["--yes"])
+    fetches = run.results_for("http_fetch")
+    assert fetches, "model did not call http_fetch" + _dump(run)
+    assert any(p.startswith("/?ref=a") for p in state.requests), (
+        f"request did not reach the displayed host: {state.requests}" + _dump(run))
+    first = json.loads(AgentRun.result_text(fetches[0]))
+    assert first.get("status") == 200, _dump(run)
+
+
+
+# std::stoi stopped at the first non-digit, so this URL connected to
+# 127.0.0.1 on the test server's port instead of being refused.
+def test_http_fetch_rejects_junk_after_port(http_server, tmp_path):
+    base, state = http_server
+    url = f"{base}.evil.invalid/"
+    run = run_agentfile(
+        f"Call http_fetch once with exactly this url, unchanged: {url} and report what happened.",
+        "http_fetch", tmp_path, extra=["--yes"])
+    fetches = run.results_for("http_fetch")
+    assert fetches, "model did not call http_fetch" + _dump(run)
+    first = json.loads(AgentRun.result_text(fetches[0]))
+    assert "invalid URL port" in first.get("error", ""), _dump(run)
+    assert not state.requests, f"a request reached the test server: {state.requests}" + _dump(run)
+
+
+# resolve_location took the base directory from a path that includes the
+# query, so a relative redirect resolved against the '/' in "next=a/b".
+def test_http_fetch_relative_redirect_after_query(http_server, tmp_path):
+    base, _ = http_server
+    run = run_agentfile(
+        f"Call http_fetch once with exactly this url, unchanged: {base}?next=a/b and report the status code.",
+        "http_fetch", tmp_path, extra=["--yes"])
+    fetches = run.results_for("http_fetch")
+    assert fetches, "model did not call http_fetch" + _dump(run)
+    first = json.loads(AgentRun.result_text(fetches[0]))
+    assert first.get("status") == 302, _dump(run)
+    assert first.get("redirect_to") == f"{base}/login", _dump(run)
+
+
+# resolve_location took any Location containing "://" as absolute, so this
+# relative redirect came back as a bare path the model could not fetch.
+def test_http_fetch_relative_redirect_with_url_in_query(http_server, tmp_path):
+    base, _ = http_server
+    run = run_agentfile(
+        f"Call http_fetch once with exactly this url, unchanged: {base}/sso and report the status code.",
+        "http_fetch", tmp_path, extra=["--yes"])
+    fetches = run.results_for("http_fetch")
+    assert fetches, "model did not call http_fetch" + _dump(run)
+    first = json.loads(AgentRun.result_text(fetches[0]))
+    assert first.get("status") == 302, _dump(run)
+    assert first.get("redirect_to") == f"{base}/login?next=https://example.com/x", _dump(run)
+
+# --- web_search -------------------------------------------------------------
+
+def test_web_search_snippet_cut_inside_utf8_char(http_server, tmp_path):
+    base, state = http_server
+    run = run_agentfile(
+        "Use web_search to search for creme brulee and tell me the title of the first result.",
+        "web_search", tmp_path, extra=["--yes", "--searxng-url", base])
+    searches = run.results_for("web_search")
+    assert searches, "model did not call web_search" + _dump(run)
+    assert any(p.startswith("/search") for p in state.requests)
+    first = json.loads(AgentRun.result_text(searches[0]))
+    assert "error" not in first, _dump(run)
+    assert first["results"][0]["snippet"].endswith("…"), _dump(run)
+
+
+# A null field threw inside the result loop, and the whole search came back
+# as "SearXNG returned unparseable JSON".
+def test_web_search_null_fields_keep_results(http_server, tmp_path):
+    base, _ = http_server
+    run = run_agentfile(
+        "Use web_search to search for creme brulee and tell me the title of the second result.",
+        "web_search", tmp_path, extra=["--yes", "--searxng-url", f"{base}/nulls"])
+    searches = run.results_for("web_search")
+    assert searches, "model did not call web_search" + _dump(run)
+    first = json.loads(AgentRun.result_text(searches[0]))
+    assert "error" not in first, _dump(run)
+    results = first["results"]
+    assert len(results) == 2, _dump(run)
+    assert results[0]["title"] == "" and results[0]["snippet"] == "", _dump(run)
+    assert results[1]["title"] == "Second", _dump(run)
+
+
+# print_tools_help read only SEARXNG_URL, so --searxng-url (on the command
+# line or in a packaged agent's .args) still listed web_search as unavailable.
+def test_help_honors_searxng_url_flag(tmp_path, monkeypatch):
+    monkeypatch.delenv("SEARXNG_URL", raising=False)
+    run = run_agentfile("hi", "all", tmp_path, extra=["--searxng-url", "http://127.0.0.1:9", "-h"])
+    assert run.proc.returncode == 0, _dump(run)
+    assert "web_search" in run.proc.stderr, _dump(run)
+    assert "unavailable: web_search" not in run.proc.stderr, _dump(run)
+
+
+# --- --tools ----------------------------------------------------------------
+
+# An empty keep-set means "all tools" to make_adapters, so a list naming
+# nothing used to enable every tool, exec_shell_command included.
+@pytest.mark.parametrize("spec", [",", " ", ""])
+def test_tools_list_naming_nothing_is_rejected(tmp_path, spec):
+    run = run_agentfile("hi", spec, tmp_path, extra=["--yes"])
+    assert run.proc.returncode == 1, _dump(run)
+    assert "--tools: no tool names" in run.proc.stderr, _dump(run)
+    assert not run.tool_calls, _dump(run)
+
+
+
+# Tools are opt-in: without --tools the model gets none (they cost context
+# and widen the attack surface). The -v roster line is the contract.
+def test_tools_default_is_none(tmp_path):
+    run = run_agentfile("What is 2 plus 2? Answer with just the number.",
+                        None, tmp_path, extra=["-v"])
+    assert run.proc.returncode == 0, _dump(run)
+    assert "[tools: none]" in run.proc.stderr, _dump(run)
+    assert "[tool: " not in run.proc.stderr, _dump(run)
+    assert not run.tool_results, _dump(run)
+
+
+def test_tools_roster_lists_enabled_tools(tmp_path):
+    run = run_agentfile("What is 2 plus 2? Answer with just the number.",
+                        "read_only", tmp_path, extra=["-v"])
+    assert run.proc.returncode == 0, _dump(run)
+    roster = [l for l in run.proc.stderr.splitlines() if "[tools: " in l]
+    assert roster, _dump(run)
+    assert "read_file" in roster[0], _dump(run)
+    assert "write_file" not in roster[0], _dump(run)
+
+
+# --tools-runtime specs went unchecked until the first tool call; llama.cpp's
+# server_tools::setup now checks them at startup.
+def test_bad_tools_runtime_fails_at_startup(tmp_path):
+    run = run_agentfile("hi", "read_only", tmp_path, extra=["--tools-runtime", "bogus:x"])
+    assert run.proc.returncode == 3, _dump(run)
+    assert "unknown tool runtime: bogus:x" in run.proc.stderr, _dump(run)
+    assert not run.tool_calls, _dump(run)
+
+
+# llama.cpp b11100 dropped get_datetime from its server tools, and the
+# read_only preset, which names it, then failed with "unknown tool".
+def test_read_only_preset_has_get_datetime(tmp_path):
+    run = run_agentfile("Use the get_datetime tool and tell me today's date.", "read_only", tmp_path)
+    assert run.proc.returncode == 0, _dump(run)
+    results = run.results_for("get_datetime")
+    assert results, "model did not call get_datetime" + _dump(run)
+    assert "result" in json.loads(AgentRun.result_text(results[0])), _dump(run)
+
+# --- -c / --max-iterations --------------------------------------------------
+
+# atoi() turned bad values into 0 ("no limit": the model's full native
+# context, or no iteration cap) or a truncated number (-c 32k -> 32).
+@pytest.mark.parametrize("flag,value", [
+    ("-c", "abc"), ("-c", "32k"), ("-c", "-1"),
+    ("--max-iterations", "abc"), ("--max-iterations", "-5"),
+])
+def test_bad_count_flag_is_rejected(tmp_path, flag, value):
+    run = run_agentfile("hi", "read_only", tmp_path, extra=[flag, value])
+    assert run.proc.returncode == 1, _dump(run)
+    assert f"{flag}: expected a non-negative integer" in run.proc.stderr, _dump(run)
+    assert not run.tool_calls, _dump(run)
+
+# The context is 64K tokens by default and never more than the model's
+# maximum, an explicit -c included.
+@pytest.mark.parametrize("ctx_flag,wanted", [((), 65536), (("-c", "10000000"), 10000000)])
+def test_context_is_capped_at_model_max(tmp_path, ctx_flag, wanted):
+    run = run_agentfile("Reply with OK.", "read_only", tmp_path, extra=["-vv", *ctx_flag])
+    assert run.proc.returncode == 0, _dump(run)
+    train = re.search(r"n_ctx_train\s*=\s*(\d+)", run.proc.stderr)
+    ctx = re.search(r"llama_context: n_ctx\s*=\s*(\d+)", run.proc.stderr)
+    assert train and ctx, _dump(run)
+    assert int(ctx.group(1)) == min(wanted, int(train.group(1))), _dump(run)
+
+# --- --session --------------------------------------------------------------
+
+# The session recorder used a strict json dump(): a tool result with invalid
+# UTF-8 (here a Latin-1 file) killed the run with exit 3.
+def test_session_records_latin1_file(tmp_path):
+    (tmp_path / "menu.txt").write_bytes(LATIN1_TEXT.encode("latin-1"))
+    run = run_agentfile("Use read_file to read menu.txt and tell me what it says.",
+                        "read_file", tmp_path)
+    assert run.proc.returncode == 0, _dump(run)
+    reads = run.results_for("read_file")
+    assert reads, "model did not call read_file (or the result was not recorded)" + _dump(run)
+    text = AgentRun.result_text(reads[0])
+    assert "Caf" in text and "�" in text, _dump(run)
+
+
+# Missing tool-call ids were assigned by the session recorder, so the prompt
+# changed with --session. Model::generate assigns them now; the recorder
+# only records them.
+def test_session_tool_calls_have_paired_ids(tmp_path):
+    (tmp_path / "menu.txt").write_text("soup")
+    run = run_agentfile("Use read_file to read menu.txt and tell me what it says.",
+                        "read_file", tmp_path)
+    assert run.proc.returncode == 0, _dump(run)
+    assert run.tool_calls and run.tool_results, _dump(run)
+    call_ids = [c.get("id") for c in run.tool_calls]
+    assert all(call_ids), f"tool call without an id: {call_ids}" + _dump(run)
+    assert [r.get("toolCallId") for r in run.tool_results] == call_ids, _dump(run)
+
+
+# The recorders opened their files after the model loaded, so a bad path
+# used to fail only after the whole load. The model path here doesn't
+# exist: the record path must fail first.
+@pytest.mark.parametrize("flag", ["--session", "--trace"])
+def test_unwritable_record_path_fails_before_load(tmp_path, flag):
+    path = str(tmp_path / "missing-dir" / "out.jsonl")
+    run = run_agentfile("hi", "read_only", tmp_path, extra=[flag, path],
+                        model=str(tmp_path / "missing.gguf"))
+    assert run.proc.returncode == 3, _dump(run)
+    assert f"{flag}: cannot open {path}" in run.proc.stderr, _dump(run)
+    assert "load model" not in run.proc.stderr, _dump(run)
+
+
+# --- -v / -vv ---------------------------------------------------------------
+
+# llama.cpp's own log was silenced at every verbosity, so -v could not show
+# why a model failed to load.
+def test_verbose_shows_model_load_error(tmp_path):
+    bad = tmp_path / "bad.gguf"
+    bad.write_bytes(b"not a gguf file\n" * 64)
+    default = run_agentfile("hi", "read_only", tmp_path, model=str(bad))
+    verbose = run_agentfile("hi", "read_only", tmp_path, model=str(bad), extra=["-v"])
+    for run in (default, verbose):
+        assert run.proc.returncode == 2, _dump(run)
+        assert "unable to load model" in run.proc.stderr, _dump(run)
+    assert "error loading model" not in default.proc.stderr, _dump(default)
+    assert "llama_model_load: error loading model" in verbose.proc.stderr, _dump(verbose)
+
+
+def test_very_verbose_shows_llama_info_log(tmp_path):
+    marker = "llama_model_loader: loaded meta data"
+    verbose = run_agentfile("Reply with OK.", "read_only", tmp_path, extra=["-v"])
+    very = run_agentfile("Reply with OK.", "read_only", tmp_path, extra=["-vv"])
+    for run in (verbose, very):
+        assert run.proc.returncode == 0, _dump(run)
+        assert marker not in run.proc.stdout, "log output on stdout" + _dump(run)
+    assert marker not in verbose.proc.stderr, _dump(verbose)
+    assert marker in very.proc.stderr, _dump(very)
+
+
+# --- --quiet --yes audit ----------------------------------------------------
+
+WRITE_PROMPT = ("Use the write_file tool to create a file named note.txt in the "
+                "current directory containing exactly the text hello. Then reply done.")
+
+
+def test_quiet_yes_prints_audit_line(tmp_path):
+    run = run_agentfile(WRITE_PROMPT, "write_file", tmp_path, extra=["--yes", "--quiet"])
+    assert (tmp_path / "note.txt").exists(), _dump(run)
+    assert "[write_file --yes]" in run.proc.stderr, _dump(run)
+    assert "[tool: write_file" not in run.proc.stderr, "progress output leaked under --quiet" + _dump(run)
+
+
+def test_default_verbosity_has_progress_not_audit(tmp_path):
+    run = run_agentfile(WRITE_PROMPT, "write_file", tmp_path, extra=["--yes"])
+    assert (tmp_path / "note.txt").exists(), _dump(run)
+    assert "[tool: write_file" in run.proc.stderr, _dump(run)
+    assert "--yes]" not in run.proc.stderr, "duplicate audit line at default verbosity" + _dump(run)
+
+
+# --- confirmation without a terminal ----------------------------------------
+
+# With no terminal to confirm on, a guarded call used to come back as
+# "user cancelled" and the model retried it without end.
+def test_guarded_call_without_terminal_ends_run(tmp_path):
+    run = run_agentfile(WRITE_PROMPT, "write_file", tmp_path)
+    assert run.proc.returncode == 2, _dump(run)
+    assert run.proc.stderr.count("cannot confirm write_file") == 1, _dump(run)
+    # Nothing to ask on, so no question nobody can answer.
+    assert "Allow? [y/N]" not in run.proc.stderr, _dump(run)
+    assert not (tmp_path / "note.txt").exists(), _dump(run)
+
+
+# --- the terminal: confirmation and -i (driven through a pty) ---------------
+
+posix_only = pytest.mark.skipif(os.name == "nt", reason="drives a pty")
+
+
+def _pump(fd, on_output) -> str:
+    """Read fd to EOF, calling on_output(everything so far) after each read."""
+    out = b""
+    while select.select([fd], [], [], RUN_TIMEOUT)[0]:
+        try:
+            chunk = os.read(fd, 4096)
+        except OSError:  # the pty closed
+            break
+        if not chunk:
+            break
+        out += chunk
+        on_output(out)
+    return out.decode(errors="replace")
+
+
+def run_on_terminal(tmp_path, args, on_terminal, typeahead=b"", stderr_on_terminal=False):
+    """Run agentfile in its own session with stdin on a pty; stderr goes to
+    a file unless stderr_on_terminal. on_terminal(master, text so far)
+    answers what agentfile asks on the pty. Returns (exit code, terminal
+    text, stdout, stderr)."""
+    import pty
+    master, slave = pty.openpty()
+    log = tmp_path / "stderr.log"
+    with open(log, "wb") as err:
+        proc = subprocess.Popen(["sh", EXE, "-m", MODEL, "--no-think", *args],
+                                stdin=slave, stdout=subprocess.PIPE,
+                                stderr=slave if stderr_on_terminal else err,
+                                cwd=tmp_path, start_new_session=True)
+    os.close(slave)
+    os.write(master, typeahead)
+    term = _pump(master, lambda text: on_terminal(master, text))
+    proc.wait(timeout=RUN_TIMEOUT)
+    os.close(master)
+    return (proc.returncode, term, proc.stdout.read().decode(errors="replace"),
+            log.read_text(errors="replace"))
+
+
+def answer_every_prompt(answer: bytes):
+    answered = [0]
+
+    def on_terminal(master, text):
+        while text.count(b"Allow? [y/N]") > answered[0]:
+            os.write(master, answer + b"\n")
+            answered[0] += 1
+    return on_terminal
+
+
+WRITE_ARGS = ["-p", WRITE_PROMPT, "--tools", "write_file"]
+
+
+# With stderr redirected, the question used to go there, and the run waited
+# on a question nobody could see. It goes to the terminal now.
+@posix_only
+def test_confirmation_yes_runs_the_call(tmp_path):
+    code, term, _, err = run_on_terminal(tmp_path, WRITE_ARGS, answer_every_prompt(b"y"))
+    assert code == 0, term + err
+    assert "Allow? [y/N]" in term and "Allow?" not in err, term + err
+    assert (tmp_path / "note.txt").exists(), term + err
+
+
+# Models retry a declined call, and each retry asked again, without end.
+@posix_only
+def test_declined_calls_end_the_run(tmp_path):
+    code, term, _, err = run_on_terminal(tmp_path, WRITE_ARGS, answer_every_prompt(b"n"))
+    assert code in (0, 2), term + err
+    assert term.count("Allow? [y/N]") <= 3, term + err
+    assert not (tmp_path / "note.txt").exists(), term + err
+    # Nothing ran, so no result line either.
+    assert "[tool: write_file ->" not in err, err
+
+
+# The answer was read from whatever was typed before the question appeared.
+@posix_only
+def test_typed_ahead_text_does_not_answer_the_prompt(tmp_path):
+    code, term, _, err = run_on_terminal(tmp_path, WRITE_ARGS, answer_every_prompt(b"n"),
+                                         typeahead=b"yes please\n")
+    assert not (tmp_path / "note.txt").exists(), term + err
+
+
+@posix_only
+def test_interactive_follow_up_then_empty_line_ends(tmp_path):
+    sent = [0]
+
+    def on_terminal(master, text):
+        if text.count(b"\n> ") > sent[0]:
+            os.write(master, b"Now reply with the single word banana.\n" if sent[0] == 0 else b"\n")
+            sent[0] += 1
+    code, term, out, _ = run_on_terminal(
+        tmp_path, ["-p", "Reply with the single word apple.", "-i", "--tools", "read_only"],
+        on_terminal, stderr_on_terminal=True)
+    assert code == 0, term
+    assert "apple" in out.lower() and "banana" in out.lower(), out + term
