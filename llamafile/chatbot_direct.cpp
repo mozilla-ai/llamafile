@@ -21,6 +21,7 @@
 
 #include "chat.h"
 #include "common.h"
+#include "log.h"
 #include "llama.h"
 #include "llamafile.h"
 #include "sampling.h"
@@ -95,9 +96,15 @@ public:
     }
 
     void print_stats() override {
-        FLAG_log_disable = false;
+        // common_perf_print() emits its metrics through LOG_INF(), which is
+        // gated by the common_log verbosity threshold. Chat mode sets that
+        // threshold to ERROR (chatbot_main.cpp) so LOG_INF is silently dropped
+        // and /stats prints nothing. Raise the threshold just for this call so
+        // the perf metrics reach stderr, then restore the previous value.
+        const int verbosity = common_log_get_verbosity_thold();
+        common_log_set_verbosity_thold(LOG_LEVEL_INFO);
         common_perf_print(g_ctx, g_sampler);
-        FLAG_log_disable = true;
+        common_log_set_verbosity_thold(verbosity);
     }
 
     void on_clear() override {
