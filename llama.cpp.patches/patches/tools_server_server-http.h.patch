@@ -1,0 +1,21 @@
+diff --git a/tools/server/server-http.h b/tools/server/server-http.h
+--- a/llama.cpp/tools/server/server-http.h
++++ b/llama.cpp/tools/server/server-http.h
+@@ -79,11 +79,17 @@ struct server_http_context {
+     std::string hostname;
+     int port    = 8080;
+     bool is_ssl = false;
++    bool is_sock  = false; // listening on a Unix domain socket
++    bool is_bound = false;
+ 
+     server_http_context();
+     ~server_http_context();
+ 
+     bool init(const common_params & params);
++    // creates and binds the listening socket; start() calls it if needed.
++    // llamafile binds early so the socket exists before the sandbox is
++    // installed (a Unix domain socket can't be created under pledge "anet")
++    bool bind_socket();
+     bool start();
+     void stop() const;
+ 

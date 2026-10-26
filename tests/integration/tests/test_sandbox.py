@@ -29,7 +29,9 @@ unveil() path confinement directly.
 import os
 import platform
 import shutil
+import socket
 import subprocess
+import tempfile
 import time
 from pathlib import Path
 
@@ -137,6 +139,38 @@ def _resolve_server_pid(pid: int) -> int:
     return pid
 
 
+def _unix_http_get(sock_path: str, path: str, timeout: float) -> tuple[int, bytes]:
+    """Minimal HTTP/1.1 GET over a Unix domain socket: (status, body)."""
+    with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as s:
+        s.settimeout(timeout)
+        s.connect(sock_path)
+        s.sendall(
+            f"GET {path} HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n".encode()
+        )
+        data = b""
+        while chunk := s.recv(65536):
+            data += chunk
+    head, _, body = data.partition(b"\r\n\r\n")
+    return int(head.split(b" ", 2)[1]), body
+
+
+def _wait_for_unix_server(sock_path: str, timeout: float, proc) -> bool:
+    """Poll GET /health on a Unix socket until it answers 200, the process
+    exits, or the timeout expires."""
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        if proc.poll() is not None:
+            return False
+        if os.path.exists(sock_path):
+            try:
+                if _unix_http_get(sock_path, "/health", 5)[0] == 200:
+                    return True
+            except OSError:
+                pass
+        time.sleep(0.5)
+    return False
+
+
 def _stop_hard(proc):
     """Terminate a process without ever hanging the test: SIGTERM first
     (llamafile shuts down gracefully), SIGKILL if it doesn't oblige."""
@@ -214,6 +248,32 @@ class TestServerSandbox:
             _stop_hard(proc)
 
         log = LlamafileRunner.read_log_file(log_file)
+        assert 'sandbox: pledge("' in log, "server should log the active promise set"
+
+    @requires_linux
+    def test_unix_socket_server_sandboxed(self, cpu_runner, server_port, timeouts):
+        """--host /path.sock serves over a Unix domain socket under the
+        sandbox (issue #971): "anet" forbids creating an AF_UNIX socket, so
+        the server must bind it before pledge()."""
+        # short path under /tmp: sun_path is limited to 108 bytes
+        sock_dir = tempfile.mkdtemp(prefix="lf_uds_")
+        sock_path = os.path.join(sock_dir, "server.sock")
+        log_file = os.path.join(sock_dir, "server.log")
+        proc = cpu_runner.start_server(
+            port=server_port, log_file=log_file, extra_args=["--host", sock_path]
+        )
+        try:
+            assert _wait_for_unix_server(
+                sock_path, timeout=timeouts.server_ready, proc=proc
+            ), "Server did not become ready on the Unix socket"
+            _assert_sandbox_installed(_resolve_server_pid(proc.pid))
+            status, body = _unix_http_get(sock_path, "/v1/models", timeouts.http_request)
+            assert status == 200 and b'"data"' in body
+        finally:
+            _stop_hard(proc)
+            log = LlamafileRunner.read_log_file(log_file)
+            shutil.rmtree(sock_dir, ignore_errors=True)
+
         assert 'sandbox: pledge("' in log, "server should log the active promise set"
 
     @requires_linux

@@ -45,6 +45,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/socket.h>
+#include <sys/un.h>
 #include <sys/wait.h>
 #include <unistd.h>
 
@@ -150,6 +151,44 @@ static void child_anet_promises(void) {
     CHECK(connect(censored, (struct sockaddr *)&addr, sizeof(addr)) == -1,
           "connect() blocked under anet");
     CHECK(errno == EPERM, "connect() fails with EPERM");
+
+    _exit(0);
+}
+
+// Socket path for child_unix_listener, under a temp dir that main() creates
+// and removes: the sandboxed child can't, as it has no cpath.
+static char unix_sock_path[PATH_MAX];
+
+// what --server --host /path.sock relies on: anet doesn't cover AF_UNIX, so
+// the server binds its Unix domain socket before pledge() and only accepts
+// on it afterwards
+static void child_unix_listener(void) {
+    int server = socket(AF_UNIX, SOCK_STREAM, 0);
+    CHECK(server != -1, "pre-pledge AF_UNIX socket");
+    struct sockaddr_un addr;
+    memset(&addr, 0, sizeof(addr));
+    addr.sun_family = AF_UNIX;
+    strlcpy(addr.sun_path, unix_sock_path, sizeof(addr.sun_path));
+    CHECK(!bind(server, (struct sockaddr *)&addr, sizeof(addr)),
+          "pre-pledge AF_UNIX bind");
+    CHECK(!listen(server, 1), "pre-pledge AF_UNIX listen");
+
+    CHECK(llamafile_sandbox_apply("stdio anet rpath") == LLAMAFILE_SANDBOX_ACTIVE,
+          "apply stdio anet rpath");
+
+    // accept() on the already-bound socket is permitted
+    int flags = fcntl(server, F_GETFL);
+    CHECK(flags != -1 && fcntl(server, F_SETFL, flags | O_NONBLOCK) != -1,
+          "set O_NONBLOCK");
+    errno = 0;
+    CHECK(accept(server, 0, 0) == -1, "accept with no client");
+    CHECK(errno == EAGAIN || errno == EWOULDBLOCK,
+          "AF_UNIX accept() allowed by filter (EAGAIN, not EPERM)");
+
+    // creating one after pledge() is not, which is why the bind comes first
+    errno = 0;
+    CHECK(socket(AF_UNIX, SOCK_STREAM, 0) == -1, "AF_UNIX socket() blocked under anet");
+    CHECK(errno == EPERM, "AF_UNIX socket() fails with EPERM");
 
     _exit(0);
 }
@@ -270,6 +309,18 @@ int main(void) {
     rc |= run_case("stdio+rpath (cli promises)", child_rpath_promises);
     rc |= run_case("stdio only (embedded weights)", child_stdio_only);
     rc |= run_case("stdio+anet+rpath (server promises)", child_anet_promises);
+
+    char unix_dir[] = "/tmp/lf_unix_XXXXXX";
+    if (!mkdtemp(unix_dir)) {
+        perror("mkdtemp");
+        return 1;
+    }
+    snprintf(unix_sock_path, sizeof(unix_sock_path), "%s/server.sock", unix_dir);
+    rc |= run_case("stdio+anet+rpath (unix socket bound before pledge)",
+                   child_unix_listener);
+    unlink(unix_sock_path);
+    rmdir(unix_dir);
+
     rc |= run_case("unveil confinement", child_unveil);
     return rc;
 }
