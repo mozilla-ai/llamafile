@@ -25,6 +25,9 @@ The `llamafile --server` process runs under `stdio anet rpath` on Linux
 
 - **No outbound network.** `anet` allows `accept()` but not `connect()`, so
   the only networking the server can do is answer connections it received.
+  The listening socket is bound before the sandbox is installed, which is
+  also what lets `--host /path/to/server.sock` serve over a Unix domain
+  socket: `anet` covers only IPv4/IPv6, so one couldn't be created later.
   If the server is ever compromised (say, through a bug in the GGUF parser
   or an HTTP handler), this is the single most valuable restriction: it cuts
   the attacker's ability to exfiltrate anything over the network.
