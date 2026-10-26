@@ -1,10 +1,8 @@
 """Server mode integration tests."""
 
 import os
-import shutil
 import socket
 import sys
-import tempfile
 import time
 
 import pytest
@@ -180,32 +178,37 @@ def _unix_http_get(sock_path: str, path: str, timeout: float) -> tuple[int, byte
     return int(head.split(b" ", 2)[1]), body
 
 
-def _short_socket_path() -> str:
-    """A free /tmp/lfX.sock path: 13 bytes, one short of the 14 a path needs
-    for a sockaddr_un to reach 16 bytes when its NUL isn't counted."""
-    for c in "abcdefghijklmnopqrstuvwxyz0123456789":
-        path = f"/tmp/lf{c}.sock"
-        if not os.path.exists(path):
-            return path
-    pytest.skip("no free short socket path under /tmp")
-
-
 @pytest.mark.server
 @pytest.mark.skipif(sys.platform == "win32", reason="the test client needs AF_UNIX on a POSIX host")
 class TestServerUnixSocket:
-    """--host /path.sock serves HTTP over a Unix domain socket.
+    """--host <path>.sock serves HTTP over a Unix domain socket.
 
     --unsecure keeps these independent of the pledge() sandbox, which
     test_sandbox.py covers.
     """
 
-    @pytest.mark.parametrize("short", [False, True], ids=["long-path", "short-path"])
-    def test_server_on_unix_socket(self, llamafile, server_port, timeouts, short):
-        sock_dir = tempfile.mkdtemp(prefix="lf_uds_")
-        sock_path = _short_socket_path() if short else os.path.join(sock_dir, "server.sock")
-        proc = llamafile.start_server(
-            port=server_port, extra_args=["--host", sock_path, "--unsecure"]
+    # "server.sock" relative to the server's cwd is 11 bytes: shorter than
+    # the 14 a path needs for 2 + strlen(path) to reach sizeof(struct
+    # sockaddr), below which Cosmopolitan's bind() returns EINVAL.
+    @pytest.mark.parametrize(
+        "relative", [False, True], ids=["absolute-path", "short-relative-path"]
+    )
+    def test_server_on_unix_socket(
+        self, executable, model, gpu_mode, server_port, timeouts, tmp_path, monkeypatch, relative
+    ):
+        # absolute paths so the runner is unaffected by the chdir below
+        runner = LlamafileRunner(
+            executable=os.path.abspath(executable),
+            model=os.path.abspath(model) if model else None,
+            gpu=gpu_mode,
         )
+        monkeypatch.chdir(tmp_path)  # the server inherits it
+        host = "server.sock" if relative else str(tmp_path / "server.sock")
+        sock_path = str(tmp_path / "server.sock")
+        if len(sock_path) >= 108:
+            pytest.skip("tmp_path too long for sun_path")
+
+        proc = runner.start_server(port=server_port, extra_args=["--host", host, "--unsecure"])
         try:
             deadline = time.time() + timeouts.server_ready
             status = None
@@ -218,13 +221,10 @@ class TestServerUnixSocket:
                     except OSError:
                         pass
                 time.sleep(0.5)
-            assert status == 200, f"server did not answer /health on {sock_path}"
+            assert status == 200, f"server did not answer /health on --host {host}"
 
             status, body = _unix_http_get(sock_path, "/v1/models", timeouts.http_request)
             assert status == 200 and b'"data"' in body
         finally:
             proc.terminate()
             proc.wait()
-            if short and os.path.exists(sock_path):
-                os.unlink(sock_path)
-            shutil.rmtree(sock_dir, ignore_errors=True)
