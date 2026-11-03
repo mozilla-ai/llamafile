@@ -5,6 +5,7 @@ import pytest
 from utils.llamafile import (
     LlamafileRunner,
     STATS_IDLE_LINE,
+    assert_generated_rate_basis,
     assert_stats_core,
     read_until_idle,
     stop_tui,
@@ -141,6 +142,23 @@ class TestCombinedStats:
 
         assert len(output) > 0, "TUI produced no output for /stats"
         assert_stats_core(output, where="combined mode")
+
+    def test_stats_generated_rate_excludes_the_free_first_token(
+        self, llamafile, server_port, timeouts
+    ):
+        """The server's generation timer skips the first token; the rate must too.
+
+        predicted_ms spans predicted_n - 1 decode steps, so dividing by
+        predicted_n overstates the rate by n/(n-1) and reads ~1e6 tok/s on a
+        one-token reply.
+        """
+        output = self._stats_output(
+            llamafile, server_port, timeouts, generate_first=True
+        )
+
+        assert_generated_rate_basis(
+            output, free_first_token=True, where="combined mode"
+        )
 
     def test_stats_omits_direct_backend_extras(self, llamafile, server_port, timeouts):
         """Rows the server cannot source must not appear in combined mode."""

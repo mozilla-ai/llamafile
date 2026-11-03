@@ -2,7 +2,12 @@
 
 import pytest
 
-from utils.llamafile import STATS_IDLE_LINE, assert_stats_core, strip_ansi
+from utils.llamafile import (
+    STATS_IDLE_LINE,
+    assert_generated_rate_basis,
+    assert_stats_core,
+    strip_ansi,
+)
 from utils.prompts import ADD_2_2
 
 
@@ -71,6 +76,18 @@ class TestTUIStats:
 
         assert result.returncode == 0, f"TUI failed: {result.stderr}"
         assert_stats_core(result.stdout, where="--chat")
+
+    def test_stats_generated_rate_counts_every_token(self, llamafile, tmp_path, timeouts):
+        """--chat decodes every generated token, so the rate divides by all of them."""
+        input_file = tmp_path / "input.txt"
+        input_file.write_text(f"{ADD_2_2.prompt}\n/stats\n/exit\n")
+
+        result = llamafile.run_tui(str(input_file), timeout=timeouts.tui)
+
+        assert result.returncode == 0
+        assert_generated_rate_basis(
+            result.stdout, free_first_token=False, where="--chat"
+        )
 
     def test_stats_reports_direct_backend_extras(self, llamafile, tmp_path, timeouts):
         """--chat adds load time and graph reuse, which the server has no equivalent for."""

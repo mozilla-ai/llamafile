@@ -111,8 +111,10 @@ public:
         const int prompt_n = ctx_perf.t_p_eval_ms > 0 ? ctx_perf.n_p_eval : 0;
         const int gen_n = ctx_perf.t_eval_ms > 0 ? ctx_perf.n_eval : 0;
 
+        // n_eval and t_eval_us accumulate together, one per decoded token, so
+        // here the rate basis is simply the token count
         if (!print_stats_core(prompt_n, ctx_perf.t_p_eval_ms, gen_n,
-                              ctx_perf.t_eval_ms, total_ms))
+                              ctx_perf.t_eval_ms, gen_n, total_ms))
             return; // nothing decoded yet; load time reappears after the first turn
 
         // --chat only: the server backend has no equivalent for these

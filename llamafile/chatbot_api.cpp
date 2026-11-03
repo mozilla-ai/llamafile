@@ -265,8 +265,14 @@ public:
         const int prompt_n = have_timings_ ? last_prompt_n_ : last_prompt_tokens_;
         const int gen_n = have_timings_ ? last_predicted_n_ : last_completion_tokens_;
 
+        // The server's generation timer starts when the first token is
+        // sampled -- that token comes free from the last prompt batch's
+        // logits -- so predicted_ms covers predicted_n - 1 decode steps. This
+        // is what the server's own n_gen_tps() divides by.
+        const int gen_rate_n = gen_n > 0 ? gen_n - 1 : 0;
+
         if (!print_stats_core(prompt_n, last_prompt_ms_, gen_n,
-                              last_predicted_ms_,
+                              last_predicted_ms_, gen_rate_n,
                               last_prompt_ms_ + last_predicted_ms_))
             return;
 
