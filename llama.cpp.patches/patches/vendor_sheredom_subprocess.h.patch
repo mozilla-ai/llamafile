@@ -27,11 +27,58 @@ diff --git a/vendor/sheredom/subprocess.h b/vendor/sheredom/subprocess.h
    switch (error) {
    case ENOENT:
    case ENOTDIR:
-@@ -636,6 +655,7 @@ int subprocess_error_from_errno(int error) {
+@@ -636,6 +655,22 @@ int subprocess_error_from_errno(int error) {
    default:
      return subprocess_error_unknown;
    }
 +#endif
++}
++#endif
++
++#if defined(__COSMOPOLITAN__)
++#include <libc/dce.h> /* IsWindows(); <cosmo.h> would bring in its defer() macro */
++/* On Windows, Cosmopolitan's waitpid() reports the child's NT exit code as the
++   wait status. Cosmopolitan programs exit with (code << 8), so theirs decode as
++   usual, but a native program such as cmd.exe exits with the plain code: exit 3
++   reads as "killed by signal 3" (reported as EXIT_FAILURE) and exit 128 reads as
++   a clean exit 0. A status with its low byte set is taken as a native code. */
++static int subprocess_return_status_from_wait_status(int status) {
++  if (IsWindows()) {
++    return (status & 0xff) ? status : (status >> 8);
++  }
++  return WIFEXITED(status) ? WEXITSTATUS(status) : EXIT_FAILURE;
  }
  #endif
  
+@@ -1943,11 +1978,15 @@ int subprocess_join(struct subprocess_s *const process,
+ 
+     process->child = 0;
+ 
++#if defined(__COSMOPOLITAN__)
++    process->return_status = subprocess_return_status_from_wait_status(status);
++#else
+     if (WIFEXITED(status)) {
+       process->return_status = WEXITSTATUS(status);
+     } else {
+       process->return_status = EXIT_FAILURE;
+     }
++#endif
+ 
+     process->alive = 0;
+   }
+@@ -2157,11 +2196,15 @@ int subprocess_alive(struct subprocess_s *const process) {
+ 
+     // If the process was successfully waited on we need to cleanup now.
+     if (!is_alive) {
++#if defined(__COSMOPOLITAN__)
++      process->return_status = subprocess_return_status_from_wait_status(status);
++#else
+       if (WIFEXITED(status)) {
+         process->return_status = WEXITSTATUS(status);
+       } else {
+         process->return_status = EXIT_FAILURE;
+       }
++#endif
+ 
+       // Since we've already successfully waited on the process, we need to wipe
+       // the child now.

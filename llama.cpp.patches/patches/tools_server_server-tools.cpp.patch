@@ -1,0 +1,40 @@
+diff --git a/tools/server/server-tools.cpp b/tools/server/server-tools.cpp
+--- a/llama.cpp/tools/server/server-tools.cpp
++++ b/llama.cpp/tools/server/server-tools.cpp
+@@ -33,6 +33,10 @@
+ #   include <unistd.h>
+ #endif
+ 
++#if defined(__COSMOPOLITAN__)
++#   include <cosmo.h>
++#endif
++
+ namespace fs = std::filesystem;
+ 
+ //
+@@ -1283,6 +1287,13 @@ struct server_tool_exec_shell_command : server_tool {
+         std::vector<std::string> args = !json_value(params, "runtime", std::string()).empty()
+             ? std::vector<std::string>{"sh", "-c", command}
+             : std::vector<std::string>{"cmd", "/c", command};
++#elif defined(__COSMOPOLITAN__)
++        // one cosmopolitan binary runs on every OS and _WIN32 is never defined, so the host is
++        // checked at run time; cosmopolitan's posix_spawnp does not try ".exe" on PATH, so the
++        // name carries it
++        std::vector<std::string> args = IsWindows() && json_value(params, "runtime", std::string()).empty()
++            ? std::vector<std::string>{"cmd.exe", "/c", command}
++            : std::vector<std::string>{"sh", "-c", command};
+ #else
+         std::vector<std::string> args = {"sh", "-c", command};
+ #endif
+@@ -1728,6 +1739,11 @@ struct server_tool_get_info : server_tool {
+         std::vector<std::string> args = !json_value(params, "runtime", std::string()).empty()
+             ? std::vector<std::string>{"uname", "-a"}
+             : std::vector<std::string>{"cmd", "/c", "ver"};
++#elif defined(__COSMOPOLITAN__)
++        // same choice as the _WIN32 branch, made at run time (see exec_shell_command)
++        std::vector<std::string> args = IsWindows() && json_value(params, "runtime", std::string()).empty()
++            ? std::vector<std::string>{"cmd.exe", "/c", "ver"}
++            : std::vector<std::string>{"uname", "-a"};
+ #else
+         std::vector<std::string> args = {"uname", "-a"};
+ #endif
