@@ -57,8 +57,8 @@ with the next backend rather than failing.
 | Vendor | Backend | Platforms | Status | Notes |
 |--------|---------|-----------|--------|-------|
 | Apple | Metal (built-in) | macOS ARM64 | Supported | Offload is enabled by default; disable with `-ngl 0` or `--gpu disable` |
-| NVIDIA | CUDA / cuBLAS | Linux, Windows, WSL | Supported | Pass `-ngl 999` to offload; Windows release binaries ship prebuilt DLLs |
-| AMD | HIP / rocBLAS | Linux, Windows | Supported | Pass `-ngl 999` to offload; multi-GPU may be broken on Radeon (see below) |
+| NVIDIA | CUDA / cuBLAS | Linux, Windows, WSL | Supported | Pass `-ngl 999` to offload; the bundled library needs compute capability 7.5+ (see below) |
+| AMD | HIP / rocBLAS | Linux, Windows | Supported | Pass `-ngl 999` to offload; the library is downloaded separately and needs the ROCm runtime (see below); multi-GPU may be broken on Radeon |
 | Any (incl. Intel) | Vulkan | Linux, Windows, macOS | Supported | Pass `-ngl 999` to offload; select with `--gpu vulkan`. Used in `--gpu auto` when no vendor backend is available |
 
 The 0.10.* series has not been tested on every GPU and platform yet, so
@@ -92,35 +92,59 @@ that happens to you, then use `export HIP_VISIBLE_DEVICES=0` which
 forces llamafile to only use the first GPU.
 
 Windows users are encouraged to use our release binaries, because they
-contain prebuilt DLLs for both NVIDIA and AMD graphics cards, which only
-depend on the graphics driver being installed. If llamafile detects that
-NVIDIA's CUDA SDK or AMD's ROCm HIP SDK are installed, then llamafile
-will try to build a faster DLL that uses cuBLAS or rocBLAS. In order for
-llamafile to successfully build a cuBLAS module, it needs to be run on
-the x64 MSVC command prompt. You can use CUDA via WSL by enabling
+bundle prebuilt CUDA and Vulkan DLLs, which only depend on the graphics
+driver being installed. llamafile does not compile GPU libraries at
+runtime, so installing NVIDIA's CUDA SDK or AMD's HIP SDK does not make
+it build one; to use a different library (for example one linked against
+cuBLAS), build it with the scripts described in
+[Building the GPU libraries](building_dlls.md) and place it next to the
+executable. You can use CUDA via WSL by enabling
 [Nvidia CUDA on
 WSL](https://learn.microsoft.com/en-us/windows/ai/directml/gpu-cuda-in-wsl)
 and running your llamafiles inside of WSL. Using WSL has the added
 benefit of letting you run llamafiles greater than 4GB on Windows.
 
-On Linux, NVIDIA users will need to install the CUDA SDK (ideally using
-the shell script installer) and ROCm users need to install the HIP SDK.
-They're detected by looking to see if `nvcc` or `hipcc` are on the PATH.
-For AMD systems, make sure the executable directory containing `hipcc` is
-on your `PATH` and that it can be executed by your user; a `hipcc:
-Permission denied` message means ROCm was found but can't be run, so GPU
-offload will not be available until the SDK permissions or installation
-are fixed. Running with `--gpu amd` or `--gpu nvidia` is a useful way to
-turn an otherwise quiet CPU fallback into an explicit startup error while
-you diagnose the toolchain.
+On Linux, the bundled CUDA library only needs the NVIDIA driver, so the
+CUDA SDK is not required. AMD users need the ROCm runtime and the
+`ggml-rocm.so` library described below. Running with `--gpu amd` or
+`--gpu nvidia` is a useful way to turn an otherwise quiet CPU fallback
+into an explicit startup error while you diagnose the setup.
 
 If you have both an AMD GPU *and* an NVIDIA GPU in your machine, then
 you may need to qualify which one you want used, by passing either
 `--gpu amd` or `--gpu nvidia`.
 
-In the event that GPU support couldn't be compiled and dynamically
-linked on the fly for any reason, llamafile will fall back to CPU
-inference.
+In the event that GPU support couldn't be set up for any reason,
+llamafile will fall back to CPU inference.
+
+### Supported NVIDIA GPU generations
+
+The CUDA library bundled in our releases contains GPU code for compute
+capability 7.5 (Turing: RTX 20 and GTX 16 series) and newer. Older GPUs,
+such as Maxwell (GTX 900 series), Pascal (GTX 10 series) and Volta, have no
+kernels they can run in it, so CUDA offload is not available on them; the
+Vulkan backend may still work. You can check your GPU's compute capability
+with `nvidia-smi --query-gpu=name,compute_cap --format=csv`. To use CUDA on
+an older GPU, build the library yourself with a `-gencode` target for it
+(see [Building the GPU libraries](building_dlls.md)). CUDA 13 no longer
+supports Maxwell, Pascal or Volta, so use CUDA 12.x for those.
+
+### AMD GPUs
+
+The ROCm library is not bundled in the release binaries. Download
+`ggml-rocm.dll` (Windows) or `ggml-rocm.so` (Linux) from
+[Hugging Face](https://huggingface.co/mozilla-ai/llamafile_0.10/tree/main)
+and put it in one of the locations listed above. It is linked against the
+ROCm runtime, which must be installed separately: on Windows,
+`ggml-rocm.dll` needs `amdhip64_7.dll` and `libhipblas.dll`, which come with
+the [AMD HIP SDK](https://www.amd.com/en/developer/resources/rocm-hub/hip-sdk.html),
+not with the graphics driver. If they can't be found, `--verbose` prints
+`probing library ...ggml-rocm.dll` followed by `failed to load library`.
+
+The prebuilt library targets gfx906, gfx942, gfx1030, gfx1031, gfx1032,
+gfx1100, gfx1101, gfx1102 and gfx1103. For other GPUs, build it yourself
+and set `OFFLOAD_ARCH` (for example `--offload-arch=gfx1035`), see
+[Building the GPU libraries](building_dlls.md).
 
 ### Verifying GPU acceleration
 
