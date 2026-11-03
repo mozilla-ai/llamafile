@@ -1,7 +1,24 @@
 diff --git a/vendor/cpp-httplib/httplib.cpp b/vendor/cpp-httplib/httplib.cpp
 --- a/llama.cpp/vendor/cpp-httplib/httplib.cpp
 +++ b/llama.cpp/vendor/cpp-httplib/httplib.cpp
-@@ -7244,6 +7244,22 @@ void ThreadPool::cleanup_finished_threads() {
+@@ -2382,6 +2382,16 @@ socket_t create_socket(const std::string &host, const std::string &ip, int port,
+       hints.ai_addr = reinterpret_cast<sockaddr *>(&addr);
+       hints.ai_addrlen = static_cast<socklen_t>(
+           sizeof(addr) - sizeof(addr.sun_path) + addrlen);
++#ifdef __COSMOPOLITAN__
++      // Cosmopolitan's bind() and connect() reject an address shorter than
++      // struct sockaddr (16 bytes) with EINVAL, so a socket path under 14
++      // bytes would fail. Passing the whole sockaddr_un is fine for a
++      // pathname socket, which the kernel reads up to the NUL; an abstract
++      // name (leading NUL) is length-delimited, so it keeps its exact size.
++      if (addr.sun_path[0] != '\0') {
++        hints.ai_addrlen = static_cast<socklen_t>(sizeof(addr));
++      }
++#endif
+ 
+ #ifndef SOCK_CLOEXEC
+ #ifndef _WIN32
+@@ -7244,6 +7254,22 @@ void ThreadPool::cleanup_finished_threads() {
  }
  
  void ThreadPool::worker(bool is_dynamic) {
@@ -24,7 +41,7 @@ diff --git a/vendor/cpp-httplib/httplib.cpp b/vendor/cpp-httplib/httplib.cpp
    for (;;) {
      std::function<void()> fn;
      {
-@@ -7261,7 +7277,13 @@ void ThreadPool::worker(bool is_dynamic) {
+@@ -7261,7 +7287,13 @@ void ThreadPool::worker(bool is_dynamic) {
            break;
          }
        } else {
@@ -39,7 +56,7 @@ diff --git a/vendor/cpp-httplib/httplib.cpp b/vendor/cpp-httplib/httplib.cpp
        }
  
        idle_thread_count_--;
-@@ -14003,6 +14025,13 @@ bool enumerate_macos_keychain_certs(Callback cb) {
+@@ -14003,6 +14035,13 @@ bool enumerate_macos_keychain_certs(Callback cb) {
  
  #if !defined(_WIN32) && !(defined(__APPLE__) &&                                \
                            defined(CPPHTTPLIB_USE_CERTS_FROM_MACOSX_KEYCHAIN))
@@ -53,7 +70,7 @@ diff --git a/vendor/cpp-httplib/httplib.cpp b/vendor/cpp-httplib/httplib.cpp
  // Common CA certificate file paths on Linux/Unix
  const char **system_ca_paths() {
    static const char *paths[] = {
-@@ -14020,6 +14049,10 @@ const char **system_ca_dirs() {
+@@ -14020,6 +14059,10 @@ const char **system_ca_dirs() {
    static const char *dirs[] = {"/etc/ssl/certs",             // Debian/Ubuntu
                                 "/etc/pki/tls/certs",         // RHEL/CentOS
                                 "/usr/share/ca-certificates", // Other
