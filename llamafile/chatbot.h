@@ -124,6 +124,18 @@ void on_undo(const std::vector<std::string> &);
 void on_upload(const std::vector<std::string> &);
 void print(const std::string_view &);
 void print_ephemeral(const std::string_view &);
+
+// Shared /stats rendering. Every backend prints this block first and with
+// identical formatting, so /stats reports the same things regardless of how
+// llamafile was started; backend-specific extras go after it. Pass a
+// non-positive duration when a figure is unavailable and the rate (and the
+// time column) is omitted rather than shown as zero.
+//
+// Returns false when nothing has been processed yet, having said so in one
+// line; callers must then print no extras, so that an idle /stats reads the
+// same in every mode.
+bool print_stats_core(int prompt_n, double prompt_ms, int gen_n, double gen_ms,
+                      double total_ms);
 void record_undo(void);
 void repl(ChatBackend &backend);
 void rewind(int);

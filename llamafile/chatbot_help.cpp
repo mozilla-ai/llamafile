@@ -89,11 +89,13 @@ the usage of that specific command will be printed.\n\
     } else if (args[1] == "stats") {
         fprintf(stderr, "\
 " BOLD "usage: /stats" RESET "\n\
-prints performance statistics for current session. this includes prompt\n\
-evaluation time in tokens per second, which indicates prefill speed, or\n\
-how quickly llamafile is able to read text. the 'eval time' statistic\n\
-gives you prediction or token generation speed, in tokens per second,\n\
-which tells you how quickly llamafile is able to write text.\n\
+prints performance statistics for current session. the 'prompt' row is\n\
+prefill speed, in tokens per second: how quickly llamafile reads text.\n\
+the 'generated' row is prediction speed, in tokens per second: how\n\
+quickly llamafile writes text. both rows are reported the same way in\n\
+--chat and server mode. further rows depend on the mode: --chat adds\n\
+model load time, sampler time and compute graph reuse, while server mode\n\
+adds prompt cache hits and, with speculative decoding, draft acceptance.\n\
 ");
     } else if (args[1] == "clear") {
         fprintf(stderr, "\
