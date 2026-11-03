@@ -95,9 +95,33 @@ public:
     }
 
     void print_stats() override {
-        FLAG_log_disable = false;
-        common_perf_print(g_ctx, g_sampler);
-        FLAG_log_disable = true;
+        // Format and print directly rather than going through llama.cpp's
+        // common_perf_print(). This keeps /stats consistent across chat and
+        // combined mode and off the logging path entirely.
+        const llama_perf_context_data ctx_perf = llama_perf_context(g_ctx);
+        const llama_perf_sampler_data smpl_perf =
+            llama_perf_sampler(common_sampler_get(g_sampler));
+        const double total_ms = 1e-3 * ggml_time_us() - ctx_perf.t_start_ms;
+
+        // llama_perf_context() clamps both token counts with std::max(1, ...)
+        // (llama-context.cpp, perf_get_data) so that its own printer can divide
+        // by them. Before anything is decoded the real counters are 0 and that
+        // guard would show up here as a phantom token on each row. The
+        // durations are not clamped, so use them to tell the cases apart.
+        const int prompt_n = ctx_perf.t_p_eval_ms > 0 ? ctx_perf.n_p_eval : 0;
+        const int gen_n = ctx_perf.t_eval_ms > 0 ? ctx_perf.n_eval : 0;
+
+        // n_eval and t_eval_us accumulate together, one per decoded token, so
+        // here the rate basis is simply the token count
+        if (!print_stats_core(prompt_n, ctx_perf.t_p_eval_ms, gen_n,
+                              ctx_perf.t_eval_ms, gen_n, total_ms))
+            return; // nothing decoded yet; load time reappears after the first turn
+
+        // --chat only: the server backend has no equivalent for these
+        printf("  %-10s %17.2f ms\n", "load", ctx_perf.t_load_ms);
+        if (smpl_perf.n_sample > 0)
+            printf("  %-10s %17.2f ms\n", "samplers", smpl_perf.t_sample_ms);
+        printf("  %-10s %17d\n", "graphs", ctx_perf.n_reused);
     }
 
     void on_clear() override {

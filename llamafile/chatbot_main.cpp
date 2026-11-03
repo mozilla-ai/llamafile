@@ -330,6 +330,15 @@ int main(int argc, char **argv) {
         clear_ephemeral();
     }
 
+    // Startup decoding (the BOS token above, and a base model's system prompt)
+    // is synchronized, so llama_context books it as generation. Left in place
+    // it is charged to the user's first /stats as a token they never asked
+    // for, and on add_bos models an idle /stats would report a decode before
+    // the conversation has begun. perf_reset() keeps t_load_us, so the load
+    // row survives; it also restarts the total-time clock here, which excludes
+    // model loading from the session total.
+    llama_perf_context_reset(g_ctx);
+
     repl(*backend);
 
     // Synchronize before cleanup to ensure all GPU operations complete

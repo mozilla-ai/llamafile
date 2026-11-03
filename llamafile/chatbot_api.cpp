@@ -176,6 +176,29 @@ public:
                                 total_tokens_ = usage["total_tokens"].get<int>();
                         }
 
+                        // Extract timings from the final chunk. The server
+                        // always attaches these once its stats are set, so no
+                        // request flag is needed; without them /stats falls
+                        // back to token counts alone.
+                        if (chunk.contains("timings")) {
+                            auto &t = chunk["timings"];
+                            if (t.contains("prompt_n"))
+                                last_prompt_n_ = t["prompt_n"].get<int>();
+                            if (t.contains("prompt_ms"))
+                                last_prompt_ms_ = t["prompt_ms"].get<double>();
+                            if (t.contains("predicted_n"))
+                                last_predicted_n_ = t["predicted_n"].get<int>();
+                            if (t.contains("predicted_ms"))
+                                last_predicted_ms_ = t["predicted_ms"].get<double>();
+                            if (t.contains("cache_n"))
+                                last_cache_n_ = t["cache_n"].get<int>();
+                            if (t.contains("draft_n"))
+                                last_draft_n_ = t["draft_n"].get<int>();
+                            if (t.contains("draft_n_accepted"))
+                                last_draft_accepted_ = t["draft_n_accepted"].get<int>();
+                            have_timings_ = true;
+                        }
+
                         if (!chunk.contains("choices") || chunk["choices"].empty())
                             continue;
 
@@ -236,10 +259,29 @@ public:
     }
 
     void print_stats() override {
-        printf("prompt tokens: %d\n"
-               "completion tokens: %d\n"
-               "total tokens: %d\n",
-               last_prompt_tokens_, last_completion_tokens_, total_tokens_);
+        // Prefer the timings' own token counts: they are what the millisecond
+        // figures were measured over, so the derived rates stay consistent.
+        // usage.prompt_tokens also counts cache hits, which were never decoded.
+        const int prompt_n = have_timings_ ? last_prompt_n_ : last_prompt_tokens_;
+        const int gen_n = have_timings_ ? last_predicted_n_ : last_completion_tokens_;
+
+        // The server's generation timer starts when the first token is
+        // sampled -- that token comes free from the last prompt batch's
+        // logits -- so predicted_ms covers predicted_n - 1 decode steps. This
+        // is what the server's own n_gen_tps() divides by.
+        const int gen_rate_n = gen_n > 0 ? gen_n - 1 : 0;
+
+        if (!print_stats_core(prompt_n, last_prompt_ms_, gen_n,
+                              last_predicted_ms_, gen_rate_n,
+                              last_prompt_ms_ + last_predicted_ms_))
+            return;
+
+        // server only: the direct backend has no equivalent for these
+        if (last_cache_n_ > 0)
+            printf("  %-10s %6d tokens\n", "cached", last_cache_n_);
+        if (last_draft_n_ > 0)
+            printf("  %-10s %6d/%d accepted\n", "draft", last_draft_accepted_,
+                   last_draft_n_);
     }
 
     void on_clear() override {
@@ -248,6 +290,14 @@ public:
         last_prompt_tokens_ = 0;
         last_completion_tokens_ = 0;
         total_tokens_ = 0;
+        have_timings_ = false;
+        last_prompt_n_ = 0;
+        last_prompt_ms_ = 0;
+        last_predicted_n_ = 0;
+        last_predicted_ms_ = 0;
+        last_cache_n_ = 0;
+        last_draft_n_ = 0;
+        last_draft_accepted_ = 0;
     }
 
     void on_push() override {
@@ -305,6 +355,16 @@ private:
     int last_prompt_tokens_ = 0;
     int last_completion_tokens_ = 0;
     int total_tokens_ = 0;
+
+    // Perf tracking (from the SSE timings object on the final chunk)
+    bool have_timings_ = false;
+    int last_prompt_n_ = 0;
+    double last_prompt_ms_ = 0;
+    int last_predicted_n_ = 0;
+    double last_predicted_ms_ = 0;
+    int last_cache_n_ = 0;
+    int last_draft_n_ = 0;
+    int last_draft_accepted_ = 0;
 
     // Cached context size from server /props endpoint
     int context_max_ = 0;

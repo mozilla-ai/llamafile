@@ -124,6 +124,16 @@ void on_undo(const std::vector<std::string> &);
 void on_upload(const std::vector<std::string> &);
 void print(const std::string_view &);
 void print_ephemeral(const std::string_view &);
+
+// Shared /stats rendering for TUI (works both in default combined mode
+// and in standalone `--chat` mode). Information available in both appears
+// first, followed by backend-specific extras.
+// gen_rate_n is how many decode steps gen_ms covers, which is not always
+// gen_n: the server's generation timer starts at the first sampled token, so
+// it spans gen_n - 1 steps there. Dividing by gen_n instead inflates the rate.
+// Returns false when nothing has been processed yet.
+bool print_stats_core(int prompt_n, double prompt_ms, int gen_n, double gen_ms,
+                      int gen_rate_n, double total_ms);
 void record_undo(void);
 void repl(ChatBackend &backend);
 void rewind(int);

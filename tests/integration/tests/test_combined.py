@@ -2,7 +2,15 @@
 
 import pytest
 
-from utils.llamafile import LlamafileRunner, read_until_idle, stop_tui
+from utils.llamafile import (
+    LlamafileRunner,
+    STATS_IDLE_LINE,
+    assert_generated_rate_basis,
+    assert_stats_core,
+    read_until_idle,
+    stop_tui,
+    strip_ansi,
+)
 from utils.prompts import ADD_1_1, ADD_2_2, ADD_3_3, GREETING_PROMPT
 
 
@@ -82,3 +90,95 @@ class TestCombinedMode:
 
         finally:
             stop_tui(proc)
+
+
+@pytest.mark.tui
+@pytest.mark.server
+@pytest.mark.combined
+class TestCombinedStats:
+    """/stats in combined mode, served by ApiBackend over HTTP."""
+
+    def _stats_output(self, llamafile, server_port, timeouts, generate_first):
+        """Drive the combined-mode TUI and return its output after /stats."""
+        proc = llamafile.start_combined(port=server_port)
+        try:
+            ready = LlamafileRunner.wait_for_server(
+                server_port, timeout=timeouts.server_ready, proc=proc
+            )
+            assert ready, "Server did not become ready in combined mode"
+
+            # discard startup banner and model info block
+            _ = read_until_idle(proc.stdout, idle_timeout=0.5, max_timeout=5.0)
+
+            if generate_first:
+                proc.stdin.write(f"{ADD_2_2.prompt}\n")
+                proc.stdin.flush()
+                read_until_idle(
+                    proc.stdout,
+                    idle_timeout=2.0 * timeouts.multiplier,
+                    max_timeout=timeouts.cli,
+                )
+
+            proc.stdin.write("/stats\n")
+            proc.stdin.flush()
+            return read_until_idle(
+                proc.stdout,
+                idle_timeout=2.0 * timeouts.multiplier,
+                max_timeout=timeouts.cli,
+            )
+        finally:
+            stop_tui(proc)
+
+    def test_stats_reports_perf_metrics(self, llamafile, server_port, timeouts):
+        """/stats prints the same core block the --chat backend prints.
+
+        ApiBackend reads these from the timings object the server attaches
+        to the final SSE chunk; before unification it reported only token
+        counts, with no durations or rates at all.
+        """
+        output = self._stats_output(
+            llamafile, server_port, timeouts, generate_first=True
+        )
+
+        assert len(output) > 0, "TUI produced no output for /stats"
+        assert_stats_core(output, where="combined mode")
+
+    def test_stats_generated_rate_excludes_the_free_first_token(
+        self, llamafile, server_port, timeouts
+    ):
+        """The server's generation timer skips the first token; the rate must too.
+
+        predicted_ms spans predicted_n - 1 decode steps, so dividing by
+        predicted_n overstates the rate by n/(n-1) and reads ~1e6 tok/s on a
+        one-token reply.
+        """
+        output = self._stats_output(
+            llamafile, server_port, timeouts, generate_first=True
+        )
+
+        assert_generated_rate_basis(
+            output, free_first_token=True, where="combined mode"
+        )
+
+    def test_stats_omits_direct_backend_extras(self, llamafile, server_port, timeouts):
+        """Rows the server cannot source must not appear in combined mode."""
+        output = self._stats_output(
+            llamafile, server_port, timeouts, generate_first=True
+        )
+        # assert the core rendered first, so this cannot pass merely because
+        # /stats printed nothing worth inspecting
+        assert_stats_core(output, where="combined mode")
+        clean = strip_ansi(output)
+
+        for row in ("load", "graphs", "samplers"):
+            assert f"  {row}" not in clean, (
+                f"combined-mode /stats printed --chat-only row '{row}': {clean}"
+            )
+
+    def test_stats_when_idle_reports_nothing(self, llamafile, server_port, timeouts):
+        """An idle /stats reads the same here as it does in --chat."""
+        clean = strip_ansi(
+            self._stats_output(llamafile, server_port, timeouts, generate_first=False)
+        )
+
+        assert STATS_IDLE_LINE in clean, f"/stats did not report an idle session: {clean}"

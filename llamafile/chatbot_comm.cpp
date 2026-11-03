@@ -29,6 +29,39 @@
 namespace lf {
 namespace chatbot {
 
+// one row of the shared /stats block; the rate is derived rather than taken
+// from the backend so both backends round it the same way. rate_n is how many
+// steps ms actually covers, which is not always the token count displayed --
+// see the gen_rate_n note on print_stats_core.
+static void print_stats_row(const char *label, int n, double ms, int rate_n) {
+    if (ms <= 0 || n <= 0) {
+        printf("  %-10s %6d tokens\n", label, n);
+    } else if (rate_n > 0) {
+        printf("  %-10s %6d tokens  %10.2f ms  %8.1f tok/s\n", label, n, ms,
+               rate_n / ms * 1e3);
+    } else {
+        // duration known but no step to divide by, e.g. a one-token reply
+        printf("  %-10s %6d tokens  %10.2f ms\n", label, n, ms);
+    }
+}
+
+bool print_stats_core(int prompt_n, double prompt_ms, int gen_n, double gen_ms,
+                      int gen_rate_n, double total_ms) {
+    if (prompt_n <= 0 && gen_n <= 0) {
+        printf("  no tokens processed yet\n");
+        return false;
+    }
+    print_stats_row("prompt", prompt_n, prompt_ms, prompt_n);
+    print_stats_row("generated", gen_n, gen_ms, gen_rate_n);
+    if (total_ms > 0) {
+        printf("  %-10s %6d tokens  %10.2f ms\n", "total", prompt_n + gen_n,
+               total_ms);
+    } else {
+        printf("  %-10s %6d tokens\n", "total", prompt_n + gen_n);
+    }
+    return true;
+}
+
 // handle irc style commands like: `/arg0 arg1 arg2`
 bool handle_command(const char *command) {
     if (!strcmp(command, "/?")) {

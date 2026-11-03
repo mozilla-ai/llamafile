@@ -5,6 +5,7 @@ import fcntl
 import logging
 import os
 import platform
+import re
 import select
 import subprocess
 import time
@@ -15,6 +16,103 @@ import pytest
 import requests
 
 logger = logging.getLogger(__name__)
+
+_ANSI_RE = re.compile(r"\x1b\[[0-9;?]*[A-Za-z]")
+
+# Rows of the shared /stats block, in the order both backends print them.
+# "total" carries no rate, so it is checked separately from the other two.
+STATS_CORE_ROWS = ("prompt", "generated", "total")
+STATS_IDLE_LINE = "no tokens processed yet"
+
+# Far above anything local inference reaches, so only an arithmetic fault
+# trips it -- a duration divided by a count of steps it does not cover.
+MAX_PLAUSIBLE_TOK_PER_SEC = 100_000.0
+
+
+def strip_ansi(text: str) -> str:
+    """Remove ANSI escape sequences so TUI output can be matched by line."""
+    return _ANSI_RE.sub("", text)
+
+
+def parse_stats_row(output: str, row: str) -> tuple[int, float, float] | None:
+    """Return (tokens, ms, tok_per_sec) for a /stats row, or None if absent.
+
+    Returns None when the row carries no rate, which is legitimate: a reply
+    short enough that the duration covers no decode step prints tokens and
+    milliseconds only.
+    """
+    m = re.search(
+        rf"^\s+{row}\s+(\d+) tokens\s+([\d.]+) ms\s+([\d.]+) tok/s",
+        strip_ansi(output),
+        re.M,
+    )
+    return (int(m.group(1)), float(m.group(2)), float(m.group(3))) if m else None
+
+
+def assert_generated_rate_basis(output: str, free_first_token: bool, where: str = "") -> None:
+    """Assert the generated row's rate divides by the steps its duration covers.
+
+    The two backends differ here and the difference is easy to get wrong.
+    ``--chat`` accumulates n_eval and t_eval_us together, one per decoded
+    token, so the rate divides by the token count. The server starts its
+    generation timer at the first sampled token -- that one comes free from
+    the last prompt batch's logits -- so its duration spans one step fewer
+    than it reports tokens, and dividing by the count inflates the rate by
+    n/(n-1).
+    """
+    parsed = parse_stats_row(output, "generated")
+    assert parsed is not None, f"/stats has no generated rate{f' in {where}' if where else ''}"
+    n, ms, rate = parsed
+
+    steps = (n - 1) if free_first_token else n
+    expected = steps / ms * 1e3
+    # generous: guards the basis, not float formatting
+    assert abs(rate - expected) < max(1.0, expected * 0.02), (
+        f"/stats generated rate {rate} tok/s{f' in {where}' if where else ''} "
+        f"does not divide {n} tokens over {steps} step(s) of {ms} ms "
+        f"(expected ~{expected:.1f})"
+    )
+
+
+def assert_stats_core(output: str, where: str = "") -> None:
+    """Assert the shared /stats core block is present and well formed.
+
+    Both backends must render this block identically -- that is the whole
+    point of having one, so both modes assert against this same helper. If
+    they ever diverge in column layout or wording, one of the two callers
+    fails here rather than silently drifting.
+    """
+    clean = strip_ansi(output)
+    context = f" in {where}" if where else ""
+
+    assert STATS_IDLE_LINE not in clean, (
+        f"/stats reported an idle session{context} after generating: {clean}"
+    )
+
+    for row in STATS_CORE_ROWS:
+        assert re.search(rf"^\s+{row}\s+\d+ tokens", clean, re.M), (
+            f"/stats missing '{row}' row{context}: {clean}"
+        )
+
+    # prompt and generated carry a duration and a derived rate; total omits
+    # the rate because a combined tokens-per-second figure would be meaningless
+    for row in ("prompt", "generated"):
+        m = re.search(
+            rf"^\s+{row}\s+\d+ tokens\s+[\d.]+ ms\s+([\d.]+) tok/s", clean, re.M
+        )
+        assert m, f"/stats '{row}' row lacks duration and rate{context}: {clean}"
+
+        # A rate this high means the duration did not cover the count it was
+        # divided by, not that the hardware is fast. The server's generation
+        # timer spans one step fewer than it reports tokens, and it clamps a
+        # sub-microsecond span to 1us, so dividing by the token count yields
+        # ~1e6 tok/s on a one-token reply.
+        rate = float(m.group(1))
+        assert rate < MAX_PLAUSIBLE_TOK_PER_SEC, (
+            f"/stats '{row}' rate of {rate} tok/s is not physically plausible"
+            f"{context}; the duration likely covers fewer steps than the token"
+            f" count it was divided by: {clean}"
+        )
 
 
 def skip_if_bundled(executable: str) -> None:
