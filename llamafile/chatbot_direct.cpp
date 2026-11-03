@@ -95,12 +95,9 @@ public:
     }
 
     void print_stats() override {
-        // Format and print directly rather than going through
-        // common_perf_print(): that helper is upstream's exit-time dump for
-        // batch tools and emits via LOG_INF(), which chat mode silences (see
-        // chatbot_main.cpp) and which would put log timestamps and a function
-        // prefix on screen. Reading the perf data ourselves keeps /stats
-        // identical to the API backend's and off the logging path entirely.
+        // Format and print directly rather than going through llama.cpp's
+        // common_perf_print(). This keeps /stats consistent across chat and
+        // combined mode and off the logging path entirely.
         const llama_perf_context_data ctx_perf = llama_perf_context(g_ctx);
         const llama_perf_sampler_data smpl_perf =
             llama_perf_sampler(common_sampler_get(g_sampler));
