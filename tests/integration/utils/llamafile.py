@@ -5,6 +5,7 @@ import fcntl
 import logging
 import os
 import platform
+import re
 import select
 import subprocess
 import time
@@ -15,6 +16,46 @@ import pytest
 import requests
 
 logger = logging.getLogger(__name__)
+
+_ANSI_RE = re.compile(r"\x1b\[[0-9;?]*[A-Za-z]")
+
+# Rows of the shared /stats block, in the order both backends print them.
+# "total" carries no rate, so it is checked separately from the other two.
+STATS_CORE_ROWS = ("prompt", "generated", "total")
+STATS_IDLE_LINE = "no tokens processed yet"
+
+
+def strip_ansi(text: str) -> str:
+    """Remove ANSI escape sequences so TUI output can be matched by line."""
+    return _ANSI_RE.sub("", text)
+
+
+def assert_stats_core(output: str, where: str = "") -> None:
+    """Assert the shared /stats core block is present and well formed.
+
+    Both backends must render this block identically -- that is the whole
+    point of having one, so both modes assert against this same helper. If
+    they ever diverge in column layout or wording, one of the two callers
+    fails here rather than silently drifting.
+    """
+    clean = strip_ansi(output)
+    context = f" in {where}" if where else ""
+
+    assert STATS_IDLE_LINE not in clean, (
+        f"/stats reported an idle session{context} after generating: {clean}"
+    )
+
+    for row in STATS_CORE_ROWS:
+        assert re.search(rf"^\s+{row}\s+\d+ tokens", clean, re.M), (
+            f"/stats missing '{row}' row{context}: {clean}"
+        )
+
+    # prompt and generated carry a duration and a derived rate; total omits
+    # the rate because a combined tokens-per-second figure would be meaningless
+    for row in ("prompt", "generated"):
+        assert re.search(
+            rf"^\s+{row}\s+\d+ tokens\s+[\d.]+ ms\s+[\d.]+ tok/s", clean, re.M
+        ), f"/stats '{row}' row lacks duration and rate{context}: {clean}"
 
 
 def skip_if_bundled(executable: str) -> None:
