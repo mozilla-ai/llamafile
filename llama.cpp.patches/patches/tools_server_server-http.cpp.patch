@@ -10,3 +10,39 @@ diff --git a/tools/server/server-http.cpp b/tools/server/server-http.cpp
      if (!params.ssl_file_key.empty() && !params.ssl_file_cert.empty()) {
          SRV_TRC("running with SSL: key = %s, cert = %s\n", params.ssl_file_key.c_str(), params.ssl_file_cert.c_str());
          srv = std::make_unique<httplib::SSLServer>(
+@@ -429,12 +429,15 @@ bool server_http_context::init(const common_params & params) {
+     return true;
+ }
+ 
+-bool server_http_context::start() {
++bool server_http_context::bind_socket() {
++    if (is_bound) {
++        return true;
++    }
++
+     // Bind and listen
+ 
+     const auto & srv = pimpl->srv;
+     auto was_bound = false;
+-    auto is_sock = false;
+     if (string_ends_with(std::string(hostname), ".sock")) {
+         is_sock = true;
+         SRV_TRC("%s", "setting address family to AF_UNIX\n");
+@@ -461,6 +464,17 @@ bool server_http_context::start() {
+         return false;
+     }
+ 
++    is_bound = true;
++    return true;
++}
++
++bool server_http_context::start() {
++    if (!bind_socket()) {
++        return false;
++    }
++
++    const auto & srv = pimpl->srv;
++
+     // run the HTTP server in a thread
+     thread = std::thread([this] { pimpl->srv->listen_after_bind(); });
+     srv->wait_until_ready();

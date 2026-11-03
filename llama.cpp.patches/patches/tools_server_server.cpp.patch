@@ -85,7 +85,7 @@ diff --git a/tools/server/server.cpp b/tools/server/server.cpp
      bool is_run_by_cli = (argv == nullptr);
  
      common_models_handler models_handler;
-@@ -457,6 +491,92 @@ int llama_server(common_params & params, int argc, char ** argv) {
+@@ -457,6 +491,103 @@ int llama_server(common_params & params, int argc, char ** argv) {
              llama_backend_free();
          };
  
@@ -154,6 +154,17 @@ diff --git a/tools/server/server.cpp b/tools/server/server.cpp
 +                rw_paths.data(), (int) rw_paths.size(),
 +                FLAG_confine_reads, needs_outbound,
 +            };
++            // Bind the listening socket now: pledge "anet" only covers
++            // IPv4/IPv6, so a Unix domain socket (--host /path.sock) can't be
++            // created once the sandbox is on, while accept() on one that is
++            // already bound stays allowed (llamafile issue #971). Binding
++            // spawns no threads; ctx_http.start() reuses the socket.
++            if (!ctx_http.bind_socket()) {
++                clean_up();
++                SRV_ERR("%s", "exiting due to HTTP server error\n");
++                return 1;
++            }
++
 +            char promises[64];
 +            common_log_pause(common_log_main());
 +            server_stream_session_manager_stop();
@@ -178,7 +189,7 @@ diff --git a/tools/server/server.cpp b/tools/server/server.cpp
          // start the HTTP server before loading the model to be able to serve /health requests
          if (!ctx_http.start()) {
              clean_up();
-@@ -490,6 +610,13 @@ int llama_server(common_params & params, int argc, char ** argv) {
+@@ -490,6 +621,13 @@ int llama_server(common_params & params, int argc, char ** argv) {
              // this will unblock start_loop()
              ctx_server.terminate();
          };
@@ -192,7 +203,7 @@ diff --git a/tools/server/server.cpp b/tools/server/server.cpp
      }
  
      // register signal handler if not running by CLI
-@@ -530,6 +657,11 @@ int llama_server(common_params & params, int argc, char ** argv) {
+@@ -530,6 +668,11 @@ int llama_server(common_params & params, int argc, char ** argv) {
          // when the HTTP server stops, clean up and exit
          clean_up();
      } else {
@@ -204,7 +215,7 @@ diff --git a/tools/server/server.cpp b/tools/server/server.cpp
          // optionally, notify router server that this instance is ready
          std::thread monitor_thread;
          if (child.is_child()) {
-@@ -554,5 +686,56 @@ int llama_server(common_params & params, int argc, char ** argv) {
+@@ -554,5 +697,56 @@ int llama_server(common_params & params, int argc, char ** argv) {
          }
      }
  
