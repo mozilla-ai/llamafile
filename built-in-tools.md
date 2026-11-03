@@ -61,6 +61,9 @@ Note: `--agent` enables all built-in tools and the experimental MCP proxy. Prefe
 | `get_datetime` | Read | Get the server's current date and time. |
 | `get_info` | Read | Get the runtime operating system and working directory. |
 
+`exec_shell_command` runs its command with `cmd.exe /c` on Windows and with
+`sh -c` everywhere else, so on Windows write commands in `cmd.exe` syntax.
+
 Tool support in llama.cpp is experimental and subject to change, so the contents
 of this table might differ from one llamafile version to another. To inspect the
 exact tool definitions and parameter signatures exposed by a running server,
