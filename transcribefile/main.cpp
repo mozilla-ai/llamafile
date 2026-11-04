@@ -133,7 +133,7 @@ int main(int argc, char ** argv) {
 
     // Answer --version before touching args or the zip store. The
     // version string is transcribe.cpp's `git describe` output, which
-    // already carries its own "v" prefix (e.g. v0.0.11-7-gdf1a4ad).
+    // already carries its own "v" prefix (e.g. v0.4.1).
     if (has_flag(argv, "--version")) {
         puts("transcribefile " TRANSCRIBEFILE_VERSION_STRING);
         return 0;

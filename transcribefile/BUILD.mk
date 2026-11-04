@@ -73,10 +73,11 @@ $(TRANSCRIBEFILE_C_OBJS): o/$(MODE)/%.c.o: %.c transcribefile/BUILD.mk $(COSMOCC
 # Same pattern as whisperfile/BUILD.mk: llamafile.o carries the FLAG_*
 # globals and DSO/app-dir helpers, gpu.a the runtime GPU loaders. The
 # GPU backends register into transcribe.cpp's vendored ggml registry
-# (ggml_backend_register resolves from transcribe.cpp.a; the ggml trees
-# are ABI-aligned at 0.15.2). $(LLAMAFILE_METAL_SOURCES) embeds the
-# patched llama.cpp ggml/metal sources in the zip store, which metal.c
-# extracts and compiles into ggml-metal.dylib at runtime on macOS.
+# (ggml_backend_register resolves from transcribe.cpp.a). The two ggml
+# trees differ in version, so they must be kept aligned at the backend
+# boundary; see transcribe.cpp.patches/README.md. $(LLAMAFILE_METAL_SOURCES)
+# embeds the patched llama.cpp ggml/metal sources in the zip store, which
+# metal.c extracts and compiles into ggml-metal.dylib at runtime on macOS.
 
 TRANSCRIBEFILE_LLAMAFILE_OBJS := \
 	o/$(MODE)/llamafile/llamafile.o \
