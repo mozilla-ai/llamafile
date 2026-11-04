@@ -82,17 +82,12 @@ static cli_chat_template_result cli_apply_chat_template_full(llama_model *model,
         inputs.reasoning_format = COMMON_REASONING_FORMAT_DEEPSEEK;
 
         auto chat_params = common_chat_templates_apply(templates, inputs);
-        result.prompt = chat_params.prompt;
+        result.prompt = chat_params.prompt.str();
 
-        // Initialize parser params from chat_params
-        result.parser_params.format = chat_params.format;
-        result.parser_params.generation_prompt = chat_params.generation_prompt;
-        if (!chat_params.parser.empty()) {
-            result.parser_params.parser.load(chat_params.parser);
-        }
-        // Enable reasoning parsing for thinking models
-        result.parser_params.reasoning_format = COMMON_REASONING_FORMAT_DEEPSEEK;
-        result.parser_params.reasoning_in_content = false;
+        // Initialize parser params from chat_params. Reasoning extraction is
+        // built into the parser from inputs.reasoning_format above.
+        result.parser_params = common_chat_parser_params(chat_params);
+        result.parser_params.parser = std::move(chat_params.parser);
         return result;
     }
 
@@ -429,7 +424,7 @@ int cli_main(int argc, char **argv) {
             raw_output += token_str;
 
             // Parse incrementally
-            auto msg = common_chat_parse(raw_output, /*is_partial=*/true, parser_params);
+            auto msg = common_chat_parse(common_chat_input(raw_output), /*is_partial=*/true, parser_params);
 
             // Compute diffs to find new content
             auto diffs = common_chat_msg_diff::compute_diffs(prev_msg, msg);

@@ -1,9 +1,9 @@
 diff --git a/tools/server/server-http.cpp b/tools/server/server-http.cpp
 --- a/llama.cpp/tools/server/server-http.cpp
 +++ b/llama.cpp/tools/server/server-http.cpp
-@@ -104,7 +104,7 @@ bool server_http_context::init(const common_params & params) {
- 
-     auto & srv = pimpl->srv;
+@@ -159,7 +159,7 @@ bool server_http_context::init(const common_params & params) {
+ bool server_http_context::init_listener(const common_params & params) {
+     auto & srv = pimpl->servers.back();
  
 -#ifdef CPPHTTPLIB_OPENSSL_SUPPORT
 +#ifdef CPPHTTPLIB_SSL_ENABLED

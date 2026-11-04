@@ -86,7 +86,7 @@ std::string apply_chat_template_with_thinking(
     inputs.reasoning_format = COMMON_REASONING_FORMAT_DEEPSEEK;
 
     auto chat_params = common_chat_templates_apply(g_chat_templates.get(), inputs);
-    return chat_params.prompt;
+    return chat_params.prompt.str();
 }
 
 void on_sigint(int sig) {

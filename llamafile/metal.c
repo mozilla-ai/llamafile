@@ -107,11 +107,29 @@ __static_yoink("llama.cpp/ggml/src/ggml-metal/kernels/quantize.h");
 __static_yoink("llama.cpp/ggml/src/ggml-metal/kernels/argsort.metal");
 __static_yoink("llama.cpp/ggml/src/ggml-metal/kernels/binbcast.metal");
 __static_yoink("llama.cpp/ggml/src/ggml-metal/kernels/conv.metal");
-__static_yoink("llama.cpp/ggml/src/ggml-metal/kernels/fa.metal");
+__static_yoink("llama.cpp/ggml/src/ggml-metal/kernels/fa_aux.metal");
+__static_yoink("llama.cpp/ggml/src/ggml-metal/kernels/fa_common.metal");
+__static_yoink("llama.cpp/ggml/src/ggml-metal/kernels/fa_f16.metal");
+__static_yoink("llama.cpp/ggml/src/ggml-metal/kernels/fa_f32.metal");
+__static_yoink("llama.cpp/ggml/src/ggml-metal/kernels/fa_q4_0.metal");
+__static_yoink("llama.cpp/ggml/src/ggml-metal/kernels/fa_q4_1.metal");
+__static_yoink("llama.cpp/ggml/src/ggml-metal/kernels/fa_q5_0.metal");
+__static_yoink("llama.cpp/ggml/src/ggml-metal/kernels/fa_q5_1.metal");
+__static_yoink("llama.cpp/ggml/src/ggml-metal/kernels/fa_q8_0.metal");
+__static_yoink("llama.cpp/ggml/src/ggml-metal/kernels/fa_tensor.metal");
+__static_yoink("llama.cpp/ggml/src/ggml-metal/kernels/fa_vec_common.metal");
+__static_yoink("llama.cpp/ggml/src/ggml-metal/kernels/fa_vec_f16.metal");
+__static_yoink("llama.cpp/ggml/src/ggml-metal/kernels/fa_vec_f32.metal");
+__static_yoink("llama.cpp/ggml/src/ggml-metal/kernels/fa_vec_q4_0.metal");
+__static_yoink("llama.cpp/ggml/src/ggml-metal/kernels/fa_vec_q4_1.metal");
+__static_yoink("llama.cpp/ggml/src/ggml-metal/kernels/fa_vec_q5_0.metal");
+__static_yoink("llama.cpp/ggml/src/ggml-metal/kernels/fa_vec_q5_1.metal");
+__static_yoink("llama.cpp/ggml/src/ggml-metal/kernels/fa_vec_q8_0.metal");
 __static_yoink("llama.cpp/ggml/src/ggml-metal/kernels/gated_delta_net.metal");
 __static_yoink("llama.cpp/ggml/src/ggml-metal/kernels/misc.metal");
 __static_yoink("llama.cpp/ggml/src/ggml-metal/kernels/mul_mm.metal");
 __static_yoink("llama.cpp/ggml/src/ggml-metal/kernels/mul_mv.metal");
+__static_yoink("llama.cpp/ggml/src/ggml-metal/kernels/mul_mv_mma.metal");
 __static_yoink("llama.cpp/ggml/src/ggml-metal/kernels/norm.metal");
 __static_yoink("llama.cpp/ggml/src/ggml-metal/kernels/pool.metal");
 __static_yoink("llama.cpp/ggml/src/ggml-metal/kernels/quantize.metal");
@@ -181,11 +199,29 @@ static const struct MetalSource {
     {"/zip/llama.cpp/ggml/src/ggml-metal/kernels/argsort.metal", "kernels/argsort.metal"},
     {"/zip/llama.cpp/ggml/src/ggml-metal/kernels/binbcast.metal", "kernels/binbcast.metal"},
     {"/zip/llama.cpp/ggml/src/ggml-metal/kernels/conv.metal", "kernels/conv.metal"},
-    {"/zip/llama.cpp/ggml/src/ggml-metal/kernels/fa.metal", "kernels/fa.metal"},
+    {"/zip/llama.cpp/ggml/src/ggml-metal/kernels/fa_aux.metal", "kernels/fa_aux.metal"},
+    {"/zip/llama.cpp/ggml/src/ggml-metal/kernels/fa_common.metal", "kernels/fa_common.metal"},
+    {"/zip/llama.cpp/ggml/src/ggml-metal/kernels/fa_f16.metal", "kernels/fa_f16.metal"},
+    {"/zip/llama.cpp/ggml/src/ggml-metal/kernels/fa_f32.metal", "kernels/fa_f32.metal"},
+    {"/zip/llama.cpp/ggml/src/ggml-metal/kernels/fa_q4_0.metal", "kernels/fa_q4_0.metal"},
+    {"/zip/llama.cpp/ggml/src/ggml-metal/kernels/fa_q4_1.metal", "kernels/fa_q4_1.metal"},
+    {"/zip/llama.cpp/ggml/src/ggml-metal/kernels/fa_q5_0.metal", "kernels/fa_q5_0.metal"},
+    {"/zip/llama.cpp/ggml/src/ggml-metal/kernels/fa_q5_1.metal", "kernels/fa_q5_1.metal"},
+    {"/zip/llama.cpp/ggml/src/ggml-metal/kernels/fa_q8_0.metal", "kernels/fa_q8_0.metal"},
+    {"/zip/llama.cpp/ggml/src/ggml-metal/kernels/fa_tensor.metal", "kernels/fa_tensor.metal"},
+    {"/zip/llama.cpp/ggml/src/ggml-metal/kernels/fa_vec_common.metal", "kernels/fa_vec_common.metal"},
+    {"/zip/llama.cpp/ggml/src/ggml-metal/kernels/fa_vec_f16.metal", "kernels/fa_vec_f16.metal"},
+    {"/zip/llama.cpp/ggml/src/ggml-metal/kernels/fa_vec_f32.metal", "kernels/fa_vec_f32.metal"},
+    {"/zip/llama.cpp/ggml/src/ggml-metal/kernels/fa_vec_q4_0.metal", "kernels/fa_vec_q4_0.metal"},
+    {"/zip/llama.cpp/ggml/src/ggml-metal/kernels/fa_vec_q4_1.metal", "kernels/fa_vec_q4_1.metal"},
+    {"/zip/llama.cpp/ggml/src/ggml-metal/kernels/fa_vec_q5_0.metal", "kernels/fa_vec_q5_0.metal"},
+    {"/zip/llama.cpp/ggml/src/ggml-metal/kernels/fa_vec_q5_1.metal", "kernels/fa_vec_q5_1.metal"},
+    {"/zip/llama.cpp/ggml/src/ggml-metal/kernels/fa_vec_q8_0.metal", "kernels/fa_vec_q8_0.metal"},
     {"/zip/llama.cpp/ggml/src/ggml-metal/kernels/gated_delta_net.metal", "kernels/gated_delta_net.metal"},
     {"/zip/llama.cpp/ggml/src/ggml-metal/kernels/misc.metal", "kernels/misc.metal"},
     {"/zip/llama.cpp/ggml/src/ggml-metal/kernels/mul_mm.metal", "kernels/mul_mm.metal"},
     {"/zip/llama.cpp/ggml/src/ggml-metal/kernels/mul_mv.metal", "kernels/mul_mv.metal"},
+    {"/zip/llama.cpp/ggml/src/ggml-metal/kernels/mul_mv_mma.metal", "kernels/mul_mv_mma.metal"},
     {"/zip/llama.cpp/ggml/src/ggml-metal/kernels/norm.metal", "kernels/norm.metal"},
     {"/zip/llama.cpp/ggml/src/ggml-metal/kernels/pool.metal", "kernels/pool.metal"},
     {"/zip/llama.cpp/ggml/src/ggml-metal/kernels/quantize.metal", "kernels/quantize.metal"},

@@ -1,12 +1,13 @@
 diff --git a/ggml/src/ggml-backend-reg.cpp b/ggml/src/ggml-backend-reg.cpp
 --- a/llama.cpp/ggml/src/ggml-backend-reg.cpp
 +++ b/llama.cpp/ggml/src/ggml-backend-reg.cpp
-@@ -510,7 +510,7 @@ static ggml_backend_reg_t ggml_backend_load_best(const char * name, bool silent,
-             if (ec) {
-                 GGML_LOG_DEBUG("%s: posix_stat(%s) failure, error-message: %s\n", __func__, path_str(search_path).c_str(), ec.message().c_str());
-             } else {
--                GGML_LOG_DEBUG("%s: search path %s does not exist\n", __func__, path_str(search_path).c_str());
-+                // GGML_LOG_DEBUG("%s: search path %s does not exist\n", __func__, path_str(search_path).c_str());
+@@ -540,7 +540,8 @@ static ggml_backend_reg_t ggml_backend_load_best(const char * name, bool silent,
              }
-             continue;
          }
+ 
+-        if (dir_ec) {
++        // llamafile: a search path that does not exist is expected (backends are loaded as DSOs elsewhere); don't log it
++        if (dir_ec && dir_ec != std::errc::no_such_file_or_directory) {
+             GGML_LOG_DEBUG("%s: failed to enumerate %s: %s\n", __func__, path_str(search_path).c_str(), dir_ec.message().c_str());
+         }
+     }

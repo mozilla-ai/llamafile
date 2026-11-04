@@ -2,22 +2,22 @@ diff --git a/ggml/src/ggml-cuda/mmq.cu b/ggml/src/ggml-cuda/mmq.cu
 --- a/llama.cpp/ggml/src/ggml-cuda/mmq.cu
 +++ b/llama.cpp/ggml/src/ggml-cuda/mmq.cu
 @@ -45,6 +45,7 @@ static void ggml_cuda_mul_mat_q_switch_type(ggml_backend_cuda_context & ctx, con
-             mul_mat_q_case<GGML_TYPE_Q6_K>(ctx, args, stream);
+             mul_mat_q_case<GGML_TYPE_Q6_K, GGML_PREC_Q8>(ctx, args, stream);
              break;
  // -----------------------------------------------------------------------
 +#ifndef GGML_CUDA_NO_IQ_QUANTS
          case GGML_TYPE_IQ1_S:
-             mul_mat_q_case<GGML_TYPE_IQ1_S>(ctx, args, stream);
+             mul_mat_q_case<GGML_TYPE_IQ1_S, GGML_PREC_Q8>(ctx, args, stream);
              break;
 @@ -69,6 +70,7 @@ static void ggml_cuda_mul_mat_q_switch_type(ggml_backend_cuda_context & ctx, con
          case GGML_TYPE_IQ4_NL:
-             mul_mat_q_case<GGML_TYPE_IQ4_NL>(ctx, args, stream);
+             mul_mat_q_case<GGML_TYPE_IQ4_NL, GGML_PREC_Q8>(ctx, args, stream);
              break;
 +#endif // GGML_CUDA_NO_IQ_QUANTS
  // -----------------------------------------------------------------------
          case GGML_TYPE_MXFP4:
-             mul_mat_q_case<GGML_TYPE_MXFP4>(ctx, args, stream);
-@@ -285,6 +287,7 @@ bool ggml_cuda_should_use_mmq(enum ggml_type type, int cc, int64_t ne11, int64_t
+             // src1 at Q4 uses the native FP4 instructions, which are Blackwell-only
+@@ -405,6 +407,7 @@ bool ggml_cuda_should_use_mmq(enum ggml_type type, int cc, int64_t ne11, int64_t
          case GGML_TYPE_Q5_K:
          case GGML_TYPE_Q6_K:
  // -------------------------------------------------
@@ -25,7 +25,7 @@ diff --git a/ggml/src/ggml-cuda/mmq.cu b/ggml/src/ggml-cuda/mmq.cu
          case GGML_TYPE_IQ1_S:
          case GGML_TYPE_IQ2_XXS:
          case GGML_TYPE_IQ2_XS:
-@@ -293,6 +296,7 @@ bool ggml_cuda_should_use_mmq(enum ggml_type type, int cc, int64_t ne11, int64_t
+@@ -413,6 +416,7 @@ bool ggml_cuda_should_use_mmq(enum ggml_type type, int cc, int64_t ne11, int64_t
          case GGML_TYPE_IQ3_S:
          case GGML_TYPE_IQ4_XS:
          case GGML_TYPE_IQ4_NL:
@@ -33,7 +33,7 @@ diff --git a/ggml/src/ggml-cuda/mmq.cu b/ggml/src/ggml-cuda/mmq.cu
  // -------------------------------------------------
          case GGML_TYPE_MXFP4:
          case GGML_TYPE_NVFP4:
-@@ -369,9 +373,11 @@ bool ggml_cuda_should_use_mmq(enum ggml_type type, int cc, int64_t ne11, int64_t
+@@ -489,9 +493,11 @@ bool ggml_cuda_should_use_mmq(enum ggml_type type, int cc, int64_t ne11, int64_t
                      return ne11 <= 128;
                  case GGML_TYPE_Q6_K:
                      return ne11 <= (GGML_CUDA_CC_IS_RDNA3_0(cc) ? 128 : 256);

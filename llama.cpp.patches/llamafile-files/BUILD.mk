@@ -34,7 +34,8 @@ GGML_SRCS_CPP := \
 	llama.cpp/ggml/src/ggml-cpu/binary-ops.cpp \
 	llama.cpp/ggml/src/ggml-cpu/ggml-cpu.cpp \
 	llama.cpp/ggml/src/ggml-cpu/hbm.cpp \
-	llama.cpp/ggml/src/ggml-cpu/iqp.cpp \
+	llama.cpp/ggml/src/ggml-cpu/tiled/tiled.cpp \
+	llama.cpp/ggml/src/ggml-cpu/tiled/tiled-kernel.cpp \
 	llama.cpp/ggml/src/ggml-cpu/ops.cpp \
 	llama.cpp/ggml/src/ggml-cpu/repack.cpp \
 	llama.cpp/ggml/src/ggml-cpu/traits.cpp \
@@ -52,6 +53,7 @@ GGML_OBJS := \
 # ==============================================================================
 
 LLAMA_SRCS_CPP := \
+	llama.cpp/src/llama-moe-cache.cpp \
 	llama.cpp/src/llama.cpp \
 	llama.cpp/src/models/afmoe.cpp \
 	llama.cpp/src/models/apertus.cpp \
@@ -62,11 +64,13 @@ LLAMA_SRCS_CPP := \
 	llama.cpp/src/models/bailingmoe.cpp \
 	llama.cpp/src/models/bailingmoe2.cpp \
 	llama.cpp/src/models/bailingmoe3.cpp \
+	llama.cpp/src/models/beam.cpp \
 	llama.cpp/src/models/bert.cpp \
 	llama.cpp/src/models/bitnet.cpp \
 	llama.cpp/src/models/bloom.cpp \
 	llama.cpp/src/models/chameleon.cpp \
 	llama.cpp/src/models/chatglm.cpp \
+	llama.cpp/src/models/clef.cpp \
 	llama.cpp/src/models/clip.cpp \
 	llama.cpp/src/models/codeshell.cpp \
 	llama.cpp/src/models/cogvlm.cpp \
@@ -80,6 +84,7 @@ LLAMA_SRCS_CPP := \
 	llama.cpp/src/models/deepseek2ocr.cpp \
 	llama.cpp/src/models/deepseek32.cpp \
 	llama.cpp/src/models/deepseek4.cpp \
+	llama.cpp/src/models/deepseek41.cpp \
 	llama.cpp/src/models/delta-net-base.cpp \
 	llama.cpp/src/models/dflash.cpp \
 	llama.cpp/src/models/dots1.cpp \
@@ -94,7 +99,9 @@ LLAMA_SRCS_CPP := \
 	llama.cpp/src/models/exaone-moe.cpp \
 	llama.cpp/src/models/falcon-h1.cpp \
 	llama.cpp/src/models/falcon.cpp \
+	llama.cpp/src/models/flint.cpp \
 	llama.cpp/src/models/gemma-embedding.cpp \
+	llama.cpp/src/models/gemma-embedding2.cpp \
 	llama.cpp/src/models/gemma.cpp \
 	llama.cpp/src/models/gemma2.cpp \
 	llama.cpp/src/models/gemma3.cpp \
@@ -104,6 +111,7 @@ LLAMA_SRCS_CPP := \
 	llama.cpp/src/models/glm-dsa.cpp \
 	llama.cpp/src/models/glm4-moe.cpp \
 	llama.cpp/src/models/glm4.cpp \
+	llama.cpp/src/models/glm5-next.cpp \
 	llama.cpp/src/models/gpt2.cpp \
 	llama.cpp/src/models/gptneox.cpp \
 	llama.cpp/src/models/granite-hybrid.cpp \
@@ -111,6 +119,11 @@ LLAMA_SRCS_CPP := \
 	llama.cpp/src/models/granite-switch.cpp \
 	llama.cpp/src/models/granite.cpp \
 	llama.cpp/src/models/granite-swa.cpp \
+	llama.cpp/src/models/k2-horizon.cpp \
+	llama.cpp/src/models/kolibri1.cpp \
+	llama.cpp/src/models/lfm-base.cpp \
+	llama.cpp/src/models/lfm3.cpp \
+	llama.cpp/src/models/maion-coder.cpp \
 	llama.cpp/src/models/mamba-base.cpp \
 	llama.cpp/src/models/grok.cpp \
 	llama.cpp/src/models/grovemoe.cpp \
@@ -152,6 +165,7 @@ LLAMA_SRCS_CPP := \
 	llama.cpp/src/models/modern-bert.cpp \
 	llama.cpp/src/models/mpt.cpp \
 	llama.cpp/src/models/muse-glimmer.cpp \
+	llama.cpp/src/models/muse-spark.cpp \
 	llama.cpp/src/models/nanbeige.cpp \
 	llama.cpp/src/models/nemotron-h-moe.cpp \
 	llama.cpp/src/models/nemotron-h.cpp \
@@ -196,6 +210,7 @@ LLAMA_SRCS_CPP := \
 	llama.cpp/src/models/rwkv7-base.cpp \
 	llama.cpp/src/models/rwkv7.cpp \
 	llama.cpp/src/models/seed-oss.cpp \
+	llama.cpp/src/models/sensenova-u1.cpp \
 	llama.cpp/src/models/smallthinker.cpp \
 	llama.cpp/src/models/smollm3.cpp \
 	llama.cpp/src/models/spark2-5.cpp \
@@ -206,6 +221,7 @@ LLAMA_SRCS_CPP := \
 	llama.cpp/src/models/t5.cpp \
 	llama.cpp/src/models/t5encoder.cpp \
 	llama.cpp/src/models/talkie.cpp \
+	llama.cpp/src/models/vllm-decision2.cpp \
 	llama.cpp/src/models/wavtokenizer-dec.cpp \
 	llama.cpp/src/models/xverse.cpp \
 	llama.cpp/src/llama-adapter.cpp \
@@ -257,6 +273,7 @@ COMMON_SRCS_CPP := \
 	llama.cpp/common/console.cpp \
 	llama.cpp/common/debug.cpp \
 	llama.cpp/common/download.cpp \
+	llama.cpp/common/file-lock.cpp \
 	llama.cpp/common/fit.cpp \
 	llama.cpp/common/hf-cache.cpp \
 	llama.cpp/common/imatrix-loader.cpp \
@@ -275,6 +292,10 @@ COMMON_SRCS_CPP := \
 	llama.cpp/common/ngram-cache.cpp \
 	llama.cpp/common/ngram-map.cpp \
 	llama.cpp/common/ngram-mod.cpp \
+	llama.cpp/common/parsers/harmony-xml.cpp \
+	llama.cpp/common/parsers/k2-horizon.cpp \
+	llama.cpp/common/parsers/llm-jp-harmony.cpp \
+	llama.cpp/common/parsers/muse-spark.cpp \
 	llama.cpp/common/parsers/parsers.cpp \
 	llama.cpp/common/parsers/cohere2moe.cpp \
 	llama.cpp/common/parsers/deepseek.cpp \
@@ -291,6 +312,7 @@ COMMON_SRCS_CPP := \
 	llama.cpp/common/parsers/ministral3.cpp \
 	llama.cpp/common/parsers/muse-glimmer.cpp \
 	llama.cpp/common/parsers/qwen3-coder.cpp \
+	llama.cpp/common/parsers/translate-gemma.cpp \
 	llama.cpp/common/peg-parser.cpp \
 	llama.cpp/common/preset.cpp \
 	llama.cpp/common/reasoning-budget.cpp \
@@ -371,6 +393,10 @@ MTMD_SRCS_CPP := \
 	llama.cpp/tools/mtmd/models/internvl.cpp \
 	llama.cpp/tools/mtmd/models/kimik25.cpp \
 	llama.cpp/tools/mtmd/models/kimivl.cpp \
+	llama.cpp/tools/mtmd/models/lfm3a-gen.cpp \
+	llama.cpp/tools/mtmd/models/lfm3a.cpp \
+	llama.cpp/tools/mtmd/models/lfm3vl.cpp \
+	llama.cpp/tools/mtmd/models/ling3vl.cpp \
 	llama.cpp/tools/mtmd/models/llama4.cpp \
 	llama.cpp/tools/mtmd/models/llava.cpp \
 	llama.cpp/tools/mtmd/models/mimo-audio.cpp \
@@ -379,6 +405,8 @@ MTMD_SRCS_CPP := \
 	llama.cpp/tools/mtmd/models/minimax-m3.cpp \
 	llama.cpp/tools/mtmd/models/mobilenetv5.cpp \
 	llama.cpp/tools/mtmd/models/muse-glimmer.cpp \
+	llama.cpp/tools/mtmd/models/muse-spark-audio.cpp \
+	llama.cpp/tools/mtmd/models/nemotron-omni.cpp \
 	llama.cpp/tools/mtmd/models/nemotron-v2-vl.cpp \
 	llama.cpp/tools/mtmd/models/paddleocr.cpp \
 	llama.cpp/tools/mtmd/models/parakeet.cpp \
@@ -391,8 +419,11 @@ MTMD_SRCS_CPP := \
 	llama.cpp/tools/mtmd/models/qwen3tts-gen.cpp \
 	llama.cpp/tools/mtmd/models/qwen3tts-spkenc.cpp \
 	llama.cpp/tools/mtmd/models/qwen3vl.cpp \
+	llama.cpp/tools/mtmd/models/sensenova-u1.cpp \
 	llama.cpp/tools/mtmd/models/siglip.cpp \
+	llama.cpp/tools/mtmd/models/soprano.cpp \
 	llama.cpp/tools/mtmd/models/step3vl.cpp \
+	llama.cpp/tools/mtmd/models/voxtral-rt.cpp \
 	llama.cpp/tools/mtmd/models/whisper-enc.cpp \
 	llama.cpp/tools/mtmd/models/yasa2.cpp \
 	llama.cpp/tools/mtmd/models/youtuvl.cpp
@@ -497,6 +528,10 @@ TOOL_BENCH_SRCS := \
 	llama.cpp/tools/llama-bench/main.cpp
 
 TOOL_SERVER_SRCS := \
+	llama.cpp/tools/server/server-connect.cpp \
+	llama.cpp/tools/server/server-decision.cpp \
+	llama.cpp/tools/server/server-models-sched.cpp \
+	llama.cpp/tools/server/server-realtime.cpp \
 	llama.cpp/tools/server/server.cpp \
 	llama.cpp/tools/server/server-chat.cpp \
 	llama.cpp/tools/server/server-common.cpp \

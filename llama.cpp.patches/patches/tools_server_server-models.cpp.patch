@@ -1,7 +1,7 @@
 diff --git a/tools/server/server-models.cpp b/tools/server/server-models.cpp
 --- a/llama.cpp/tools/server/server-models.cpp
 +++ b/llama.cpp/tools/server/server-models.cpp
-@@ -31,6 +31,7 @@
+@@ -34,6 +34,7 @@
  #include <cstring>
  
  #ifndef _WIN32
@@ -9,7 +9,7 @@ diff --git a/tools/server/server-models.cpp b/tools/server/server-models.cpp
  extern char **environ;
  #endif
  
-@@ -61,7 +62,25 @@ static void request_child_exit(server_subproc & proc) {
+@@ -51,7 +52,25 @@ static void request_child_exit(server_subproc & proc) {
  // single-threaded, watching all child processes at once
  struct server_monitor {
      server_monitor(server_models & models) : models(models) {
@@ -36,7 +36,7 @@ diff --git a/tools/server/server-models.cpp b/tools/server/server-models.cpp
      }
  
      ~server_monitor() {
-@@ -893,13 +912,19 @@ void server_models::load_models() {
+@@ -947,13 +966,19 @@ void server_models::load_models() {
          }
  
          // wait for all targeted models to reach UNLOADED; cv.wait handles unlock/relock
@@ -58,23 +58,7 @@ diff --git a/tools/server/server-models.cpp b/tools/server/server-models.cpp
  
          // erase models no longer in any source
          for (auto it = mapping.begin(); it != mapping.end(); ) {
-@@ -1096,9 +1121,12 @@ void server_models::unload_lru() {
-         // wait for unload to complete
-         {
-             std::unique_lock<std::mutex> lk(mutex);
--            cv.wait(lk, [this, &lru_model_name]() {
--                return mapping[lru_model_name].meta.status == SERVER_MODEL_STATUS_UNLOADED;
--            });
-+            // Use wait_for() instead of wait() to work around a Cosmopolitan libc
-+            // bug where untimed futex waits on XNU (macOS) expire after ~72 minutes,
-+            // causing condition_variable::wait() to throw ETIMEDOUT.
-+            while (mapping[lru_model_name].meta.status != SERVER_MODEL_STATUS_UNLOADED) {
-+                cv.wait_for(lk, std::chrono::seconds(30));
-+            }
-         }
-     }
- }
-@@ -1123,7 +1151,12 @@ void server_models::load(const std::string & name, const load_options & opts) {
+@@ -1158,7 +1183,12 @@ void server_models::load(const std::string & name, const load_options & opts) {
      std::unique_lock<std::mutex> lk(mutex);
      // edge case: block until any in-progress reload has finished so we always load
      // against the freshest preset and a consistent mapping state
@@ -86,20 +70,21 @@ diff --git a/tools/server/server-models.cpp b/tools/server/server-models.cpp
 +        cv.wait_for(lk, std::chrono::seconds(30));
 +    }
  
-     auto meta = opts.custom_meta.has_value() ? *opts.custom_meta : mapping[name].meta;
-     if (meta.status != SERVER_MODEL_STATUS_UNLOADED) {
-@@ -1283,14 +1316,20 @@ void server_models::unload_all() {
+     // a download over an existing entry is decided under the lock, so a load of the
+     // same model cannot start in between: a paused download or an idle cached model
+@@ -1381,7 +1411,10 @@ void server_models::unload_all() {
          }
      }
      // wait for every child to exit, the monitor force-kills the ones that ignore the exit command
--    cv.wait(lk, [this]() {
+-    cv.wait(lk, [this, &lk]() {
 +    // Use wait_for() instead of wait() to work around a Cosmopolitan libc bug
 +    // where untimed futex waits on XNU (macOS) expire after ~72 minutes,
 +    // causing condition_variable::wait() to throw ETIMEDOUT.
-+    auto all_stopped = [this]() {
-         for (const auto & [name, inst] : mapping) {
-             if (inst.meta.is_running() || inst.meta.status == SERVER_MODEL_STATUS_DOWNLOADING) {
-                 return false;
++    auto all_stopped = [this, &lk]() {
+         if (sched->is_measuring(lk)) {
+             return false;
+         }
+@@ -1391,7 +1424,10 @@ void server_models::unload_all() {
              }
          }
          return true;
@@ -111,7 +96,7 @@ diff --git a/tools/server/server-models.cpp b/tools/server/server-models.cpp
  }
  
  void server_models::update_status(const std::string & name, const update_status_args & args) {
-@@ -1422,16 +1461,22 @@ void server_models::wait(const std::string & name, std::function<bool(const serv
+@@ -1552,16 +1588,22 @@ void server_models::wait(const std::string & name, std::function<bool(const serv
  }
  
  void server_models::wait(std::unique_lock<std::mutex> & lk, const std::string & name, std::function<bool(const server_model_meta &)> predicate) {
@@ -141,7 +126,7 @@ diff --git a/tools/server/server-models.cpp b/tools/server/server-models.cpp
  }
  
  bool server_models::ensure_model_ready(const std::string & name, const std::function<bool()> & should_stop) {
-@@ -2448,10 +2493,10 @@ server_http_proxy::server_http_proxy(
+@@ -2631,10 +2673,10 @@ server_http_proxy::server_http_proxy(
      auto pipe = std::make_shared<server_pipe<msg_t>>();
  
      if (scheme == "https") {

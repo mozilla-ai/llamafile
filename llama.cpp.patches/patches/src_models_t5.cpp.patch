@@ -1,7 +1,7 @@
 diff --git a/src/models/t5.cpp b/src/models/t5.cpp
 --- a/llama.cpp/src/models/t5.cpp
 +++ b/llama.cpp/src/models/t5.cpp
-@@ -357,6 +357,12 @@ llama_model_t5::graph<true>::graph(const llama_model & model, const llm_graph_pa
+@@ -355,6 +355,12 @@ llama_model_t5::graph<true>::graph(const llama_model & model, const llm_graph_pa
      ggml_build_forward_expand(gf, cur);
  }
  

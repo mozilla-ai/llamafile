@@ -27,3 +27,14 @@ diff --git a/src/model.h b/src/model.h
      // Owning handles for this Model's LoRA adapters, in ModelConfig::loras
      // order. Set on this Model's context only, so different Model instances
      // sharing the same ModelWeights can carry independent adapters.
+@@ -236,10 +240,6 @@ class Model
+     std::vector<llama_token> processed_tokens_; // Track tokens in KV cache
+     int n_past_ = 0;                            // Track position in KV cache
+     ModelConfig config_;
+-    // Chat parser derived from the template, cached across turns along with
+-    // the definition it was built from
+-    std::string parser_source_;
+-    common_peg_arena parser_arena_;
+ };
+ 
+ } // namespace agent_cpp
