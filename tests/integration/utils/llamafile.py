@@ -238,7 +238,9 @@ class LlamafileRunner:
         Args:
             executable: Path to llamafile binary or pre-built .llamafile
             model: Path to model file (None for pre-built llamafiles)
-            gpu: GPU mode - "auto", "apple", "amd", "nvidia", or None for CPU
+            gpu: GPU mode passed as --gpu - "auto", "apple", "amd", "nvidia",
+                 "vulkan", or "disable" for CPU only; None passes no flag,
+                 so llamafile picks a GPU itself
             default_thinking: Default thinking mode when callers don't specify
                               one. Set to True for tests that exercise thinking
                               behavior; False otherwise so small reasoning
