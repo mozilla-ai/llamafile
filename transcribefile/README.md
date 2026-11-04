@@ -6,9 +6,10 @@ same Cosmopolitan packaging as llamafile and whisperfile. One Actually
 Portable Executable runs on macOS, Linux, Windows and BSD, on x86-64 and
 ARM64, with no installation.
 
-transcribe.cpp supports modern GGUF speech models from more than 16
+transcribe.cpp supports modern GGUF speech models from more than 20
 different families, including Parakeet, Whisper, Canary, Voxtral, Moonshine,
-and more (see `transcribe.cpp/docs/models/`).
+and more, plus models for speaker diarization, language identification
+and voice activity detection (see `transcribe.cpp/docs/models/`).
 
 ## Quick start
 
@@ -46,6 +47,21 @@ default), Metal is used when available and the run falls back to CPU
 otherwise; only an explicit `--backend metal` makes a missing Metal
 device an error, reported by transcribe.cpp.
 
+The cache directory is keyed on llamafile's version number only: once
+`~/.transcribefile/v/<ver>/ggml-metal.dylib` exists it is reused as is,
+even if the bundled sources changed. When testing a build whose ggml
+differs from the one that produced the cached dylib (a submodule bump,
+a patch change), remove that directory first, or point `HOME` at an
+empty directory.
+
+The Metal sources come from llama.cpp's ggml (0.28.0 as of llama.cpp
+v0.8.0), while transcribe.cpp builds its graphs with its own vendored
+ggml (0.26.0 as of transcribe.cpp v0.4.1). Temporary patches align the
+two trees (op numbering, and which ops a backend may over-allocate)
+until transcribe.cpp catches up; see `transcribe.cpp.patches/README.md`.
+GPU support is best effort until then: compare against `--backend cpu`
+when trying a new model family.
+
 GPU-side logging (device init banners, per-run Metal pipeline-state
 creation) is suppressed by default; pass `--verbose` — same flag as
 llamafile — to see it, along with the loader's own diagnostics, when
@@ -81,11 +97,13 @@ identical to the CPU backend.
 
 - `transcribefile/main.cpp` — entry point: crash reports, `--version`,
   `/zip/.args` defaults, GPU backend registration, then hands argv to
-  upstream's CLI (`transcribe.cpp/examples/cli/main.cpp`, whose `main`
-  is renamed via `-DTRANSCRIBEFILE`).
+  upstream's CLI (`transcribe.cpp/examples/cli/`, whose `main` is
+  renamed via `-DTRANSCRIBEFILE`).
 - `transcribe.cpp.patches/` — llamafile patches for the submodule: the
   cosmocc `BUILD.mk` plus the host-side ggml ABI patches (`GGML_CALL`,
   `free_struct`) that keep the backend interface structs identical to
-  the GPU dylibs built from llama.cpp's ggml (both vendor ggml 0.15.2).
+  the GPU dylibs built from llama.cpp's ggml, and a temporary op-enum
+  alignment between the two ggml versions. Its `README.md` lists every
+  patch.
 - `llamafile/gpu_backend.c`, `llamafile/metal.c` — shared GPU probe core
   and Metal runtime build, linked in via `o/$(MODE)/llamafile/gpu.a`.

@@ -1,7 +1,7 @@
 diff --git a/examples/cli/main.cpp b/examples/cli/main.cpp
 --- a/transcribe.cpp/examples/cli/main.cpp
 +++ b/transcribe.cpp/examples/cli/main.cpp
-@@ -595,7 +595,11 @@ void log_cb(transcribe_log_level level, const char * msg, void * userdata) {
+@@ -648,7 +648,11 @@ int run_file(const cli_args & args, std::ofstream * output) {
  
  }  // namespace
  
@@ -14,9 +14,9 @@ diff --git a/examples/cli/main.cpp b/examples/cli/main.cpp
      cli_args args;
      if (!parse_args(argc, argv, args)) {
          print_usage(argv[0]);
-@@ -1284,3 +1288,12 @@ int main(int argc, char ** argv) {
+@@ -688,3 +692,12 @@ int main(int argc, char ** argv) {
  
-     return EXIT_SUCCESS;
+     return run_file(args, output);
  }
 +
 +// Standalone entry point. Not compiled into transcribefile (which provides its

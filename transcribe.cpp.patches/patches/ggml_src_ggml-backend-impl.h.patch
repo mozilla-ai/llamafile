@@ -1,31 +1,37 @@
 diff --git a/ggml/src/ggml-backend-impl.h b/ggml/src/ggml-backend-impl.h
 --- a/transcribe.cpp/ggml/src/ggml-backend-impl.h
 +++ b/transcribe.cpp/ggml/src/ggml-backend-impl.h
-@@ -15,17 +15,17 @@ extern "C" {
+@@ -15,21 +15,21 @@ extern "C" {
      //
  
      struct ggml_backend_buffer_type_i {
--        const char *          (*get_name)      (ggml_backend_buffer_type_t buft);
-+        const char *          (GGML_CALL *get_name)      (ggml_backend_buffer_type_t buft);
+-        const char *          (*get_name)        (ggml_backend_buffer_type_t buft);
++        const char *          (GGML_CALL *get_name)        (ggml_backend_buffer_type_t buft);
          // allocate a buffer of this type
--        ggml_backend_buffer_t (*alloc_buffer)  (ggml_backend_buffer_type_t buft, size_t size);
-+        ggml_backend_buffer_t (GGML_CALL *alloc_buffer)  (ggml_backend_buffer_type_t buft, size_t size);
+-        ggml_backend_buffer_t (*alloc_buffer)    (ggml_backend_buffer_type_t buft, size_t size);
++        ggml_backend_buffer_t (GGML_CALL *alloc_buffer)    (ggml_backend_buffer_type_t buft, size_t size);
+         // (optional) allocate tensors from a list into a buffer of this type (defaults to alloc_buffer + linear allocator)
+-        ggml_backend_buffer_t (*alloc_buffer_n)  (ggml_backend_buffer_type_t buft, struct ggml_tensor ** tensors, int n_tensors);
++        ggml_backend_buffer_t (GGML_CALL *alloc_buffer_n)  (ggml_backend_buffer_type_t buft, struct ggml_tensor ** tensors, int n_tensors);
          // tensor alignment
--        size_t                (*get_alignment) (ggml_backend_buffer_type_t buft);
-+        size_t                (GGML_CALL *get_alignment) (ggml_backend_buffer_type_t buft);
+-        size_t                (*get_alignment)   (ggml_backend_buffer_type_t buft);
++        size_t                (GGML_CALL *get_alignment)   (ggml_backend_buffer_type_t buft);
          // (optional) max buffer size that can be allocated (defaults to SIZE_MAX)
--        size_t                (*get_max_size)  (ggml_backend_buffer_type_t buft);
-+        size_t                (GGML_CALL *get_max_size)  (ggml_backend_buffer_type_t buft);
+-        size_t                (*get_max_size)    (ggml_backend_buffer_type_t buft);
++        size_t                (GGML_CALL *get_max_size)    (ggml_backend_buffer_type_t buft);
          // (optional) data size needed to allocate the tensor, including padding (defaults to ggml_nbytes)
--        size_t                (*get_alloc_size)(ggml_backend_buffer_type_t buft, const struct ggml_tensor * tensor);
-+        size_t                (GGML_CALL *get_alloc_size)(ggml_backend_buffer_type_t buft, const struct ggml_tensor * tensor);
+-        size_t                (*get_alloc_size)  (ggml_backend_buffer_type_t buft, const struct ggml_tensor * tensor);
++        size_t                (GGML_CALL *get_alloc_size)  (ggml_backend_buffer_type_t buft, const struct ggml_tensor * tensor);
+         // (optional) total data size needed to allocate the given tensors, including padding and splitting (defaults to per-tensor get_alloc_size)
+-        size_t                (*get_alloc_size_n)(ggml_backend_buffer_type_t buft, struct ggml_tensor ** tensors, int n_tensors);
++        size_t                (GGML_CALL *get_alloc_size_n)(ggml_backend_buffer_type_t buft, struct ggml_tensor ** tensors, int n_tensors);
          // (optional) check if tensor data is in host memory and uses standard ggml tensor layout (defaults to false)
--        bool                  (*is_host)       (ggml_backend_buffer_type_t buft);
-+        bool                  (GGML_CALL *is_host)       (ggml_backend_buffer_type_t buft);
+-        bool                  (*is_host)         (ggml_backend_buffer_type_t buft);
++        bool                  (GGML_CALL *is_host)         (ggml_backend_buffer_type_t buft);
      };
  
      struct ggml_backend_buffer_type {
-@@ -39,26 +39,30 @@ extern "C" {
+@@ -48,26 +48,30 @@ extern "C" {
      //
  
      struct ggml_backend_buffer_i {
@@ -68,8 +74,14 @@ diff --git a/ggml/src/ggml-backend-impl.h b/ggml/src/ggml-backend-impl.h
      };
  
      struct ggml_backend_buffer {
-@@ -103,40 +107,40 @@ extern "C" {
-     //
+@@ -115,45 +119,45 @@ extern "C" {
+     struct ggml_backend_graph_optimize_params {
+         // keep `tensor` allocated at least until `until` (a node of the same graph) has been computed
+         // can be called multiple times for the same tensor: the longest lifetime applies
+-        void (*add_alloc_dep)(void * user_data, struct ggml_tensor * tensor, struct ggml_tensor * until);
++        void (GGML_CALL *add_alloc_dep)(void * user_data, struct ggml_tensor * tensor, struct ggml_tensor * until);
+         void * user_data;
+     };
  
      struct ggml_backend_i {
 -        const char * (*get_name)(ggml_backend_t backend);
@@ -120,12 +132,12 @@ diff --git a/ggml/src/ggml-backend-impl.h b/ggml/src/ggml-backend-impl.h
 +        void (GGML_CALL *event_wait)  (ggml_backend_t backend, ggml_backend_event_t event);
  
          // (optional) sort/optimize the nodes in the graph
--        void                      (*graph_optimize)    (ggml_backend_t backend, struct ggml_cgraph * cgraph);
-+        void                      (GGML_CALL *graph_optimize)    (ggml_backend_t backend, struct ggml_cgraph * cgraph);
+-        void                      (*graph_optimize)    (ggml_backend_t backend, struct ggml_cgraph * cgraph, struct ggml_backend_graph_optimize_params * params);
++        void                      (GGML_CALL *graph_optimize)    (ggml_backend_t backend, struct ggml_cgraph * cgraph, struct ggml_backend_graph_optimize_params * params);
      };
  
      struct ggml_backend {
-@@ -159,46 +163,46 @@ extern "C" {
+@@ -176,46 +180,46 @@ extern "C" {
      //       the current functions to obtain the properties can remain, since they are more convenient for often used properties
      struct ggml_backend_device_i {
          // device name: short identifier for this device, such as "CPU" or "CUDA0"
@@ -187,7 +199,7 @@ diff --git a/ggml/src/ggml-backend-impl.h b/ggml/src/ggml-backend-impl.h
      };
  
      struct ggml_backend_device {
-@@ -212,15 +216,15 @@ extern "C" {
+@@ -229,15 +233,15 @@ extern "C" {
      //
  
      struct ggml_backend_reg_i {

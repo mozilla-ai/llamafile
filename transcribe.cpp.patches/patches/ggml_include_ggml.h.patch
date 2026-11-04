@@ -1,0 +1,17 @@
+diff --git a/ggml/include/ggml.h b/ggml/include/ggml.h
+--- a/transcribe.cpp/ggml/include/ggml.h
++++ b/transcribe.cpp/ggml/include/ggml.h
+@@ -585,6 +585,13 @@ extern "C" {
+         GGML_OP_DSV4_HC_COMB,
+         GGML_OP_DSV4_HC_PRE,
+         GGML_OP_DSV4_HC_POST,
++        // [llamafile] TEMPORARY: ggml 0.28 (llama.cpp v0.8.0) inserted this op
++        // here. transcribefile's Metal dylib is built from llama.cpp's ggml, so
++        // this vendored ggml (0.26) must number its ops the same way or every
++        // op from GGML_OP_UNARY on is misread on the GPU. Only the enum value
++        // exists here: transcribe.cpp never builds this op. Drop this patch
++        // once transcribe.cpp vendors ggml >= 0.28.
++        GGML_OP_TOP_K_MASK,
+ 
+         GGML_OP_UNARY,
+ 

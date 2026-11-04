@@ -6,7 +6,8 @@
 # Entry point is transcribefile/main.cpp, a thin wrapper that loads default
 # arguments from the executable's own zip store (/zip/.args, via cosmo_args)
 # and then calls transcribe.cpp's example CLI logic. The CLI lives in
-# transcribe.cpp/examples/cli/main.cpp, compiled with -DTRANSCRIBEFILE so its
+# transcribe.cpp/examples/cli/ (main.cpp plus one file per task: asr,
+# diarize, langid, vad); main.cpp is compiled with -DTRANSCRIBEFILE so its
 # main() is renamed to transcribe_cli_main() and our wrapper owns the entry
 # point (the standalone CLI main() is dropped). The WAV loader comes from
 # transcribe.cpp/examples/common/wav.cpp. Everything links against the
@@ -24,6 +25,10 @@ TRANSCRIBEFILE_VERSION_STRING := $(shell cd transcribe.cpp 2>/dev/null && git de
 TRANSCRIBEFILE_SRCS_CPP := \
 	transcribefile/main.cpp \
 	transcribe.cpp/examples/cli/main.cpp \
+	transcribe.cpp/examples/cli/asr.cpp \
+	transcribe.cpp/examples/cli/diarize.cpp \
+	transcribe.cpp/examples/cli/langid.cpp \
+	transcribe.cpp/examples/cli/vad.cpp \
 	transcribe.cpp/examples/common/wav.cpp
 
 # Our own code (cosmocc libc compatibility shims, etc.).
