@@ -403,6 +403,7 @@ int cli_main(int argc, char **argv) {
     common_chat_msg prev_msg;         // Previous parse result for diff computation
     bool think_tag_opened = false;    // Track if we've printed <think>
     bool think_tag_closed = false;    // Track if we've printed </think>
+    char last_reasoning_char = '\n';  // Last character of the printed reasoning
 
     while (n_cur < params.n_ctx) {
         if (g_got_sigint) {
@@ -437,11 +438,17 @@ int cli_main(int argc, char **argv) {
                         think_tag_opened = true;
                     }
                     fputs(diff.reasoning_content_delta.c_str(), stdout);
+                    last_reasoning_char = diff.reasoning_content_delta.back();
                     fflush(stdout);
                 }
                 // Output final content (close think tag first if needed)
                 if (!diff.content_delta.empty()) {
                     if (think_tag_opened && !think_tag_closed) {
+                        // The parser trims the newline that ends the reasoning
+                        // (since llama.cpp v0.8.0), so put </think> on its own line
+                        if (last_reasoning_char != '\n') {
+                            fputs("\n", stdout);
+                        }
                         fputs("</think>\n", stdout);
                         think_tag_closed = true;
                     }
