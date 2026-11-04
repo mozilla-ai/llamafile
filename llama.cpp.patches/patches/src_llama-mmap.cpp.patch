@@ -1,18 +1,19 @@
 diff --git a/src/llama-mmap.cpp b/src/llama-mmap.cpp
 --- a/llama.cpp/src/llama-mmap.cpp
 +++ b/llama.cpp/src/llama-mmap.cpp
-@@ -4,6 +4,10 @@
+@@ -4,6 +4,11 @@
  
  #include "ggml.h"
  
 +#ifdef COSMOCC
 +#include "llamafile/llamafile.h"
++#include <cosmo.h>
 +#endif
 +
  #include <cstring>
  #include <climits>
  #include <cstdlib>
-@@ -182,6 +186,15 @@ struct llama_file::impl {
+@@ -182,6 +187,15 @@ struct llama_file::impl {
      }
  #else
      impl(const char * fname, const char * mode, [[maybe_unused]] const bool use_direct_io = false) : fname(fname) {
@@ -28,7 +29,7 @@ diff --git a/src/llama-mmap.cpp b/src/llama-mmap.cpp
  #ifdef __linux__
          // Try unbuffered I/O for read only
          if (use_direct_io && std::strcmp(mode, "rb") == 0) {
-@@ -234,6 +247,9 @@ struct llama_file::impl {
+@@ -234,6 +248,9 @@ struct llama_file::impl {
      }
  
      size_t tell() const {
@@ -38,7 +39,7 @@ diff --git a/src/llama-mmap.cpp b/src/llama-mmap.cpp
          if (fd == -1) {
              off_t ret = llama_mmap_ftell(fp);
              if (ret == -1) {
-@@ -251,6 +267,11 @@ struct llama_file::impl {
+@@ -251,6 +268,11 @@ struct llama_file::impl {
      }
  
      void seek(size_t offset, int whence) const {
@@ -50,7 +51,7 @@ diff --git a/src/llama-mmap.cpp b/src/llama-mmap.cpp
          off_t ret = 0;
          if (fd == -1) {
              ret = llama_mmap_fseek(fp, offset, whence);
-@@ -260,12 +281,22 @@ struct llama_file::impl {
+@@ -260,12 +282,22 @@ struct llama_file::impl {
          if (ret == -1) {
              throw std::runtime_error(format("seek error: %s", strerror(errno)));
          }
@@ -73,7 +74,7 @@ diff --git a/src/llama-mmap.cpp b/src/llama-mmap.cpp
          errno = 0;
          if (fd == -1) {
              const size_t curr_off = tell();
-@@ -315,6 +346,7 @@ struct llama_file::impl {
+@@ -315,6 +347,7 @@ struct llama_file::impl {
                  bytes_read += (size_t) ret;
              }
          }
@@ -81,7 +82,7 @@ diff --git a/src/llama-mmap.cpp b/src/llama-mmap.cpp
      }
  
      void read_aligned_chunk(void * dest, size_t size) {
-@@ -388,13 +420,20 @@ struct llama_file::impl {
+@@ -388,13 +421,20 @@ struct llama_file::impl {
      }
  
      ~impl() {
@@ -102,7 +103,7 @@ diff --git a/src/llama-mmap.cpp b/src/llama-mmap.cpp
      std::string fname;
  #endif
  
-@@ -423,6 +462,10 @@ size_t llama_file::read_alignment() const { return pimpl->read_alignment(); }
+@@ -423,6 +463,10 @@ size_t llama_file::read_alignment() const { return pimpl->read_alignment(); }
  bool llama_file::has_direct_io() const { return pimpl->has_direct_io(); }
  
  int llama_file::file_id() const {
@@ -113,7 +114,7 @@ diff --git a/src/llama-mmap.cpp b/src/llama-mmap.cpp
  #ifdef _WIN32
      return _fileno(pimpl->fp);
  #else
-@@ -430,9 +473,10 @@ int llama_file::file_id() const {
+@@ -430,9 +474,10 @@ int llama_file::file_id() const {
          return pimpl->fd;
      }
  #if defined(fileno)
@@ -126,7 +127,7 @@ diff --git a/src/llama-mmap.cpp b/src/llama-mmap.cpp
  #endif
  #endif
  }
-@@ -450,6 +494,31 @@ uint32_t llama_file::read_u32() { return pimpl->read_u32(); }
+@@ -450,6 +495,31 @@ uint32_t llama_file::read_u32() { return pimpl->read_u32(); }
  void llama_file::write_raw(const void * ptr, size_t len) const { pimpl->write_raw(ptr, len); }
  void llama_file::write_u32(uint32_t val) const { pimpl->write_u32(val); }
  
@@ -158,7 +159,7 @@ diff --git a/src/llama-mmap.cpp b/src/llama-mmap.cpp
  // llama_mmap
  
  #if defined(_POSIX_MAPPED_FILES) || defined(_WIN32)
-@@ -478,9 +547,26 @@ static llama_mmap::ranges ranges_complement(llama_mmap::ranges ranges, size_t li
+@@ -478,9 +548,26 @@ static llama_mmap::ranges ranges_complement(llama_mmap::ranges ranges, size_t li
  struct llama_mmap::impl {
  #ifdef _POSIX_MAPPED_FILES
      std::vector<std::pair<size_t, size_t>> mapped_fragments;
@@ -185,18 +186,26 @@ diff --git a/src/llama-mmap.cpp b/src/llama-mmap.cpp
          int fd = file->file_id();
          int flags = MAP_SHARED;
          if (numa) { prefetch = 0; }
-@@ -541,6 +627,10 @@ struct llama_mmap::impl {
+@@ -541,6 +628,18 @@ struct llama_mmap::impl {
      }
  
      void unmap_fragment(size_t first, size_t last) {
 +        if (!is_owned) {
 +            return;
 +        }
++#ifdef COSMOCC
++        // Windows can only unmap a whole view (cosmo's munmap fails with ENOTSUP or
++        // EINVAL on a sub-range), so do what the _WIN32 branch below does: keep the
++        // fragments, and let the destructor unmap the whole file in one call.
++        if (IsWindows()) {
++            return;
++        }
++#endif
 +
          int page_size = sysconf(_SC_PAGESIZE);
          align_range(&first, &last, page_size);
          size_t len = last - first;
-@@ -577,6 +667,14 @@ struct llama_mmap::impl {
+@@ -577,6 +676,14 @@ struct llama_mmap::impl {
      }
  
      ~impl() {

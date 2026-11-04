@@ -199,7 +199,7 @@ These patches integrate llamafile's file handling APIs for loading models from b
 | Patch | Description |
 |-------|-------------|
 | `src_llama-mmap.h.patch` | Adds `has_premapped_content()`, `premapped_content()`, and `get_llamafile()` methods to `llama_file` class |
-| `src_llama-mmap.cpp.patch` | Under `COSMOCC`, redirects file open/read/seek/tell/close through llamafile API (`llamafile_open_gguf`, `llamafile_read`, etc.); adds premapped content support to `llama_mmap` using llamafile reference counting (`llamafile_ref`/`llamafile_unref`); skips `munmap` for premapped content |
+| `src_llama-mmap.cpp.patch` | Under `COSMOCC`, redirects file open/read/seek/tell/close through llamafile API (`llamafile_open_gguf`, `llamafile_read`, etc.); adds premapped content support to `llama_mmap` using llamafile reference counting (`llamafile_ref`/`llamafile_unref`); skips `munmap` for premapped content; on Windows makes `unmap_fragment()` a no-op, as upstream's `_WIN32` branch does (cosmocc never defines `_WIN32`, so llamafile runs the POSIX branch everywhere, and Windows can only unmap a whole view: cosmo's `munmap` fails with `ENOTSUP`/`EINVAL` on a sub-range, which printed "munmap failed" warnings and left the view mapped at exit). Memory use then matches the official llama.cpp Windows build: the whole file stays mapped after GPU offload in both |
 | `ggml_src_gguf.cpp.patch` | Adds `tell()`/`seek()` to `gguf_reader`; under `COSMOCC`, adds `gguf_llamafile_reader` that reads via llamafile API; templatizes `gguf_init_from_reader_impl` so both readers work; redirects `gguf_init_from_file` through `llamafile_open_gguf` (supports `/zip/` paths, `.llamafile` containers) |
 
 ### Server Integration
