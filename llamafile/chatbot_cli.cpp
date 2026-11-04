@@ -404,10 +404,17 @@ int cli_main(int argc, char **argv) {
     bool think_tag_opened = false;    // Track if we've printed <think>
     bool think_tag_closed = false;    // Track if we've printed </think>
     char last_reasoning_char = '\n';  // Last character of the printed reasoning
+    int n_generated = 0;              // New tokens so far, for -n / --n-predict
 
     while (n_cur < params.n_ctx) {
         if (g_got_sigint) {
             g_got_sigint = 0;
+            break;
+        }
+
+        // -n N stops after N new tokens; -1 (default) means no limit and -2
+        // means "until the context is full", which the loop bound covers.
+        if (params.n_predict >= 0 && n_generated >= params.n_predict) {
             break;
         }
 
@@ -470,6 +477,7 @@ int cli_main(int argc, char **argv) {
             break;
         }
         n_cur++;
+        n_generated++;
     }
 
     // Ensure output ends with newline

@@ -31,6 +31,25 @@ class TestCLIBasic:
 
         assert result.returncode == 0
 
+    def test_cli_n_predict_limits_output(self, llamafile, timeouts):
+        """Test that -n caps the number of generated tokens.
+
+        Counting to 200 takes far more than 64 tokens, so without the cap
+        both runs would print the same long answer.
+        """
+        prompt = "Count from 1 to 200, separated by commas."
+        short = llamafile.run_cli(prompt, thinking=False, timeout=timeouts.cli,
+                                  extra_args=["-n", "8", "--temp", "0"])
+        longer = llamafile.run_cli(prompt, thinking=False, timeout=timeouts.cli,
+                                   extra_args=["-n", "64", "--temp", "0"])
+
+        assert short.returncode == 0, f"CLI failed: {short.stderr}"
+        assert longer.returncode == 0, f"CLI failed: {longer.stderr}"
+        assert 0 < len(short.stdout.strip()) < len(longer.stdout.strip()), (
+            f"-n 8 output ({len(short.stdout)} chars) is not shorter than "
+            f"-n 64 output ({len(longer.stdout)} chars)"
+        )
+
 
 @pytest.mark.cli
 @pytest.mark.thinking
