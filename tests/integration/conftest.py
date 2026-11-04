@@ -39,7 +39,7 @@ def pytest_addoption(parser):
         "--gpu",
         action="store",
         default=None,
-        choices=["auto", "apple", "amd", "nvidia", "disable"],
+        choices=["auto", "apple", "amd", "nvidia", "vulkan", "disable"],
         help="GPU mode to use (disable for CPU-only)",
     )
     parser.addoption(
