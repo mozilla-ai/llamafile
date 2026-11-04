@@ -1,5 +1,10 @@
 """Server mode integration tests."""
 
+import os
+import socket
+import sys
+import time
+
 import pytest
 
 from utils.llamafile import LlamafileRunner
@@ -153,6 +158,73 @@ class TestServerParameters:
             # With max_tokens=10, we shouldn't get to 100
             assert "100" not in content or len(content) < 50
 
+        finally:
+            proc.terminate()
+            proc.wait()
+
+
+def _unix_http_get(sock_path: str, path: str, timeout: float) -> tuple[int, bytes]:
+    """Minimal HTTP/1.1 GET over a Unix domain socket: (status, body)."""
+    with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as s:
+        s.settimeout(timeout)
+        s.connect(sock_path)
+        s.sendall(
+            f"GET {path} HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n".encode()
+        )
+        data = b""
+        while chunk := s.recv(65536):
+            data += chunk
+    head, _, body = data.partition(b"\r\n\r\n")
+    return int(head.split(b" ", 2)[1]), body
+
+
+@pytest.mark.server
+@pytest.mark.skipif(sys.platform == "win32", reason="the test client needs AF_UNIX on a POSIX host")
+class TestServerUnixSocket:
+    """--host <path>.sock serves HTTP over a Unix domain socket.
+
+    --unsecure keeps these independent of the pledge() sandbox, which
+    test_sandbox.py covers.
+    """
+
+    # "server.sock" relative to the server's cwd is 11 bytes: shorter than
+    # the 14 a path needs for 2 + strlen(path) to reach sizeof(struct
+    # sockaddr), below which Cosmopolitan's bind() returns EINVAL.
+    @pytest.mark.parametrize(
+        "relative", [False, True], ids=["absolute-path", "short-relative-path"]
+    )
+    def test_server_on_unix_socket(
+        self, executable, model, gpu_mode, server_port, timeouts, tmp_path, monkeypatch, relative
+    ):
+        # absolute paths so the runner is unaffected by the chdir below
+        runner = LlamafileRunner(
+            executable=os.path.abspath(executable),
+            model=os.path.abspath(model) if model else None,
+            gpu=gpu_mode,
+        )
+        monkeypatch.chdir(tmp_path)  # the server inherits it
+        host = "server.sock" if relative else str(tmp_path / "server.sock")
+        sock_path = str(tmp_path / "server.sock")
+        if len(sock_path) >= 108:
+            pytest.skip("tmp_path too long for sun_path")
+
+        proc = runner.start_server(port=server_port, extra_args=["--host", host, "--unsecure"])
+        try:
+            deadline = time.time() + timeouts.server_ready
+            status = None
+            while time.time() < deadline and proc.poll() is None:
+                if os.path.exists(sock_path):
+                    try:
+                        status, _ = _unix_http_get(sock_path, "/health", 5)
+                        if status == 200:
+                            break
+                    except OSError:
+                        pass
+                time.sleep(0.5)
+            assert status == 200, f"server did not answer /health on --host {host}"
+
+            status, body = _unix_http_get(sock_path, "/v1/models", timeouts.http_request)
+            assert status == 200 and b'"data"' in body
         finally:
             proc.terminate()
             proc.wait()
