@@ -219,7 +219,8 @@ class TestGPUAcceleration:
           complete``, i.e. graphs actually engaged for this model. ggml may
           legitimately refuse them (pre-Volta GPU, unsupported node type); it
           then logs ``disabling CUDA graphs due to ...`` and the runtime check
-          is skipped rather than failed.
+          is skipped rather than failed. Since llama.cpp v0.8.0 (#30327) ggml
+          prints both lines only with ``GGML_CUDA_GRAPH_DEBUG`` set.
 
         The module's own log lines go to stderr, not to --log-file (they are
         written by the ggml logger inside the DSO), so stderr is captured too.
@@ -243,7 +244,8 @@ class TestGPUAcceleration:
 
         proc = runner.start_server(port=server_port, log_file=log_path,
                                     stderr_file=stderr_path,
-                                    extra_args=["--verbose"])
+                                    extra_args=["--verbose"],
+                                    env={"GGML_CUDA_GRAPH_DEBUG": "1"})
         try:
             ready = LlamafileRunner.wait_for_server(
                 server_port, timeout=timeouts.server_ready, proc=proc

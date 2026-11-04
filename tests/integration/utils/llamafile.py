@@ -409,6 +409,7 @@ class LlamafileRunner:
         extra_args: list[str] | None = None,
         log_file: str | None = None,
         stderr_file: str | None = None,
+        env: dict[str, str] | None = None,
     ) -> subprocess.Popen:
         """Start llamafile in server mode.
 
@@ -424,6 +425,8 @@ class LlamafileRunner:
                       file. Messages logged by a GPU backend module
                       (ggml-cuda.so, ...) are emitted by the module's own ggml
                       logger and reach stderr, not --log-file.
+            env: Extra environment variables for the server process, on top
+                 of the inherited environment.
 
         Returns:
             Popen process handle (caller must terminate)
@@ -451,6 +454,7 @@ class LlamafileRunner:
                 stdout=subprocess.DEVNULL,
                 stderr=stderr,
                 text=True,
+                env={**os.environ, **env} if env else None,
             )
         finally:
             if stderr_file:
