@@ -238,7 +238,9 @@ class LlamafileRunner:
         Args:
             executable: Path to llamafile binary or pre-built .llamafile
             model: Path to model file (None for pre-built llamafiles)
-            gpu: GPU mode - "auto", "apple", "amd", "nvidia", or None for CPU
+            gpu: GPU mode passed as --gpu - "auto", "apple", "amd", "nvidia",
+                 "vulkan", or "disable" for CPU only; None passes no flag,
+                 so llamafile picks a GPU itself
             default_thinking: Default thinking mode when callers don't specify
                               one. Set to True for tests that exercise thinking
                               behavior; False otherwise so small reasoning
@@ -409,6 +411,7 @@ class LlamafileRunner:
         extra_args: list[str] | None = None,
         log_file: str | None = None,
         stderr_file: str | None = None,
+        env: dict[str, str] | None = None,
     ) -> subprocess.Popen:
         """Start llamafile in server mode.
 
@@ -424,6 +427,8 @@ class LlamafileRunner:
                       file. Messages logged by a GPU backend module
                       (ggml-cuda.so, ...) are emitted by the module's own ggml
                       logger and reach stderr, not --log-file.
+            env: Extra environment variables for the server process, on top
+                 of the inherited environment.
 
         Returns:
             Popen process handle (caller must terminate)
@@ -451,6 +456,7 @@ class LlamafileRunner:
                 stdout=subprocess.DEVNULL,
                 stderr=stderr,
                 text=True,
+                env={**os.environ, **env} if env else None,
             )
         finally:
             if stderr_file:

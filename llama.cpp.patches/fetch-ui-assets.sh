@@ -125,7 +125,9 @@ echo "Fetching prebuilt web UI assets from Hugging Face..."
 # build number. "latest" is kept only as a last-resort fallback (enumeration
 # failed, e.g. offline / API change, or our commit predates every published
 # tag) so the build can still get *some* UI rather than none.
-UI_CUR_BUILD="$(cd "$LLAMA_DIR" && git describe --tags --always 2>/dev/null \
+# --match: upstream also tags releases as vX.Y.Z, often on the same commit as a
+# bNNNN tag, and a plain describe then prefers it; we need the build number.
+UI_CUR_BUILD="$(cd "$LLAMA_DIR" && git describe --tags --match 'b[0-9]*' --always 2>/dev/null \
     | grep -oE '^b[0-9]+' | grep -oE '[0-9]+' || true)"
 
 UI_CANDIDATES=()

@@ -276,17 +276,11 @@ int main(int argc, char **argv) {
 
             try {
                 auto chat_params = common_chat_templates_apply(g_chat_templates.get(), inputs);
-                g_chat_syntax.format = chat_params.format;
-                g_chat_syntax.generation_prompt = chat_params.generation_prompt;
 
-                // Load the PEG parser if one was provided
-                if (!chat_params.parser.empty()) {
-                    g_chat_syntax.parser.load(chat_params.parser);
-                }
-
-                // Copy reasoning format to chat syntax for use by the parser at runtime
-                g_chat_syntax.reasoning_format = COMMON_REASONING_FORMAT_DEEPSEEK;
-                g_chat_syntax.reasoning_in_content = false;
+                // The PEG parser (with reasoning extraction, from
+                // inputs.reasoning_format above) comes built in chat_params.
+                g_chat_syntax = common_chat_parser_params(chat_params);
+                g_chat_syntax.parser = std::move(chat_params.parser);
 
                 // Print detected format
                 if (!FLAG_nologo && g_chat_syntax.format != COMMON_CHAT_FORMAT_CONTENT_ONLY) {

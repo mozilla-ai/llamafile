@@ -1,7 +1,7 @@
 diff --git a/tools/server/server.cpp b/tools/server/server.cpp
 --- a/llama.cpp/tools/server/server.cpp
 +++ b/llama.cpp/tools/server/server.cpp
-@@ -15,6 +15,7 @@
+@@ -16,6 +16,7 @@
  #include <atomic>
  #include <clocale>
  #include <exception>
@@ -9,7 +9,7 @@ diff --git a/tools/server/server.cpp b/tools/server/server.cpp
  #include <signal.h>
  #include <thread> // for std::thread::hardware_concurrency
  
-@@ -22,6 +23,13 @@
+@@ -23,6 +24,13 @@
  #include <windows.h>
  #endif
  
@@ -23,15 +23,23 @@ diff --git a/tools/server/server.cpp b/tools/server/server.cpp
  static std::function<void(int)> shutdown_handler;
  static std::atomic_flag is_terminating = ATOMIC_FLAG_INIT;
  
-@@ -40,7 +48,19 @@ static inline void signal_handler(int signal) {
- int llama_server(int argc, char ** argv);
+@@ -41,6 +49,12 @@ static inline void signal_handler(int signal) {
+ struct server_run_opts {
+     bool install_signal_handlers = true; // off when embedded in llama-cli, which handles them itself
+     bool resolve_model           = true; // download / resolve -hf and docker models; off when the caller did it already
++
++    // llamafile combined mode (TUI + server in one process), see server_main()
++    std::function<void(const std::string &)>   on_ready;              // the server is loaded and accepting requests
++    std::function<void(std::function<void()>)> on_shutdown_available; // receives a function that stops the server
++    char ** argv = nullptr; // the sandbox detects --rpc on argv, it has no params field
++    bool combined_mode() const { return on_ready || on_shutdown_available; }
+ };
+ 
+ // satisfies -Wmissing-declarations (used by llama command)
+@@ -48,6 +62,31 @@ int llama_server(int argc, char ** argv);
  
  // to be used via CLI (argc / argv are used by router mode only)
--int llama_server(common_params & params, int argc, char ** argv);
-+// on_ready / on_shutdown_available are llamafile combined-mode (TUI) callbacks.
-+int llama_server(common_params & params, int argc, char ** argv,
-+                 std::function<void(const std::string &)> on_ready = nullptr,
-+                 std::function<void(std::function<void()>)> on_shutdown_available = nullptr);
+ int llama_server(common_params & params, int argc, char ** argv);
 +
 +// Core server logic - can be called from llamafile main.cpp or standalone main()
 +// Optional callbacks for combined mode:
@@ -41,10 +49,180 @@ diff --git a/tools/server/server.cpp b/tools/server/server.cpp
 +                std::function<void(const std::string &)> on_ready,
 +                std::function<void(std::function<void()>)> on_shutdown_available);
 +
++#ifdef LLAMAFILE_TUI
++// By now the program can safely exit. In combined mode return normally instead,
++// so the caller can handle cleanup and join the TUI thread.
++static void server_tui_exit(const server_run_opts & opts) {
++    if (opts.combined_mode()) {
++        return;
++    }
++    common_log_flush(common_log_main());
++    // Metal backend has async logging that llama_synchronize() doesn't wait for.
++    // Without this delay, _exit() might truncate llama_memory_breakdown_print's output
++    sleep(1);
++    // Use _exit() to avoid Metal cleanup crash (dangling refs with TUI + Metal + server)
++    _exit(0);
++}
++#endif
++
  void llama_server_terminate();
  void llama_server_terminate() {
      if (shutdown_handler) {
-@@ -86,6 +106,14 @@ static server_http_context::handler_t ex_wrapper(server_http_context::handler_t
+@@ -602,6 +641,9 @@ static int server_run_router(common_params & params, int argc, char ** argv, con
+     // when the HTTP server stops, clean up and exit
+     clean_up();
+ 
++#ifdef LLAMAFILE_TUI
++    server_tui_exit(opts);
++#endif
+     return 0;
+ }
+ 
+@@ -655,6 +697,107 @@ static int server_run_instance(common_params & params, server_role & role, commo
+         llama_backend_free();
+     };
+ 
++#ifdef COSMOCC
++    // Sandbox (pledge()/unveil(), llamafile issue #930). The whole
++    // derivation lives in llamafile/sandbox.c so it stays unit-testable
++    // and off the vendored diff. Placement is constrained on every side:
++    //   - after the -hf / docker model resolve above: downloads need connect()
++    //   - after ctx_http.init(): the TLS certificate/key are read there
++    //   - before ctx_http.start(): filters only cover threads created
++    //     after installation, so the HTTP listener/pool must not exist
++    //   - before load_model(): untrusted GGUF data is parsed sandboxed
++    //
++    // Combined mode hosts an in-process HTTP client (the TUI) that needs
++    // connect(), which the accept-only sandbox forbids, so it's skipped.
++    //
++    // --connect spawns llama-connect once the server listens, i.e. after the
++    // lock; the sandbox forbids exec, so it is skipped there too.
++    if (opts.combined_mode()) {
++        SRV_WRN("%s", "sandbox: disabled in combined mode; use --server for a sandboxed server\n");
++    } else if (params.server_connect) {
++        SRV_WRN("%s", "sandbox: disabled with --connect (it spawns llama-connect, which the sandbox forbids)\n");
++    } else {
++        // pledge() (no outbound network / writes / exec) is applied by
++        // default. unveil() path confinement is opt-in (--confine-reads),
++        // because a server opens files by path at request time (multimodal
++        // media, etc.) that can't be known when the ruleset locks.
++        //
++        // cosmo installs the SECCOMP/Landlock filters on the calling thread
++        // only (no TSYNC), so quiesce every pre-existing background thread
++        // across the call: the llama.cpp log worker (pause() joins it,
++        // resume() respawns it under the filter) and the stream-session GC
++        // started at the top of server_main() (stop joins it, start
++        // respawns it; no sessions exist yet, so stopping is a no-op
++        // beyond the join).
++        //
++        // When --confine-reads is on, unveil() confines reads to these
++        // directories, so collect every on-disk path the loader opens
++        // after the lock. Add to this list when llama.cpp gains a new file
++        // parameter (else it'd be denied under confinement). Paths read
++        // before the sandbox (ssl_file_key/cert in ctx_http.init(), -hf
++        // downloads in the model resolve above) need no entry.
++        std::vector<const char *> read_paths, rw_paths;
++        read_paths.push_back(params.model.path.c_str());
++        read_paths.push_back(params.mmproj.path.c_str());
++        read_paths.push_back(params.media_path.c_str());  // request-time media
++        read_paths.push_back(params.speculative.draft.mparams.path.c_str());
++        read_paths.push_back(params.speculative.ngram_cache.lookup_cache_static.c_str());
++        read_paths.push_back(params.public_path.c_str());
++        for (const auto & la : params.lora_adapters)
++            read_paths.push_back(la.path.c_str());
++        for (const auto & cv : params.control_vectors)
++            read_paths.push_back(cv.fname.c_str());
++        rw_paths.push_back(params.slot_save_path.c_str());
++        rw_paths.push_back(params.path_prompt_cache.c_str());
++        rw_paths.push_back(params.speculative.ngram_cache.lookup_cache_dynamic.c_str());
++
++        // Features that dial out at runtime need connect(), which the
++        // accept-only default forbids; relax to full sockets for them
++        // (still no writes/exec). --rpc has no params field -- its handler
++        // registers backends directly -- so detect it on argv/env.
++        const bool needs_outbound =
++            params.ui_mcp_proxy ||
++            !params.server_tools.empty() ||
++            (opts.argv && llamafile_has(opts.argv, "--rpc")) ||
++            (std::getenv("LLAMA_ARG_RPC") != nullptr);
++
++        llamafile_sandbox_spec spec = {
++            read_paths.data(), (int) read_paths.size(),
++            rw_paths.data(), (int) rw_paths.size(),
++            FLAG_confine_reads, needs_outbound,
++        };
++        // Bind the listening sockets now: pledge "anet" only covers
++        // IPv4/IPv6, so a Unix domain socket (--host /path.sock) can't be
++        // created once the sandbox is on, while accept() on one that is
++        // already bound stays allowed (llamafile issue #971). Binding
++        // spawns no threads; ctx_http.start() reuses the sockets.
++        if (!ctx_http.bind_socket()) {
++            clean_up();
++            SRV_ERR("%s", "exiting due to HTTP server error\n");
++            return 1;
++        }
++
++        char promises[64];
++        common_log_pause(common_log_main());
++        server_stream_session_manager_stop();
++        int sandbox = llamafile_sandbox_server(&spec, promises, sizeof(promises));
++        int sandbox_errno = errno;  // capture before the respawns spawn threads
++        server_stream_session_manager_start();
++        common_log_resume(common_log_main());
++        if (sandbox == LLAMAFILE_SANDBOX_FAILED) {
++            SRV_ERR("sandbox: pledge failed: %s; retry with --unsecure to disable sandboxing\n",
++                    strerror(sandbox_errno));
++            clean_up();
++            return 1;
++        } else if (llamafile_sandbox_is_active(sandbox)) {
++            SRV_INF("sandbox: pledge(\"%s\") %s\n", promises,
++                    llamafile_sandbox_describe(sandbox));
++        } else {
++            SRV_WRN("sandbox: %s\n", llamafile_sandbox_describe(sandbox));
++        }
++    }
++#endif
++
+     // start the HTTP server before loading the model to be able to serve /health requests
+     if (!ctx_http.start()) {
+         clean_up();
+@@ -687,6 +830,13 @@ static int server_run_instance(common_params & params, server_role & role, commo
+         ctx_server.terminate();
+     };
+ 
++    // Provide shutdown function to caller (for combined mode)
++    if (opts.on_shutdown_available) {
++        opts.on_shutdown_available([&ctx_server]() {
++            ctx_server.terminate();
++        });
++    }
++
+     if (opts.install_signal_handlers) {
+         server_install_signal_handlers();
+     }
+@@ -699,6 +849,11 @@ static int server_run_instance(common_params & params, server_role & role, commo
+         return 1;
+     }
+ 
++    // Notify caller that server is ready (for combined mode TUI startup)
++    if (opts.on_ready) {
++        opts.on_ready(ctx_http.listening_addresses.front());
++    }
++
+     // optionally, notify router server that this instance is ready
+     std::thread monitor_thread;
+     if (role.is_managed_by_router()) {
+@@ -725,6 +880,9 @@ static int server_run_instance(common_params & params, server_role & role, commo
+         common_memory_breakdown_print(ll_ctx);
+     }
+ 
++#ifdef LLAMAFILE_TUI
++    server_tui_exit(opts);
++#endif
+     return 0;
+ }
+ 
+@@ -770,6 +928,14 @@ static int server_run(common_params & params, int argc, char ** argv, server_rol
  }
  
  int llama_server(int argc, char ** argv) {
@@ -56,10 +234,10 @@ diff --git a/tools/server/server.cpp b/tools/server/server.cpp
 +int server_main(int argc, char ** argv,
 +                std::function<void(const std::string &)> on_ready,
 +                std::function<void(std::function<void()>)> on_shutdown_available) {
-     std::setlocale(LC_NUMERIC, "C");
+     server_role role;
  
- #ifndef _WIN32
-@@ -96,6 +124,10 @@ int llama_server(int argc, char ** argv) {
+     std::setlocale(LC_NUMERIC, "C");
+@@ -782,6 +948,10 @@ int llama_server(int argc, char ** argv) {
      // own arguments required by this example
      common_params params;
  
@@ -70,170 +248,23 @@ diff --git a/tools/server/server.cpp b/tools/server/server.cpp
      common_init();
  
      // start the stream session manager GC right after common init, before any HTTP route can
-@@ -111,10 +143,12 @@ int llama_server(int argc, char ** argv) {
+@@ -797,7 +967,12 @@ int llama_server(int argc, char ** argv) {
      llama_backend_init();
      llama_numa_init(params.numa);
  
--    return llama_server(params, argc, argv);
-+    return llama_server(params, argc, argv, on_ready, on_shutdown_available);
+-    const int result = server_run(params, argc, argv, role, server_run_opts{});
++    server_run_opts opts;
++    opts.on_ready              = std::move(on_ready);
++    opts.on_shutdown_available = std::move(on_shutdown_available);
++    opts.argv                  = argv;
++
++    const int result = server_run(params, argc, argv, role, opts);
+     common_log_flush(common_log_main());
+     return result;
  }
- 
--int llama_server(common_params & params, int argc, char ** argv) {
-+int llama_server(common_params & params, int argc, char ** argv,
-+                 std::function<void(const std::string &)> on_ready,
-+                 std::function<void(std::function<void()>)> on_shutdown_available) {
-     bool is_run_by_cli = (argv == nullptr);
- 
-     common_models_handler models_handler;
-@@ -457,6 +491,103 @@ int llama_server(common_params & params, int argc, char ** argv) {
-             llama_backend_free();
-         };
- 
-+#ifdef COSMOCC
-+        // Sandbox (pledge()/unveil(), llamafile issue #930). The whole
-+        // derivation lives in llamafile/sandbox.c so it stays unit-testable
-+        // and off the vendored diff. Placement is constrained on every side:
-+        //   - after common_params_parse(): -hf downloads need connect()
-+        //   - after ctx_http.init(): the TLS certificate/key are read there
-+        //   - before ctx_http.start(): filters only cover threads created
-+        //     after installation, so the HTTP listener/pool must not exist
-+        //   - before load_model(): untrusted GGUF data is parsed sandboxed
-+        //
-+        // Combined mode hosts an in-process HTTP client (the TUI) that needs
-+        // connect(), which the accept-only sandbox forbids, so it's skipped.
-+        const bool combined_mode = on_ready || on_shutdown_available;
-+        if (combined_mode) {
-+            SRV_WRN("%s", "sandbox: disabled in combined mode; use --server for a sandboxed server\n");
-+        } else {
-+            // pledge() (no outbound network / writes / exec) is applied by
-+            // default. unveil() path confinement is opt-in (--confine-reads),
-+            // because a server opens files by path at request time (multimodal
-+            // media, etc.) that can't be known when the ruleset locks.
-+            //
-+            // cosmo installs the SECCOMP/Landlock filters on the calling thread
-+            // only (no TSYNC), so quiesce every pre-existing background thread
-+            // across the call: the llama.cpp log worker (pause() joins it,
-+            // resume() respawns it under the filter) and the stream-session GC
-+            // started at the top of server_main() (stop joins it, start
-+            // respawns it; no sessions exist yet, so stopping is a no-op
-+            // beyond the join).
-+            //
-+            // When --confine-reads is on, unveil() confines reads to these
-+            // directories, so collect every on-disk path the loader opens
-+            // after the lock. Add to this list when llama.cpp gains a new file
-+            // parameter (else it'd be denied under confinement). Paths read
-+            // before the sandbox (ssl_file_key/cert in ctx_http.init(), -hf
-+            // downloads in parse) need no entry.
-+            std::vector<const char *> read_paths, rw_paths;
-+            read_paths.push_back(params.model.path.c_str());
-+            read_paths.push_back(params.mmproj.path.c_str());
-+            read_paths.push_back(params.media_path.c_str());  // request-time media
-+            read_paths.push_back(params.speculative.draft.mparams.path.c_str());
-+            read_paths.push_back(params.speculative.ngram_cache.lookup_cache_static.c_str());
-+            read_paths.push_back(params.public_path.c_str());
-+            for (const auto & la : params.lora_adapters)
-+                read_paths.push_back(la.path.c_str());
-+            for (const auto & cv : params.control_vectors)
-+                read_paths.push_back(cv.fname.c_str());
-+            rw_paths.push_back(params.slot_save_path.c_str());
-+            rw_paths.push_back(params.path_prompt_cache.c_str());
-+            rw_paths.push_back(params.speculative.ngram_cache.lookup_cache_dynamic.c_str());
-+
-+            // Features that dial out at runtime need connect(), which the
-+            // accept-only default forbids; relax to full sockets for them
-+            // (still no writes/exec). --rpc has no params field -- its handler
-+            // registers backends directly -- so detect it on argv/env.
-+            const bool needs_outbound =
-+                params.ui_mcp_proxy ||
-+                !params.server_tools.empty() ||
-+                llamafile_has(argv, "--rpc") ||
-+                (std::getenv("LLAMA_ARG_RPC") != nullptr);
-+
-+            llamafile_sandbox_spec spec = {
-+                read_paths.data(), (int) read_paths.size(),
-+                rw_paths.data(), (int) rw_paths.size(),
-+                FLAG_confine_reads, needs_outbound,
-+            };
-+            // Bind the listening socket now: pledge "anet" only covers
-+            // IPv4/IPv6, so a Unix domain socket (--host /path.sock) can't be
-+            // created once the sandbox is on, while accept() on one that is
-+            // already bound stays allowed (llamafile issue #971). Binding
-+            // spawns no threads; ctx_http.start() reuses the socket.
-+            if (!ctx_http.bind_socket()) {
-+                clean_up();
-+                SRV_ERR("%s", "exiting due to HTTP server error\n");
-+                return 1;
-+            }
-+
-+            char promises[64];
-+            common_log_pause(common_log_main());
-+            server_stream_session_manager_stop();
-+            int sandbox = llamafile_sandbox_server(&spec, promises, sizeof(promises));
-+            int sandbox_errno = errno;  // capture before the respawns spawn threads
-+            server_stream_session_manager_start();
-+            common_log_resume(common_log_main());
-+            if (sandbox == LLAMAFILE_SANDBOX_FAILED) {
-+                SRV_ERR("sandbox: pledge failed: %s; retry with --unsecure to disable sandboxing\n",
-+                        strerror(sandbox_errno));
-+                clean_up();
-+                return 1;
-+            } else if (llamafile_sandbox_is_active(sandbox)) {
-+                SRV_INF("sandbox: pledge(\"%s\") %s\n", promises,
-+                        llamafile_sandbox_describe(sandbox));
-+            } else {
-+                SRV_WRN("sandbox: %s\n", llamafile_sandbox_describe(sandbox));
-+            }
-+        }
-+#endif
-+
-         // start the HTTP server before loading the model to be able to serve /health requests
-         if (!ctx_http.start()) {
-             clean_up();
-@@ -490,6 +621,13 @@ int llama_server(common_params & params, int argc, char ** argv) {
-             // this will unblock start_loop()
-             ctx_server.terminate();
-         };
-+
-+        // Provide shutdown function to caller (for combined mode)
-+        if (on_shutdown_available) {
-+            on_shutdown_available([&ctx_server]() {
-+                ctx_server.terminate();
-+            });
-+        }
-     }
- 
-     // register signal handler if not running by CLI
-@@ -530,6 +668,11 @@ int llama_server(common_params & params, int argc, char ** argv) {
-         // when the HTTP server stops, clean up and exit
-         clean_up();
-     } else {
-+        // Notify caller that server is ready (for combined mode TUI startup)
-+        if (on_ready) {
-+            on_ready(ctx_http.listening_address);
-+        }
-+
-         // optionally, notify router server that this instance is ready
-         std::thread monitor_thread;
-         if (child.is_child()) {
-@@ -554,5 +697,56 @@ int llama_server(common_params & params, int argc, char ** argv) {
-         }
-     }
- 
-+#ifdef LLAMAFILE_TUI
-+    // In combined mode (callbacks provided), return normally so the caller
-+    // can handle cleanup and TUI thread joining
-+    if (on_ready || on_shutdown_available) {
-+        return 0;
-+    }
-+    // By now the program can safely exit:
-+    // Metal backend has async logging that llama_synchronize() doesn't wait for.
-+    // Without this delay, _exit() might truncate llama_memory_breakdown_print's output
-+    sleep(1);
-+    // Use _exit() to avoid Metal cleanup crash (dangling refs with TUI + Metal + server)
-+    _exit(0);
-+#else
-     return 0;
-+#endif
+@@ -811,3 +986,40 @@ int llama_server(common_params & params, int argc, char ** argv) {
+     server_role role;
+     return server_run(params, argc, argv, role, opts);
  }
 +
 +// Standalone entry point for llama-server executable

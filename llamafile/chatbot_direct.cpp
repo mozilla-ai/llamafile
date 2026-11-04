@@ -61,7 +61,7 @@ public:
             if (use_chat_parser) {
                 std::string token_str = token_to_piece(g_ctx, id, true);
                 raw_output += token_str;
-                auto msg = common_chat_parse(raw_output, true, g_chat_syntax);
+                auto msg = common_chat_parse(common_chat_input(raw_output), true, g_chat_syntax);
                 auto diffs = common_chat_msg_diff::compute_diffs(prev_msg, msg);
 
                 for (const auto &diff : diffs) {

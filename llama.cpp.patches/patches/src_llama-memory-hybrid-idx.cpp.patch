@@ -1,0 +1,53 @@
+diff --git a/src/llama-memory-hybrid-idx.cpp b/src/llama-memory-hybrid-idx.cpp
+--- a/llama.cpp/src/llama-memory-hybrid-idx.cpp
++++ b/llama.cpp/src/llama-memory-hybrid-idx.cpp
+@@ -16,6 +16,25 @@
+ // llama_memory_hybrid_idx
+ //
+ 
++// llamafile: defined before the constructor, which instantiates ~unique_ptr<kpool_layout>;
++// with -std=gnu++23 that destructor is constexpr and clang instantiates it on the spot.
++// Which cells of a sequence make up which pool, for the whole cache.
++struct llama_memory_hybrid_idx::kpool_layout {
++    struct seq {
++        llama_pos pos_min = 0;
++        uint32_t  strm    = 0; // Stream holding this sequence's cells
++        std::vector<std::pair<llama_pos, uint32_t>> cells; // Position and stream local cell pairs, sorted by position.
++        std::vector<uint32_t> pools;
++
++        // Where the pool scan stopped, so an append resumes instead of starting over.
++        size_t j_next = 0;
++    };
++
++    std::array<seq, LLAMA_MAX_SEQ> seqs;
++
++    uint32_t n_pool_real = 0;
++};
++
+ llama_memory_hybrid_idx::llama_memory_hybrid_idx(
+         const llama_model & model,
+                      bool   no_alloc,
+@@ -329,23 +348,6 @@ static std::vector<uint32_t> llama_memory_hybrid_idx_ns(const llama_kv_cache::sl
+     return res;
+ }
+ 
+-// Which cells of a sequence make up which pool, for the whole cache.
+-struct llama_memory_hybrid_idx::kpool_layout {
+-    struct seq {
+-        llama_pos pos_min = 0;
+-        uint32_t  strm    = 0; // Stream holding this sequence's cells
+-        std::vector<std::pair<llama_pos, uint32_t>> cells; // Position and stream local cell pairs, sorted by position.
+-        std::vector<uint32_t> pools;
+-
+-        // Where the pool scan stopped, so an append resumes instead of starting over.
+-        size_t j_next = 0;
+-    };
+-
+-    std::array<seq, LLAMA_MAX_SEQ> seqs;
+-
+-    uint32_t n_pool_real = 0;
+-};
+-
+ // Which pools of the layout the current ubatch must re-pool, in the layout's pool order.
+ struct llama_memory_hybrid_idx_context::kpool_state {
+     std::vector<uint32_t> is_new;

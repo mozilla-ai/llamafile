@@ -1,7 +1,7 @@
 diff --git a/vendor/cpp-httplib/httplib.cpp b/vendor/cpp-httplib/httplib.cpp
 --- a/llama.cpp/vendor/cpp-httplib/httplib.cpp
 +++ b/llama.cpp/vendor/cpp-httplib/httplib.cpp
-@@ -2382,6 +2382,16 @@ socket_t create_socket(const std::string &host, const std::string &ip, int port,
+@@ -2551,6 +2551,16 @@ socket_t create_socket(const std::string &host, const std::string &ip, int port,
        hints.ai_addr = reinterpret_cast<sockaddr *>(&addr);
        hints.ai_addrlen = static_cast<socklen_t>(
            sizeof(addr) - sizeof(addr.sun_path) + addrlen);
@@ -18,7 +18,7 @@ diff --git a/vendor/cpp-httplib/httplib.cpp b/vendor/cpp-httplib/httplib.cpp
  
  #ifndef SOCK_CLOEXEC
  #ifndef _WIN32
-@@ -7244,6 +7254,22 @@ void ThreadPool::cleanup_finished_threads() {
+@@ -7723,6 +7733,22 @@ void ThreadPool::cleanup_finished_threads() {
  }
  
  void ThreadPool::worker(bool is_dynamic) {
@@ -41,7 +41,7 @@ diff --git a/vendor/cpp-httplib/httplib.cpp b/vendor/cpp-httplib/httplib.cpp
    for (;;) {
      std::function<void()> fn;
      {
-@@ -7261,7 +7287,13 @@ void ThreadPool::worker(bool is_dynamic) {
+@@ -7740,7 +7766,13 @@ void ThreadPool::worker(bool is_dynamic) {
            break;
          }
        } else {
@@ -56,7 +56,7 @@ diff --git a/vendor/cpp-httplib/httplib.cpp b/vendor/cpp-httplib/httplib.cpp
        }
  
        idle_thread_count_--;
-@@ -14003,6 +14035,13 @@ bool enumerate_macos_keychain_certs(Callback cb) {
+@@ -14684,6 +14716,13 @@ bool enumerate_macos_keychain_certs(Callback cb) {
  
  #if !defined(_WIN32) && !(defined(__APPLE__) &&                                \
                            defined(CPPHTTPLIB_USE_CERTS_FROM_MACOSX_KEYCHAIN))
@@ -70,7 +70,7 @@ diff --git a/vendor/cpp-httplib/httplib.cpp b/vendor/cpp-httplib/httplib.cpp
  // Common CA certificate file paths on Linux/Unix
  const char **system_ca_paths() {
    static const char *paths[] = {
-@@ -14020,6 +14059,10 @@ const char **system_ca_dirs() {
+@@ -14701,6 +14740,10 @@ const char **system_ca_dirs() {
    static const char *dirs[] = {"/etc/ssl/certs",             // Debian/Ubuntu
                                 "/etc/pki/tls/certs",         // RHEL/CentOS
                                 "/usr/share/ca-certificates", // Other

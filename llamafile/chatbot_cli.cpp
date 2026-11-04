@@ -82,17 +82,12 @@ static cli_chat_template_result cli_apply_chat_template_full(llama_model *model,
         inputs.reasoning_format = COMMON_REASONING_FORMAT_DEEPSEEK;
 
         auto chat_params = common_chat_templates_apply(templates, inputs);
-        result.prompt = chat_params.prompt;
+        result.prompt = chat_params.prompt.str();
 
-        // Initialize parser params from chat_params
-        result.parser_params.format = chat_params.format;
-        result.parser_params.generation_prompt = chat_params.generation_prompt;
-        if (!chat_params.parser.empty()) {
-            result.parser_params.parser.load(chat_params.parser);
-        }
-        // Enable reasoning parsing for thinking models
-        result.parser_params.reasoning_format = COMMON_REASONING_FORMAT_DEEPSEEK;
-        result.parser_params.reasoning_in_content = false;
+        // Initialize parser params from chat_params. Reasoning extraction is
+        // built into the parser from inputs.reasoning_format above.
+        result.parser_params = common_chat_parser_params(chat_params);
+        result.parser_params.parser = std::move(chat_params.parser);
         return result;
     }
 
@@ -408,10 +403,18 @@ int cli_main(int argc, char **argv) {
     common_chat_msg prev_msg;         // Previous parse result for diff computation
     bool think_tag_opened = false;    // Track if we've printed <think>
     bool think_tag_closed = false;    // Track if we've printed </think>
+    char last_reasoning_char = '\n';  // Last character of the printed reasoning
+    int n_generated = 0;              // New tokens so far, for -n / --n-predict
 
     while (n_cur < params.n_ctx) {
         if (g_got_sigint) {
             g_got_sigint = 0;
+            break;
+        }
+
+        // -n N stops after N new tokens; -1 (default) means no limit and -2
+        // means "until the context is full", which the loop bound covers.
+        if (params.n_predict >= 0 && n_generated >= params.n_predict) {
             break;
         }
 
@@ -429,7 +432,7 @@ int cli_main(int argc, char **argv) {
             raw_output += token_str;
 
             // Parse incrementally
-            auto msg = common_chat_parse(raw_output, /*is_partial=*/true, parser_params);
+            auto msg = common_chat_parse(common_chat_input(raw_output), /*is_partial=*/true, parser_params);
 
             // Compute diffs to find new content
             auto diffs = common_chat_msg_diff::compute_diffs(prev_msg, msg);
@@ -442,11 +445,17 @@ int cli_main(int argc, char **argv) {
                         think_tag_opened = true;
                     }
                     fputs(diff.reasoning_content_delta.c_str(), stdout);
+                    last_reasoning_char = diff.reasoning_content_delta.back();
                     fflush(stdout);
                 }
                 // Output final content (close think tag first if needed)
                 if (!diff.content_delta.empty()) {
                     if (think_tag_opened && !think_tag_closed) {
+                        // The parser trims the newline that ends the reasoning
+                        // (since llama.cpp v0.8.0), so put </think> on its own line
+                        if (last_reasoning_char != '\n') {
+                            fputs("\n", stdout);
+                        }
                         fputs("</think>\n", stdout);
                         think_tag_closed = true;
                     }
@@ -468,6 +477,7 @@ int cli_main(int argc, char **argv) {
             break;
         }
         n_cur++;
+        n_generated++;
     }
 
     // Ensure output ends with newline

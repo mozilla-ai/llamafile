@@ -245,11 +245,15 @@ LLAMAFILE_HIGHLIGHT_KEYWORDS := $(LLAMAFILE_HIGHLIGHT_GPERF_FILES:%.gperf=o/$(MO
 LLAMAFILE_SERVER_SUPPORT_OBJS := \
 	o/$(MODE)/llama.cpp/tools/server/server-chat.cpp.o \
 	o/$(MODE)/llama.cpp/tools/server/server-common.cpp.o \
+	o/$(MODE)/llama.cpp/tools/server/server-connect.cpp.o \
 	o/$(MODE)/llama.cpp/tools/server/server-context.cpp.o \
+	o/$(MODE)/llama.cpp/tools/server/server-decision.cpp.o \
 	o/$(MODE)/llama.cpp/tools/server/server-http.cpp.o \
 	o/$(MODE)/llama.cpp/tools/server/server-mcp.cpp.o \
+	o/$(MODE)/llama.cpp/tools/server/server-models-sched.cpp.o \
 	o/$(MODE)/llama.cpp/tools/server/server-models.cpp.o \
 	o/$(MODE)/llama.cpp/tools/server/server-queue.cpp.o \
+	o/$(MODE)/llama.cpp/tools/server/server-realtime.cpp.o \
 	o/$(MODE)/llama.cpp/tools/server/server-schema.cpp.o \
 	o/$(MODE)/llama.cpp/tools/server/server-stream.cpp.o \
 	o/$(MODE)/llama.cpp/tools/server/server-task.cpp.o \
@@ -301,11 +305,29 @@ LLAMAFILE_METAL_SOURCES := \
 	o/$(MODE)/llama.cpp/ggml/src/ggml-metal/kernels/argsort.metal.zip.o \
 	o/$(MODE)/llama.cpp/ggml/src/ggml-metal/kernels/binbcast.metal.zip.o \
 	o/$(MODE)/llama.cpp/ggml/src/ggml-metal/kernels/conv.metal.zip.o \
-	o/$(MODE)/llama.cpp/ggml/src/ggml-metal/kernels/fa.metal.zip.o \
+	o/$(MODE)/llama.cpp/ggml/src/ggml-metal/kernels/fa_aux.metal.zip.o \
+	o/$(MODE)/llama.cpp/ggml/src/ggml-metal/kernels/fa_common.metal.zip.o \
+	o/$(MODE)/llama.cpp/ggml/src/ggml-metal/kernels/fa_f16.metal.zip.o \
+	o/$(MODE)/llama.cpp/ggml/src/ggml-metal/kernels/fa_f32.metal.zip.o \
+	o/$(MODE)/llama.cpp/ggml/src/ggml-metal/kernels/fa_q4_0.metal.zip.o \
+	o/$(MODE)/llama.cpp/ggml/src/ggml-metal/kernels/fa_q4_1.metal.zip.o \
+	o/$(MODE)/llama.cpp/ggml/src/ggml-metal/kernels/fa_q5_0.metal.zip.o \
+	o/$(MODE)/llama.cpp/ggml/src/ggml-metal/kernels/fa_q5_1.metal.zip.o \
+	o/$(MODE)/llama.cpp/ggml/src/ggml-metal/kernels/fa_q8_0.metal.zip.o \
+	o/$(MODE)/llama.cpp/ggml/src/ggml-metal/kernels/fa_tensor.metal.zip.o \
+	o/$(MODE)/llama.cpp/ggml/src/ggml-metal/kernels/fa_vec_common.metal.zip.o \
+	o/$(MODE)/llama.cpp/ggml/src/ggml-metal/kernels/fa_vec_f16.metal.zip.o \
+	o/$(MODE)/llama.cpp/ggml/src/ggml-metal/kernels/fa_vec_f32.metal.zip.o \
+	o/$(MODE)/llama.cpp/ggml/src/ggml-metal/kernels/fa_vec_q4_0.metal.zip.o \
+	o/$(MODE)/llama.cpp/ggml/src/ggml-metal/kernels/fa_vec_q4_1.metal.zip.o \
+	o/$(MODE)/llama.cpp/ggml/src/ggml-metal/kernels/fa_vec_q5_0.metal.zip.o \
+	o/$(MODE)/llama.cpp/ggml/src/ggml-metal/kernels/fa_vec_q5_1.metal.zip.o \
+	o/$(MODE)/llama.cpp/ggml/src/ggml-metal/kernels/fa_vec_q8_0.metal.zip.o \
 	o/$(MODE)/llama.cpp/ggml/src/ggml-metal/kernels/gated_delta_net.metal.zip.o \
 	o/$(MODE)/llama.cpp/ggml/src/ggml-metal/kernels/misc.metal.zip.o \
 	o/$(MODE)/llama.cpp/ggml/src/ggml-metal/kernels/mul_mm.metal.zip.o \
 	o/$(MODE)/llama.cpp/ggml/src/ggml-metal/kernels/mul_mv.metal.zip.o \
+	o/$(MODE)/llama.cpp/ggml/src/ggml-metal/kernels/mul_mv_mma.metal.zip.o \
 	o/$(MODE)/llama.cpp/ggml/src/ggml-metal/kernels/norm.metal.zip.o \
 	o/$(MODE)/llama.cpp/ggml/src/ggml-metal/kernels/pool.metal.zip.o \
 	o/$(MODE)/llama.cpp/ggml/src/ggml-metal/kernels/quantize.metal.zip.o \

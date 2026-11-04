@@ -1,0 +1,12 @@
+diff --git a/src/agent.cpp b/src/agent.cpp
+--- a/agent.cpp/src/agent.cpp
++++ b/agent.cpp/src/agent.cpp
+@@ -171,7 +171,7 @@ Agent::build_prompt_tokens()
+ 
+     auto params = common_chat_templates_apply(model->get_templates(), inputs);
+ 
+-    return model->tokenize(params.prompt);
++    return model->tokenize(params.prompt.str());
+ }
+ 
+ bool

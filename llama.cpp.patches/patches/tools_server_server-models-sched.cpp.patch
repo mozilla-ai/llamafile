@@ -1,0 +1,33 @@
+diff --git a/tools/server/server-models-sched.cpp b/tools/server/server-models-sched.cpp
+--- a/llama.cpp/tools/server/server-models-sched.cpp
++++ b/llama.cpp/tools/server/server-models-sched.cpp
+@@ -277,7 +277,12 @@ void server_models_sched::make_room(const std::string & name) {
+         };
+         if (!measured()) {
+             SRV_INF("waiting for the memory measurement of model name=%s\n", name.c_str());
+-            models.cv.wait(lk, measured);
++            // Use wait_for() instead of wait() to work around a Cosmopolitan libc bug
++            // where untimed futex waits on XNU (macOS) expire after ~72 minutes,
++            // causing condition_variable::wait() to throw ETIMEDOUT.
++            while (!measured()) {
++                models.cv.wait_for(lk, std::chrono::seconds(30));
++            }
+         }
+     }
+ 
+@@ -298,9 +303,12 @@ void server_models_sched::make_room(const std::string & name) {
+         // wait for unload to complete
+         {
+             std::unique_lock<std::mutex> lk(models.mutex);
+-            models.cv.wait(lk, [this, &lru_model_name]() {
+-                return models.mapping[lru_model_name].meta.status == SERVER_MODEL_STATUS_UNLOADED;
+-            });
++            // Use wait_for() instead of wait() to work around a Cosmopolitan libc
++            // bug where untimed futex waits on XNU (macOS) expire after ~72 minutes,
++            // causing condition_variable::wait() to throw ETIMEDOUT.
++            while (models.mapping[lru_model_name].meta.status != SERVER_MODEL_STATUS_UNLOADED) {
++                models.cv.wait_for(lk, std::chrono::seconds(30));
++            }
+         }
+     }
+ }

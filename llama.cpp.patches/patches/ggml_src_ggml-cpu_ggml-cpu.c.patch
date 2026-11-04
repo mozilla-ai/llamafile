@@ -1,7 +1,7 @@
 diff --git a/ggml/src/ggml-cpu/ggml-cpu.c b/ggml/src/ggml-cpu/ggml-cpu.c
 --- a/llama.cpp/ggml/src/ggml-cpu/ggml-cpu.c
 +++ b/llama.cpp/ggml/src/ggml-cpu/ggml-cpu.c
-@@ -1555,6 +1555,26 @@ static void ggml_compute_forward_mul_mat_id(
+@@ -1559,6 +1559,26 @@ static void ggml_compute_forward_mul_mat_id(
      const struct ggml_tensor * src1 = dst->src[1];
      const struct ggml_tensor * ids = dst->src[2];
  
@@ -28,7 +28,7 @@ diff --git a/ggml/src/ggml-cpu/ggml-cpu.c b/ggml/src/ggml-cpu/ggml-cpu.c
      GGML_TENSOR_BINARY_OP_LOCALS
  
      const int ith = params->ith;
-@@ -1691,6 +1711,24 @@ static void ggml_compute_forward_mul_mat_id(
+@@ -1692,6 +1712,24 @@ static void ggml_compute_forward_mul_mat_id(
          const int64_t nr0 = ne01;
          const int64_t nr1 = cne1;
  
@@ -53,10 +53,10 @@ diff --git a/ggml/src/ggml-cpu/ggml-cpu.c b/ggml/src/ggml-cpu/ggml-cpu.c
          int chunk_size = 16;
          if (nr0 == 1 || nr1 == 1) {
              chunk_size = 64;
-@@ -2919,6 +2957,19 @@ struct ggml_cplan ggml_graph_plan(
-                         if (ggml_cpu_iqp_supports_mul_mat_id(node)) {
-                             cur += n_tasks * ggml_cpu_iqp_scratch_size(node) + 64;
-                         }
+@@ -2921,6 +2959,19 @@ struct ggml_cplan ggml_graph_plan(
+                         // Workspace for tiled (see tiled.h)
+                         cur = GGML_PAD(cur, 64);
+                         cur += ggml_tiled_wdata_size(n_tasks, node);
 +#if GGML_USE_LLAMAFILE
 +                        // [jart] reserve work-buffer space for llamafile_mixmul.
 +                        // Without this, MixMul::allocate_shared_memory() in

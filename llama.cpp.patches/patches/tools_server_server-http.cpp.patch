@@ -1,16 +1,16 @@
 diff --git a/tools/server/server-http.cpp b/tools/server/server-http.cpp
 --- a/llama.cpp/tools/server/server-http.cpp
 +++ b/llama.cpp/tools/server/server-http.cpp
-@@ -104,7 +104,7 @@ bool server_http_context::init(const common_params & params) {
- 
-     auto & srv = pimpl->srv;
+@@ -159,7 +159,7 @@ bool server_http_context::init(const common_params & params) {
+ bool server_http_context::init_listener(const common_params & params) {
+     auto & srv = pimpl->servers.back();
  
 -#ifdef CPPHTTPLIB_OPENSSL_SUPPORT
 +#ifdef CPPHTTPLIB_SSL_ENABLED
      if (!params.ssl_file_key.empty() && !params.ssl_file_cert.empty()) {
          SRV_TRC("running with SSL: key = %s, cert = %s\n", params.ssl_file_key.c_str(), params.ssl_file_cert.c_str());
          srv = std::make_unique<httplib::SSLServer>(
-@@ -429,12 +429,15 @@ bool server_http_context::init(const common_params & params) {
+@@ -491,7 +491,11 @@ self.addEventListener('activate', (e) => e.waitUntil((async () => {
      return true;
  }
  
@@ -22,14 +22,9 @@ diff --git a/tools/server/server-http.cpp b/tools/server/server-http.cpp
 +
      // Bind and listen
  
-     const auto & srv = pimpl->srv;
-     auto was_bound = false;
--    auto is_sock = false;
-     if (string_ends_with(std::string(hostname), ".sock")) {
-         is_sock = true;
-         SRV_TRC("%s", "setting address family to AF_UNIX\n");
-@@ -461,6 +464,17 @@ bool server_http_context::start() {
-         return false;
+     listening_addresses.clear();
+@@ -524,6 +528,15 @@ bool server_http_context::start() {
+                                               : string_format("%s://%s:%d", is_ssl ? "https" : "http", common_http_format_host(host).c_str(), port));
      }
  
 +    is_bound = true;
@@ -41,8 +36,6 @@ diff --git a/tools/server/server-http.cpp b/tools/server/server-http.cpp
 +        return false;
 +    }
 +
-+    const auto & srv = pimpl->srv;
-+
-     // run the HTTP server in a thread
-     thread = std::thread([this] { pimpl->srv->listen_after_bind(); });
-     srv->wait_until_ready();
+     // n_threads_http fixed threads (always alive), plus up to 1024 dynamic threads destroyed after each request
+     // ref: https://github.com/yhirose/cpp-httplib/pull/2368
+     pimpl->pool = std::make_unique<httplib::ThreadPool>(pimpl->n_threads_http, pimpl->n_threads_http + 1024);

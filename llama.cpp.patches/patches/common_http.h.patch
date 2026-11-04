@@ -1,7 +1,7 @@
 diff --git a/common/http.h b/common/http.h
 --- a/llama.cpp/common/http.h
 +++ b/llama.cpp/common/http.h
-@@ -40,10 +40,15 @@ static common_http_url common_http_parse_url(const std::string & url) {
+@@ -42,10 +42,15 @@ static common_http_url common_http_parse_url(const std::string & url) {
      }
  
      auto rest = url.substr(scheme_end + 3);
@@ -19,7 +19,7 @@ diff --git a/common/http.h b/common/http.h
          auto colon_pos = auth.find(':');
          if (colon_pos != std::string::npos) {
              parts.user = auth.substr(0, colon_pos);
-@@ -51,18 +56,14 @@ static common_http_url common_http_parse_url(const std::string & url) {
+@@ -53,18 +58,14 @@ static common_http_url common_http_parse_url(const std::string & url) {
          } else {
              parts.user = auth;
          }
@@ -43,7 +43,7 @@ diff --git a/common/http.h b/common/http.h
  
      // split the authority into host and optional port, a bracketed IPv6 literal keeps its inner colons (RFC 3986)
      std::string port_str;
-@@ -74,6 +75,8 @@ static common_http_url common_http_parse_url(const std::string & url) {
+@@ -76,6 +77,8 @@ static common_http_url common_http_parse_url(const std::string & url) {
          auto after = parts.host.substr(close + 1);
          if (!after.empty() && after.front() == ':') {
              port_str = after.substr(1);
@@ -52,7 +52,7 @@ diff --git a/common/http.h b/common/http.h
          }
          parts.host = parts.host.substr(1, close - 1);
      } else {
-@@ -85,7 +88,14 @@ static common_http_url common_http_parse_url(const std::string & url) {
+@@ -87,7 +90,14 @@ static common_http_url common_http_parse_url(const std::string & url) {
      }
  
      if (!port_str.empty()) {
@@ -67,7 +67,7 @@ diff --git a/common/http.h b/common/http.h
      } else if (parts.scheme == "http") {
          parts.port = 80;
      } else if (parts.scheme == "https") {
-@@ -104,7 +114,7 @@ static std::pair<httplib::Client, common_http_url> common_http_client(const std:
+@@ -218,7 +228,7 @@ static std::pair<httplib::Client, common_http_url> common_http_client(const std:
          throw std::runtime_error("error: invalid URL format");
      }
  

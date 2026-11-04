@@ -180,17 +180,45 @@ diff --git a/src/model.cpp b/src/model.cpp
                         true) < 0) {
          return {}; // Return empty vector on failure
      }
-@@ -261,6 +276,9 @@ parse_with_parser(const common_peg_arena& parser,
+@@ -232,19 +247,6 @@ Model::tokenize(const std::string& prompt) const
+ 
+ namespace {
+ 
+-/// Deserializes the PEG parser derived from the chat template. An empty
+-/// definition yields an empty arena, which common_chat_peg_parse() treats as a
+-/// pure-content parser.
+-common_peg_arena
+-load_parser(const std::string& parser_definition)
+-{
+-    common_peg_arena arena;
+-    if (!parser_definition.empty()) {
+-        arena.load(parser_definition);
+-    }
+-    return arena;
+-}
+-
+ common_chat_msg
+ parse_with_parser(const common_peg_arena& parser,
+                   const common_chat_params& params,
+@@ -259,12 +261,14 @@ parse_with_parser(const common_peg_arena& parser,
+     // The parser is derived from the chat template together with the
+     // generation prompt it was built against, and parsing needs both
      // (ggml-org/llama.cpp#18675). Without them tool calls stay as raw text.
-     syntax.generation_prompt = params.generation_prompt;
-     syntax.parse_tool_calls = true;
-+    // llamafile: extract <think>...</think> into reasoning_content instead
-+    // of leaving it inline in content (callers decide how to show it).
-+    syntax.reasoning_format = COMMON_REASONING_FORMAT_AUTO;
+-    syntax.generation_prompt = params.generation_prompt;
+-    syntax.parse_tool_calls = true;
++    // llamafile: since llama.cpp v0.8.0 tool calls are always parsed, and
++    // reasoning extraction is built into the parser at apply time
++    // (inputs.reasoning_format), so there are no parse-time switches left.
++    syntax.generation_prompt = common_chat_input(params.generation_prompt);
  
      try {
          auto parsed_msg =
-@@ -276,6 +294,62 @@ parse_with_parser(const common_peg_arena& parser,
+-          common_chat_peg_parse(parser, response, false, syntax);
++          common_chat_peg_parse(parser, common_chat_input(response), false, syntax);
+         parsed_msg.role = "assistant";
+         return parsed_msg;
+     } catch (const std::exception& e) {
+@@ -276,6 +280,62 @@ parse_with_parser(const common_peg_arena& parser,
      }
  }
  
@@ -253,7 +281,7 @@ diff --git a/src/model.cpp b/src/model.cpp
  }
  
  common_chat_msg
-@@ -288,11 +362,97 @@ Model::generate(const std::vector<common_chat_msg>& messages,
+@@ -288,28 +348,213 @@ Model::generate(const std::vector<common_chat_msg>& messages,
      inputs.tools = tools;
      inputs.tool_choice = COMMON_CHAT_TOOL_CHOICE_AUTO;
      inputs.add_generation_prompt = true;
@@ -261,7 +289,7 @@ diff --git a/src/model.cpp b/src/model.cpp
 +    inputs.enable_thinking = config_.enable_thinking; // llamafile: was false
 +    // llamafile: build the template's parser with reasoning rules so any
 +    // <think>...</think> the model emits anyway is extracted into
-+    // reasoning_content (matching syntax.reasoning_format in the parse).
++    // reasoning_content.
 +    inputs.reasoning_format = COMMON_REASONING_FORMAT_AUTO;
  
      auto params =
@@ -350,19 +378,24 @@ diff --git a/src/model.cpp b/src/model.cpp
 +    }
 +
      // Tokenize the prompt
-     std::vector<llama_token> prompt_tokens = tokenize(params.prompt);
+-    std::vector<llama_token> prompt_tokens = tokenize(params.prompt);
++    std::vector<llama_token> prompt_tokens = tokenize(params.prompt.str());
      if (prompt_tokens.empty()) {
-@@ -308,8 +468,114 @@ Model::generate(const std::vector<common_chat_msg>& messages,
-         parser_source_ = params.parser;
+         throw ModelError("failed to tokenize prompt");
      }
  
--    return parse_with_parser(
--      parser_arena_, params, response, config_.chat_format);
+     std::string response = generate_from_tokens(prompt_tokens, callback);
+ 
+-    // The PEG parser only changes when the rendered template changes, so keep
+-    // the deserialized arena around instead of re-parsing it every turn.
+-    if (parser_source_ != params.parser) {
+-        parser_arena_ = load_parser(params.parser);
+-        parser_source_ = params.parser;
 +    common_chat_msg parsed_msg;
 +    std::optional<ModelError> parse_error;
 +    try {
 +        parsed_msg = parse_with_parser(
-+          parser_arena_, params, response, config_.chat_format);
++          params.parser, params, response, config_.chat_format);
 +    } catch (const ModelError& e) {
 +        // llamafile: a parse refusal must not kill the agent loop. Fall
 +        // back to content-only, with the reasoning split off so it is
@@ -375,7 +408,10 @@ diff --git a/src/model.cpp b/src/model.cpp
 +        parse_error = e;
 +        parsed_msg.content = response;
 +        split_reasoning(params, parsed_msg);
-+    }
+     }
+-
+-    return parse_with_parser(
+-      parser_arena_, params, response, config_.chat_format);
 +    // A reply that ends inside a reasoning block it never closed, with
 +    // nothing else, holds the model's answer in that block: small models
 +    // do this after a tool result. Take it as the content, so a tool call
@@ -469,7 +505,17 @@ diff --git a/src/model.cpp b/src/model.cpp
  }
  
  common_chat_msg
-@@ -338,10 +604,16 @@ Model::generate_from_tokens(const std::vector<llama_token>& all_tokens,
+@@ -317,8 +562,7 @@ parse_response(const common_chat_params& params,
+                const std::string& response,
+                std::optional<common_chat_format> format_override)
+ {
+-    return parse_with_parser(
+-      load_parser(params.parser), params, response, format_override);
++    return parse_with_parser(params.parser, params, response, format_override);
+ }
+ 
+ std::string
+@@ -338,10 +582,16 @@ Model::generate_from_tokens(const std::vector<llama_token>& all_tokens,
          common_prefix++;
      }
  
@@ -488,7 +534,7 @@ diff --git a/src/model.cpp b/src/model.cpp
          processed_tokens_.resize(common_prefix);
          n_past_ = common_prefix;
      }
-@@ -370,15 +642,15 @@ Model::generate_from_tokens(const std::vector<llama_token>& all_tokens,
+@@ -370,15 +620,15 @@ Model::generate_from_tokens(const std::vector<llama_token>& all_tokens,
          i += batch_size;
      }
  

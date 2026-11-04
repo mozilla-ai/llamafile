@@ -1,7 +1,7 @@
 diff --git a/ggml/src/ggml-vulkan/ggml-vulkan.cpp b/ggml/src/ggml-vulkan/ggml-vulkan.cpp
 --- a/llama.cpp/ggml/src/ggml-vulkan/ggml-vulkan.cpp
 +++ b/llama.cpp/ggml/src/ggml-vulkan/ggml-vulkan.cpp
-@@ -12492,20 +12492,28 @@ bool ggml_backend_buffer_is_vk(ggml_backend_buffer_t buffer) {
+@@ -13096,20 +13096,28 @@ bool ggml_backend_buffer_is_vk(ggml_backend_buffer_t buffer) {
      return buffer->buft->iface.get_name == ggml_backend_vk_buffer_type_name;
  }
  
@@ -33,7 +33,7 @@ diff --git a/ggml/src/ggml-vulkan/ggml-vulkan.cpp b/ggml/src/ggml-vulkan/ggml-vu
      VK_LOG_DEBUG("ggml_backend_vk_buffer_init_tensor(" << buffer << " (" << buffer->context << "), " << tensor << ")");
      if (tensor->view_src != nullptr) {
          GGML_ASSERT(tensor->view_src->buffer->buft == buffer->buft);
-@@ -12513,7 +12521,7 @@ enum ggml_status ggml_backend_vk_buffer_init_tensor(ggml_backend_buffer_t buffer
+@@ -13117,7 +13125,7 @@ enum ggml_status ggml_backend_vk_buffer_init_tensor(ggml_backend_buffer_t buffer
      return GGML_STATUS_SUCCESS;
  }
  
@@ -42,7 +42,7 @@ diff --git a/ggml/src/ggml-vulkan/ggml-vulkan.cpp b/ggml/src/ggml-vulkan/ggml-vu
      VK_LOG_DEBUG("ggml_backend_vk_buffer_memset_tensor(" << buffer << ", " << tensor << ", " << value << ", " << offset << ", " << size << ")");
      ggml_backend_vk_buffer_context * buf_ctx = (ggml_backend_vk_buffer_context *)buffer->context;
      vk_buffer buf = buf_ctx->dev_buffer;
-@@ -12526,7 +12534,7 @@ void ggml_backend_vk_buffer_memset_tensor(ggml_backend_buffer_t buffer, ggml_ten
+@@ -13130,7 +13138,7 @@ void ggml_backend_vk_buffer_memset_tensor(ggml_backend_buffer_t buffer, ggml_ten
      ggml_vk_buffer_memset(buf, vk_tensor_offset(tensor) + tensor->view_offs + offset, val32, size);
  }
  
@@ -51,7 +51,7 @@ diff --git a/ggml/src/ggml-vulkan/ggml-vulkan.cpp b/ggml/src/ggml-vulkan/ggml-vu
      VK_LOG_DEBUG("ggml_backend_vk_buffer_set_tensor(" << buffer << ", " << tensor << ", " << data << ", " << offset << ", " << size << ")");
      ggml_backend_vk_buffer_context * buf_ctx = (ggml_backend_vk_buffer_context *)buffer->context;
      vk_buffer buf = buf_ctx->dev_buffer;
-@@ -12538,7 +12546,7 @@ void ggml_backend_vk_buffer_set_tensor(ggml_backend_buffer_t buffer, ggml_tensor
+@@ -13142,7 +13150,7 @@ void ggml_backend_vk_buffer_set_tensor(ggml_backend_buffer_t buffer, ggml_tensor
      ggml_vk_buffer_write(buf, vk_tensor_offset(tensor) + tensor->view_offs + offset, data, size);
  }
  
@@ -60,7 +60,7 @@ diff --git a/ggml/src/ggml-vulkan/ggml-vulkan.cpp b/ggml/src/ggml-vulkan/ggml-vu
                                                   size_t size, size_t n_copies, size_t stride_tensor, size_t stride_data) {
      VK_LOG_DEBUG("ggml_backend_vk_buffer_set_tensor_2d(" << buffer << ", " << tensor << ", " << data << ", " << offset << ", " << size << ", " <<
                   n_copies << ", " << stride_tensor << ", " << stride_data << ")");
-@@ -12552,7 +12560,7 @@ void ggml_backend_vk_buffer_set_tensor_2d(ggml_backend_buffer_t buffer, ggml_ten
+@@ -13156,7 +13164,7 @@ void ggml_backend_vk_buffer_set_tensor_2d(ggml_backend_buffer_t buffer, ggml_ten
      ggml_vk_buffer_write_2d(buf, vk_tensor_offset(tensor) + tensor->view_offs + offset, data, stride_data, stride_tensor, size, n_copies);
  }
  
@@ -69,7 +69,7 @@ diff --git a/ggml/src/ggml-vulkan/ggml-vulkan.cpp b/ggml/src/ggml-vulkan/ggml-vu
      VK_LOG_DEBUG("ggml_backend_vk_buffer_get_tensor(" << buffer << ", " << tensor << ", " << data << ", " << offset << ", " << size << ")");
      ggml_backend_vk_buffer_context * buf_ctx = (ggml_backend_vk_buffer_context *)buffer->context;
  
-@@ -12565,7 +12573,7 @@ void ggml_backend_vk_buffer_get_tensor(ggml_backend_buffer_t buffer, const ggml_
+@@ -13169,7 +13177,7 @@ void ggml_backend_vk_buffer_get_tensor(ggml_backend_buffer_t buffer, const ggml_
      ggml_vk_buffer_read(buf, vk_tensor_offset(tensor) + tensor->view_offs + offset, data, size);
  }
  
@@ -78,7 +78,7 @@ diff --git a/ggml/src/ggml-vulkan/ggml-vulkan.cpp b/ggml/src/ggml-vulkan/ggml-vu
                                                   size_t size, size_t n_copies, size_t stride_tensor, size_t stride_data) {
      VK_LOG_DEBUG("ggml_backend_vk_buffer_get_tensor_2d(" << buffer << ", " << tensor << ", " << data << ", " << offset << ", " << size << ", " <<
                   n_copies << ", " << stride_tensor << ", " << stride_data << ")");
-@@ -12580,7 +12588,7 @@ void ggml_backend_vk_buffer_get_tensor_2d(ggml_backend_buffer_t buffer, const gg
+@@ -13184,7 +13192,7 @@ void ggml_backend_vk_buffer_get_tensor_2d(ggml_backend_buffer_t buffer, const gg
      ggml_vk_buffer_read_2d(buf, vk_tensor_offset(tensor) + tensor->view_offs + offset, data, stride_tensor, stride_data, size, n_copies);
  }
  
@@ -87,7 +87,7 @@ diff --git a/ggml/src/ggml-vulkan/ggml-vulkan.cpp b/ggml/src/ggml-vulkan/ggml-vu
      if (ggml_nbytes(src) == 0) {
          return true;
      }
-@@ -12601,19 +12609,19 @@ bool ggml_backend_vk_buffer_cpy_tensor(ggml_backend_buffer_t buffer, const ggml_
+@@ -13205,19 +13213,19 @@ bool ggml_backend_vk_buffer_cpy_tensor(ggml_backend_buffer_t buffer, const ggml_
      UNUSED(buffer);
  }
  
@@ -110,7 +110,7 @@ diff --git a/ggml/src/ggml-vulkan/ggml-vulkan.cpp b/ggml/src/ggml-vulkan/ggml-vu
      VK_LOG_MEMORY("ggml_backend_vk_buffer_type_alloc_buffer(" << size << ")");
      ggml_backend_vk_buffer_type_context * ctx = (ggml_backend_vk_buffer_type_context *) buft->context;
  
-@@ -12629,17 +12637,17 @@ ggml_backend_buffer_t ggml_backend_vk_buffer_type_alloc_buffer(ggml_backend_buff
+@@ -13233,17 +13241,17 @@ ggml_backend_buffer_t ggml_backend_vk_buffer_type_alloc_buffer(ggml_backend_buff
      return ggml_backend_buffer_init(buft, ggml_backend_vk_buffer_interface, bufctx, size);
  }
  
@@ -131,7 +131,7 @@ diff --git a/ggml/src/ggml-vulkan/ggml-vulkan.cpp b/ggml/src/ggml-vulkan/ggml-vu
      return ggml_nbytes(tensor);
  
      UNUSED(buft);
-@@ -12655,18 +12663,18 @@ ggml_backend_buffer_type_t ggml_backend_vk_buffer_type(size_t dev_num) {
+@@ -13259,18 +13267,18 @@ ggml_backend_buffer_type_t ggml_backend_vk_buffer_type(size_t dev_num) {
      return &dev->buffer_type;
  }
  
@@ -145,7 +145,7 @@ diff --git a/ggml/src/ggml-vulkan/ggml-vulkan.cpp b/ggml/src/ggml-vulkan/ggml-vu
 -static void ggml_backend_vk_host_buffer_free_buffer(ggml_backend_buffer_t buffer) {
 +static void GGML_CALL ggml_backend_vk_host_buffer_free_buffer(ggml_backend_buffer_t buffer) {
      VK_LOG_MEMORY("ggml_backend_vk_host_buffer_free_buffer()");
-     ggml_vk_host_free(vk_instance.devices[0], buffer->context);
+     ggml_vk_host_free(buffer->context);
  }
  
 -static ggml_backend_buffer_t ggml_backend_vk_host_buffer_type_alloc_buffer(ggml_backend_buffer_type_t buft, size_t size) {
@@ -153,7 +153,7 @@ diff --git a/ggml/src/ggml-vulkan/ggml-vulkan.cpp b/ggml/src/ggml-vulkan/ggml-vu
      VK_LOG_MEMORY("ggml_backend_vk_host_buffer_type_alloc_buffer(" << size << ")");
  
      size += 32;  // Behave like the CPU buffer type
-@@ -12682,19 +12690,20 @@ static ggml_backend_buffer_t ggml_backend_vk_host_buffer_type_alloc_buffer(ggml_
+@@ -13284,19 +13292,20 @@ static ggml_backend_buffer_t ggml_backend_vk_host_buffer_type_alloc_buffer(ggml_
      ggml_backend_buffer_t buffer = ggml_backend_cpu_buffer_from_ptr(ptr, size);
      buffer->buft = buft;
      buffer->iface.free_buffer = ggml_backend_vk_host_buffer_free_buffer;
@@ -176,7 +176,7 @@ diff --git a/ggml/src/ggml-vulkan/ggml-vulkan.cpp b/ggml/src/ggml-vulkan/ggml-vu
      return vk_instance.devices[0]->suballocation_block_size;
  
      UNUSED(buft);
-@@ -12721,13 +12730,13 @@ ggml_backend_buffer_type_t ggml_backend_vk_host_buffer_type() {
+@@ -13325,13 +13334,13 @@ ggml_backend_buffer_type_t ggml_backend_vk_host_buffer_type() {
      return &ggml_backend_vk_buffer_type_host;
  }
  
@@ -192,7 +192,7 @@ diff --git a/ggml/src/ggml-vulkan/ggml-vulkan.cpp b/ggml/src/ggml-vulkan/ggml-vu
      ggml_backend_vk_context * ctx = (ggml_backend_vk_context *)backend->context;
      VK_LOG_DEBUG("ggml_backend_vk_free(" << ctx->name << ")");
  
-@@ -12743,7 +12752,7 @@ static ggml_backend_buffer_type_t ggml_backend_vk_get_default_buffer_type(ggml_b
+@@ -13347,7 +13356,7 @@ static ggml_backend_buffer_type_t ggml_backend_vk_get_default_buffer_type(ggml_b
      return &ctx->device->buffer_type;
  }
  
@@ -201,7 +201,7 @@ diff --git a/ggml/src/ggml-vulkan/ggml-vulkan.cpp b/ggml/src/ggml-vulkan/ggml-vu
                                                  size_t size, size_t n_copies, size_t stride_tensor, size_t stride_data) {
      VK_LOG_DEBUG("ggml_backend_vk_set_tensor_2d_async(" << size << ", " << n_copies << ")");
      ggml_backend_vk_context * ctx = (ggml_backend_vk_context *)backend->context;
-@@ -12801,12 +12810,12 @@ static void ggml_backend_vk_set_tensor_2d_async(ggml_backend_t backend, ggml_ten
+@@ -13405,12 +13414,12 @@ static void ggml_backend_vk_set_tensor_2d_async(ggml_backend_t backend, ggml_ten
      }
  }
  
@@ -216,7 +216,7 @@ diff --git a/ggml/src/ggml-vulkan/ggml-vulkan.cpp b/ggml/src/ggml-vulkan/ggml-vu
                                                  size_t size, size_t n_copies, size_t stride_tensor, size_t stride_data) {
      VK_LOG_DEBUG("ggml_backend_vk_get_tensor_2d_async(" << size << ", " << n_copies << ")");
      ggml_backend_vk_context * ctx = (ggml_backend_vk_context *)backend->context;
-@@ -12857,12 +12866,12 @@ static void ggml_backend_vk_get_tensor_2d_async(ggml_backend_t backend, const gg
+@@ -13461,12 +13470,12 @@ static void ggml_backend_vk_get_tensor_2d_async(ggml_backend_t backend, const gg
      }
  }
  
@@ -231,7 +231,7 @@ diff --git a/ggml/src/ggml-vulkan/ggml-vulkan.cpp b/ggml/src/ggml-vulkan/ggml-vu
      VK_LOG_DEBUG("ggml_backend_vk_cpy_tensor_async(" << src << " -> " << dst << ", size=" << ggml_nbytes(src) << ")");
      ggml_backend_vk_context * ctx = (ggml_backend_vk_context *)backend_dst->context;
  
-@@ -13004,7 +13013,7 @@ void ggml_vk_synchronize(ggml_backend_vk_context * ctx) {
+@@ -13608,7 +13617,7 @@ void ggml_vk_synchronize(ggml_backend_vk_context * ctx) {
      }
  }
  
@@ -240,7 +240,7 @@ diff --git a/ggml/src/ggml-vulkan/ggml-vulkan.cpp b/ggml/src/ggml-vulkan/ggml-vu
      VK_LOG_DEBUG("ggml_backend_vk_synchronize()");
      ggml_backend_vk_context * ctx = (ggml_backend_vk_context *)backend->context;
  
-@@ -13741,7 +13750,7 @@ static int32_t find_first_set(uint32_t x) {
+@@ -14358,7 +14367,7 @@ static int32_t find_first_set(uint32_t x) {
      return ret;
  }
  
@@ -249,7 +249,7 @@ diff --git a/ggml/src/ggml-vulkan/ggml-vulkan.cpp b/ggml/src/ggml-vulkan/ggml-vu
      VK_LOG_DEBUG("ggml_backend_vk_graph_compute(" << cgraph->n_nodes << " nodes)");
      ggml_backend_vk_context * ctx = (ggml_backend_vk_context *)backend->context;
  
-@@ -14236,7 +14245,7 @@ static ggml_status ggml_backend_vk_graph_compute(ggml_backend_t backend, ggml_cg
+@@ -14862,7 +14871,7 @@ static ggml_status ggml_backend_vk_graph_compute(ggml_backend_t backend, ggml_cg
      UNUSED(backend);
  }
  
@@ -258,7 +258,7 @@ diff --git a/ggml/src/ggml-vulkan/ggml-vulkan.cpp b/ggml/src/ggml-vulkan/ggml-vu
  {
      VK_LOG_DEBUG("ggml_vk_graph_optimize(" << graph->n_nodes << " nodes)");
      ggml_backend_vk_context * ctx = (ggml_backend_vk_context *)backend->context;
-@@ -14617,7 +14626,7 @@ void ggml_vk_graph_optimize(ggml_backend_t backend, struct ggml_cgraph * graph,
+@@ -15249,7 +15258,7 @@ void ggml_vk_graph_optimize(ggml_backend_t backend, struct ggml_cgraph * graph,
      }
  }
  
@@ -267,7 +267,7 @@ diff --git a/ggml/src/ggml-vulkan/ggml-vulkan.cpp b/ggml/src/ggml-vulkan/ggml-vu
      VK_LOG_DEBUG("ggml_backend_vk_event_record(backend=" << backend << ", event=" << event << ")");
      ggml_backend_vk_context * ctx = (ggml_backend_vk_context *)backend->context;
      vk_event *vkev = (vk_event *)event->context;
-@@ -14655,7 +14664,7 @@ static void ggml_backend_vk_event_record(ggml_backend_t backend, ggml_backend_ev
+@@ -15287,7 +15296,7 @@ static void ggml_backend_vk_event_record(ggml_backend_t backend, ggml_backend_ev
      ctx->compute_ctx.reset();
  }
  
@@ -276,19 +276,7 @@ diff --git a/ggml/src/ggml-vulkan/ggml-vulkan.cpp b/ggml/src/ggml-vulkan/ggml-vu
      VK_LOG_DEBUG("ggml_backend_vk_event_wait(backend=" << backend << ", event=" << event << ")");
      ggml_backend_vk_context * ctx = (ggml_backend_vk_context *)backend->context;
      vk_event *vkev = (vk_event *)event->context;
-@@ -14756,7 +14765,10 @@ void ggml_backend_vk_get_device_memory(int device, size_t * free, size_t * total
-             *total += heap.size;
- 
-             if (membudget_supported && i < budgetprops.heapUsage.size()) {
--                *free += budgetprops.heapBudget[i] - budgetprops.heapUsage[i];
-+                // heapUsage can exceed heapBudget (permitted by spec); clamp to 0 to avoid underflow
-+                if (budgetprops.heapBudget[i] > budgetprops.heapUsage[i]) {
-+                    *free += budgetprops.heapBudget[i] - budgetprops.heapUsage[i];
-+                }
-             } else {
-                 *free += heap.size;
-             }
-@@ -14813,38 +14825,38 @@ static std::string ggml_backend_vk_get_device_pci_id(int device_idx) {
+@@ -15448,38 +15457,38 @@ static std::string ggml_backend_vk_get_device_pci_id(int device_idx) {
      return std::string(pci_bus_id);
  }
  
@@ -334,7 +322,7 @@ diff --git a/ggml/src/ggml-vulkan/ggml-vulkan.cpp b/ggml/src/ggml-vulkan/ggml-vu
      ggml_backend_vk_device_context * ctx = (ggml_backend_vk_device_context *)dev->context;
  
      props->name        = ggml_backend_vk_device_get_name(dev);
-@@ -14861,13 +14873,13 @@ static void ggml_backend_vk_device_get_props(ggml_backend_dev_t dev, struct ggml
+@@ -15496,13 +15505,13 @@ static void ggml_backend_vk_device_get_props(ggml_backend_dev_t dev, struct ggml
      };
  }
  
@@ -350,7 +338,7 @@ diff --git a/ggml/src/ggml-vulkan/ggml-vulkan.cpp b/ggml/src/ggml-vulkan/ggml-vu
      ggml_backend_vk_device_context * ctx = (ggml_backend_vk_device_context *)dev->context;
      const vk_device& device = ggml_vk_get_device(ctx->device);
  
-@@ -15522,7 +15534,7 @@ static bool ggml_backend_vk_device_supports_op(ggml_backend_dev_t dev, const ggm
+@@ -16164,7 +16173,7 @@ static bool ggml_backend_vk_device_supports_op(ggml_backend_dev_t dev, const ggm
      UNUSED(dev);
  }
  
@@ -359,7 +347,7 @@ diff --git a/ggml/src/ggml-vulkan/ggml-vulkan.cpp b/ggml/src/ggml-vulkan/ggml-vu
      if (buft->iface.get_name != ggml_backend_vk_buffer_type_name) {
          return false;
      }
-@@ -15533,13 +15545,13 @@ static bool ggml_backend_vk_device_supports_buft(ggml_backend_dev_t dev, ggml_ba
+@@ -16175,13 +16184,13 @@ static bool ggml_backend_vk_device_supports_buft(ggml_backend_dev_t dev, ggml_ba
      return buft_ctx->device->idx == ctx->device;
  }
  
@@ -375,7 +363,7 @@ diff --git a/ggml/src/ggml-vulkan/ggml-vulkan.cpp b/ggml/src/ggml-vulkan/ggml-vu
      ggml_backend_vk_device_context * ctx = (ggml_backend_vk_device_context *)dev->context;
      auto device = ggml_vk_get_device(ctx->device);
  
-@@ -15562,7 +15574,7 @@ static ggml_backend_event_t ggml_backend_vk_device_event_new(ggml_backend_dev_t
+@@ -16204,7 +16213,7 @@ static ggml_backend_event_t ggml_backend_vk_device_event_new(ggml_backend_dev_t
      };
  }
  
@@ -384,7 +372,7 @@ diff --git a/ggml/src/ggml-vulkan/ggml-vulkan.cpp b/ggml/src/ggml-vulkan/ggml-vu
      ggml_backend_vk_device_context * ctx = (ggml_backend_vk_device_context *)dev->context;
      auto device = ggml_vk_get_device(ctx->device);
  
-@@ -15582,7 +15594,7 @@ static void ggml_backend_vk_device_event_free(ggml_backend_dev_t dev, ggml_backe
+@@ -16224,7 +16233,7 @@ static void ggml_backend_vk_device_event_free(ggml_backend_dev_t dev, ggml_backe
      delete event;
  }
  
@@ -393,7 +381,7 @@ diff --git a/ggml/src/ggml-vulkan/ggml-vulkan.cpp b/ggml/src/ggml-vulkan/ggml-vu
      VK_LOG_DEBUG("ggml_backend_vk_device_event_synchronize(backend=" << dev << ", event=" << event << ")");
      ggml_backend_vk_device_context * ctx = (ggml_backend_vk_device_context *)dev->context;
      auto device = ggml_vk_get_device(ctx->device);
-@@ -15614,7 +15626,7 @@ static void ggml_backend_vk_device_event_synchronize(ggml_backend_dev_t dev, ggm
+@@ -16256,7 +16265,7 @@ static void ggml_backend_vk_device_event_synchronize(ggml_backend_dev_t dev, ggm
      }
  }
  
@@ -402,7 +390,7 @@ diff --git a/ggml/src/ggml-vulkan/ggml-vulkan.cpp b/ggml/src/ggml-vulkan/ggml-vu
      VK_LOG_DEBUG("ggml_backend_vk_device_buffer_from_host_ptr(backend=" << dev << ", ptr=" << ptr << ", size=" << size << ")");
      GGML_UNUSED(max_tensor_size);
  
-@@ -15652,17 +15664,17 @@ static const struct ggml_backend_device_i ggml_backend_vk_device_i = {
+@@ -16294,17 +16303,17 @@ static const struct ggml_backend_device_i ggml_backend_vk_device_i = {
      /* .event_synchronize    = */ ggml_backend_vk_device_event_synchronize,
  };
  

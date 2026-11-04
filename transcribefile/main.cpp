@@ -65,9 +65,8 @@ static void print_wrapper_help(void) {
             "  --verbose             show GPU loader and backend logging\n"
             "                        (suppressed by default)\n"
             "transcribefile notes:\n"
-            "  GPU backends wired up in this build: metal (macOS on Apple\n"
-            "  Silicon; used by --backend auto/metal, first run compiles\n"
-            "  ggml-metal.dylib and caches it under ~/.transcribefile).\n"
+            "  No GPU backend in this build: runs on CPU. Metal is disabled\n"
+            "  until transcribe.cpp's ggml matches llamafile's again;\n"
             "  vulkan and cuda are not available yet.\n"
             "  Default arguments are read from .args in the executable's zip\n"
             "  store (one per line), so models can be bundled with zipalign.\n");
@@ -86,7 +85,21 @@ static void print_wrapper_help(void) {
 // FLAG_gpu stays AUTO (not APPLE) even for --backend metal so a failed
 // load degrades silently here; transcribe.cpp reports the missing
 // backend itself, with wording that matches its own CLI.
+// Metal is disabled for now. The dylib is built from llamafile's bundled
+// llama.cpp ggml-metal sources and registered with transcribe.cpp's own
+// ggml (0.15.2), which only works while both trees agree on the backend
+// interface structs. llama.cpp v0.8.0 (ggml 0.28) added alloc_buffer_n
+// and get_alloc_size_n to ggml_backend_buffer_type_i, so transcribe.cpp
+// called a NULL slot in ggml_backend_buft_get_alignment and crashed on
+// model load. Re-enable together with a transcribe.cpp update whose ggml
+// matches llama.cpp's.
+static constexpr bool kMetalEnabled = false;
+
 static void load_gpu_backends(char ** argv) {
+    if (!kMetalEnabled) {
+        FLAG_gpu = LLAMAFILE_GPU_DISABLE;
+        return;
+    }
     const char * backend = "auto";
     for (char ** p = argv + 1; p && *p; ++p) {
         if (!strcmp(*p, "--backend") && p[1]) {
