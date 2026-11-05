@@ -60,13 +60,33 @@ static bool is_decision_request(const std::string &text) {
     return !body.is_discarded() && body.is_object() && body.contains("questions");
 }
 
-bool decision_cli_wanted(const ModelOutputs &outputs, const std::string &prompt) {
+// The request text of -p or -f as the user wrote it. common_params_parse()
+// rewrites the escape sequences of the prompt (\n, \", \\, ...; params.escape,
+// on by default), which breaks a JSON request. As in common_params_parse(),
+// the last -p or -f wins; empty means neither was given.
+static std::string request_text(const common_params &params, char **argv) {
+    if (!params.escape)
+        return params.prompt;
+    std::string text = params.prompt;
+    for (int i = 1; argv[i] && argv[i + 1]; ++i) {
+        if (!strcmp(argv[i], "-p") || !strcmp(argv[i], "--prompt")) {
+            text = argv[++i];
+        } else if (!strcmp(argv[i], "-f") || !strcmp(argv[i], "--file")) {
+            std::ifstream f(argv[++i], std::ios::binary);
+            text.assign(std::istreambuf_iterator<char>(f), std::istreambuf_iterator<char>());
+        }
+    }
+    return text;
+}
+
+bool decision_cli_wanted(const ModelOutputs &outputs, const common_params &params, char **argv) {
     if (!outputs.decisions)
         return false;
     if (!outputs.text)
         return true;
     // a model that also generates text: decide when given a request
-    return prompt.empty() ? !isatty(STDIN_FILENO) : is_decision_request(prompt);
+    const std::string text = request_text(params, argv);
+    return text.empty() ? !isatty(STDIN_FILENO) : is_decision_request(text);
 }
 
 static bool read_stream(FILE *f, std::string &out) {
@@ -117,8 +137,8 @@ static std::string error_message(const std::string &response) {
 }
 
 int decision_cli_main(common_params &params, char **argv) {
-    // the request: -p TEXT, -f FILE (both end up in params.prompt), or stdin
-    std::string request = params.prompt;
+    // the request: -p TEXT, -f FILE, or stdin
+    std::string request = request_text(params, argv);
     if (request.empty()) {
         if (isatty(STDIN_FILENO)) {
             fprintf(stderr,

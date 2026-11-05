@@ -138,6 +138,23 @@ class TestDecisionCli:
         assert result.returncode == 0, result.stderr
         check_answers(json.loads(result.stdout))
 
+    def test_escapes_in_request(self, llamafile, tmp_path, timeouts):
+        """JSON escapes survive -p and -f, which llama.cpp's escape processing
+        would otherwise rewrite: same answer as on stdin"""
+        request = json.dumps({
+            "state": 'He wrote "refund me"\non the form, saved as C:\\Users\\a.txt',
+            "questions": {"angry": QUESTIONS["angry"]},
+        })
+        assert '\\"' in request and "\\n" in request and "\\\\" in request
+        path = tmp_path / "request.json"
+        path.write_text(request)
+        answers = []
+        for args, stdin in ([], request), (["-p", request], None), (["-f", str(path)], None):
+            result = run_cli(llamafile, args, stdin=stdin, timeout=timeouts.cli)
+            assert result.returncode == 0, f"{args[:1] or 'stdin'}: {result.stderr}"
+            answers.append(json.loads(result.stdout))
+        assert answers[0] == answers[1] == answers[2]
+
     def test_invalid_request(self, llamafile, timeouts):
         result = run_cli(llamafile, stdin=json.dumps({"state": STATE}), timeout=timeouts.cli)
         assert result.returncode == 1

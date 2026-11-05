@@ -39,8 +39,8 @@ extern const char kDecisionNoChat[];
 
 // True if --cli should answer a /v1/systemone request instead of generating
 // text: always for a decision-only model; for a model that does both, when
-// the prompt is a JSON object with "questions", or comes from a pipe.
-bool decision_cli_wanted(const ModelOutputs &outputs, const std::string &prompt);
+// the prompt (-p or -f) is a JSON object with "questions", or comes from a pipe.
+bool decision_cli_wanted(const ModelOutputs &outputs, const common_params &params, char **argv);
 
 // --cli with a decision model: reads one /v1/systemone request (-p, -f or
 // stdin), adds the --image/--audio files to it, answers it in-process and

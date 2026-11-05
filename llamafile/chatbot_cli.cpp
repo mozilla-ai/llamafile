@@ -154,7 +154,7 @@ int cli_main(int argc, char **argv) {
     }
 
     // Decision models answer a /v1/systemone request: JSON in, JSON out
-    if (decision_cli_wanted(model_outputs(params.model.path), params.prompt))
+    if (decision_cli_wanted(model_outputs(params.model.path), params, argv))
         return decision_cli_main(params, argv);
 
     // Check that a prompt was provided
