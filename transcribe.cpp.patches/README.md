@@ -17,7 +17,8 @@ ggml >= 0.28.0:**
   `ggml_src_ggml-cpu_ggml-cpu.c.patch` (whole files): op numbering.
 - The `GGML_OP_ARGMAX` hunk of `ggml_src_ggml-backend.cpp.patch`
   (marked `[llamafile] TEMPORARY`; the rest of that patch is the
-  permanent `GGML_CALL`/`free_struct` work): allocation-size check.
+  `GGML_CALL`/`free_struct` work and the upstream #25584 allocator fix,
+  see the patch index): allocation-size check.
 
 | tree | ggml |
 |---|---|
@@ -29,7 +30,9 @@ runs them on Metal through a dylib built from **llama.cpp's** ggml
 sources (`llamafile/metal.c`, `LLAMAFILE_METAL_SOURCES`). The two trees
 must agree on everything that crosses that boundary: the backend
 interface structs, `struct ggml_tensor`, `struct ggml_cgraph`, the
-op-params layout of each op, and the numbering of `enum ggml_op`.
+op-params layout of each op, and the numbering of `enum ggml_op`,
+`enum ggml_type`, and `enum ggml_unary_op`/`enum ggml_glu_op` (whose
+values travel in `op_params`).
 
 The host side (transcribe.cpp's scheduler and allocator) must also
 expect what 0.28 backends do. Between 0.26 and 0.28 all of that is
@@ -70,23 +73,43 @@ When bumping transcribe.cpp, check `ggml/CMakeLists.txt`
   `transcribefile/README.md` and the matching comment in
   `transcribefile/main.cpp`.
 - **Still older than llama.cpp's ggml**: keep the patches, and re-check
-  that they still cover every difference. Compare the op enums of the
-  two trees, e.g.
+  that they still cover every difference. After `make setup` (both trees
+  patched), from the repository root:
 
   ```sh
-  diff <(sed -n '/enum ggml_op {/,/GGML_OP_COUNT,/p' transcribe.cpp/ggml/include/ggml.h) \
-       <(sed -n '/enum ggml_op {/,/GGML_OP_COUNT,/p' llama.cpp/ggml/include/ggml.h)
+  ext() { awk -v b="$1" 'index($0, b) { f = 1 } f { print } f && /^ *};/ { exit }' "$2"; }
+  for b in 'enum ggml_type {' 'enum ggml_op {' 'enum ggml_unary_op {' \
+           'enum ggml_glu_op {' 'struct ggml_tensor {'; do
+      [ -n "$(ext "$b" llama.cpp/ggml/include/ggml.h)" ] || echo "!!! '$b' not found"
+      diff <(ext "$b" transcribe.cpp/ggml/include/ggml.h) \
+           <(ext "$b" llama.cpp/ggml/include/ggml.h) || echo "^^^ $b"
+  done
+  for f in ggml-backend-impl.h ggml-impl.h; do
+      diff transcribe.cpp/ggml/src/$f llama.cpp/ggml/src/$f || echo "^^^ $f"
+  done
+  m='/^bool ggml_op_alloc_size_may_expand(/,/^}/p'
+  [ -n "$(sed -n "$m" llama.cpp/ggml/src/ggml-backend.cpp)" ] || echo "!!! may_expand not found"
+  diff <(sed -n "$m" transcribe.cpp/ggml/src/ggml-backend.cpp) \
+       <(sed -n "$m" llama.cpp/ggml/src/ggml-backend.cpp) || echo "^^^ may_expand"
   ```
 
-  (after `make setup`; the only expected difference is the `[llamafile]`
-  comment block), diff `ggml/src/ggml-backend-impl.h` and
-  `ggml/src/ggml-impl.h` between the trees, and compare
-  `ggml_op_alloc_size_may_expand()` in `ggml/src/ggml-backend.cpp`.
+  The only expected differences are the two `[llamafile] TEMPORARY`
+  comment blocks (in `enum ggml_op` and in
+  `ggml_op_alloc_size_may_expand()`); a `!!!` line means a pattern no
+  longer matches and the check proved nothing. Then skim a full
+  `diff` of the two `ggml/include/ggml.h`: today it shows only that
+  comment, doc-comment changes and llama.cpp-only API
+  (`ggml_prec_get_acc`, `ggml_prec_get_src`, `ggml_top_k_mask`).
+  A changed op-params layout (the `ggml_set_op_params*()` calls in
+  `ggml/src/ggml.c`) of an op transcribe.cpp uses has no mechanical
+  check; comparing Metal and CPU transcripts is the backstop.
 
 The same check applies when **llama.cpp** is bumped: a new op in
 llama.cpp's ggml shifts the numbering again and needs to be mirrored
 here (or Metal disabled in `transcribefile/main.cpp`) until
-transcribe.cpp catches up.
+transcribe.cpp catches up. A value inserted into `ggml_unary_op` or
+`ggml_glu_op` is worse: nothing crashes, Metal just dispatches the wrong
+kernels and the transcripts come out wrong.
 
 When testing Metal after any of these changes, make sure the dylib is
 rebuilt: `metal.c` reuses `~/.transcribefile/v/<llamafile version>/ggml-metal.dylib`
@@ -146,10 +169,20 @@ llama.cpp v0.8.0's, and so are their patched versions.
 | `ggml_include_ggml-backend.h.patch` | Defines `GGML_CALL`; adds it to the `get_proc_address` return typedefs |
 | `ggml_include_ggml-cpu.h.patch` | Adds `GGML_CALL` to `ggml_backend_cpu_set_n_threads` and `ggml_backend_cpu_set_abort_callback` (returned via `get_proc_address`) |
 | `ggml_src_ggml-backend-impl.h.patch` | Adds `GGML_CALL` to every function pointer of the five interface structs and to `ggml_backend_graph_optimize_params::add_alloc_dep`; adds the `free_struct` buffer callback (cross-module memory: a buffer allocated by a dylib is freed by it). Identical to the llama.cpp patch for the same file |
-| `ggml_src_ggml-backend.cpp.patch` | `GGML_CALL` on the CPU buffer, buffer-type and multi-buffer callbacks; `free_struct` support in `ggml_backend_buffer_free`; turns the scheduler's `add_alloc_dep` lambda into a named `GGML_CALL` function (a lambda cannot carry the attribute; the Metal backend calls it from the dylib). Also carries the **temporary** `GGML_OP_ARGMAX` hunk described at the top |
+| `ggml_src_ggml-backend.cpp.patch` | `GGML_CALL` on the CPU buffer, buffer-type and multi-buffer callbacks; `free_struct` support in `ggml_backend_buffer_free`; turns the scheduler's `add_alloc_dep` lambda into a named `GGML_CALL` function (a lambda cannot carry the attribute; the Metal backend calls it from the dylib). Also carries the upstream #25584 fix (see "Upstream fixes" below) and the **temporary** `GGML_OP_ARGMAX` hunk described at the top |
 | `ggml_src_ggml-backend-meta.cpp.patch` | `GGML_CALL` on all meta device/buffer/backend callbacks |
 | `ggml_src_ggml-cpu_ggml-cpu.cpp.patch` | `GGML_CALL` on the CPU backend, device and registry callbacks and on the `get_proc_address`-returned functions |
 | `ggml_src_ggml-cpu_repack.cpp.patch` | `GGML_CALL` on the repack buffer and buffer-type callbacks |
+
+### Upstream fixes
+
+An upstream fix we need before it lands in transcribe.cpp's ggml. Drop
+it at the bump that first includes it (`check_patches.sh` flags it as
+conflicting once upstream has the same change).
+
+| Patch | Description |
+|-------|-------------|
+| `ggml_src_ggml-backend.cpp.patch` (part) | [PR #25584](https://github.com/ggml-org/llama.cpp/pull/25584), the same two hunks `llama.cpp.patches` carries in `ggml_backend_buft_alloc_buffer_n_default()` (see its README for the full story). When a buffer type has a `max_size`, a range made only of views that follows a tensor larger than `max_size` is never planned, and those views keep `data == NULL`; the fix allocates only parent tensors per range and initializes every view in one final pass. transcribe.cpp's ggml 0.26 has the identical code, and since the Metal backend leaves `alloc_buffer_n` unset, this host-side copy allocates for every backend. Not reachable today (CPU's `max_size` is `SIZE_MAX`, Metal's is the device's `maxBufferLength`); it becomes reachable once a backend with a small `max_size`, such as Vulkan (1 GiB), is wired up |
 
 ### Temporary ggml 0.28 alignment
 
