@@ -275,9 +275,7 @@ public:
         return "";
     }
 
-    // What the server's model outputs, from /v1/models ("text", "decisions",
-    // "audio"); empty if the server doesn't say
-    std::vector<std::string> output_modalities() {
+    std::vector<std::string> output_modalities() override {
         std::vector<std::string> res;
         httplib::Client cli(host_, port_);
         cli.set_read_timeout(5);
@@ -440,10 +438,5 @@ private:
 std::unique_ptr<ChatBackend> create_api_backend(const std::string &server_url) {
     return std::make_unique<ApiBackend>(server_url);
 }
-
-std::vector<std::string> api_server_output_modalities(const std::string &server_url) {
-    return ApiBackend(server_url).output_modalities();
-}
-
 } // namespace chatbot
 } // namespace lf

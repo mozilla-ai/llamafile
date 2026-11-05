@@ -419,7 +419,7 @@ int api_main(const std::string &server_url, const std::string &system_prompt,
 
     // A model that doesn't generate text (a decision model, or a speech-only
     // one) can't chat; a decision model's server still answers its requests
-    const std::vector<std::string> outputs = api_server_output_modalities(server_url);
+    const std::vector<std::string> outputs = backend->output_modalities();
     auto outputs_has = [&](const char *m) {
         return std::find(outputs.begin(), outputs.end(), m) != outputs.end();
     };
