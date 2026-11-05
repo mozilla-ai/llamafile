@@ -1,0 +1,12 @@
+diff --git a/common/parsers/parsers.h b/common/parsers/parsers.h
+--- a/llama.cpp/common/parsers/parsers.h
++++ b/llama.cpp/common/parsers/parsers.h
+@@ -47,6 +47,8 @@ void convert_tool_responses_gemma4(json & messages);
+ 
+ }
+ 
++common_chat_params common_chat_params_init_apertus(const common_chat_template & tmpl, const autoparser::generation_params & inputs);
++
+ common_chat_params common_chat_params_init_cohere2moe(const common_chat_template & tmpl, const autoparser::generation_params & inputs);
+ 
+ common_chat_params common_chat_params_init_deepseek_v3_2(const common_chat_template & tmpl, const autoparser::generation_params & inputs);

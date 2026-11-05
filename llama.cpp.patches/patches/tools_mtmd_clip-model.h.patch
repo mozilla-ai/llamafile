@@ -1,0 +1,89 @@
+diff --git a/tools/mtmd/clip-model.h b/tools/mtmd/clip-model.h
+--- a/llama.cpp/tools/mtmd/clip-model.h
++++ b/llama.cpp/tools/mtmd/clip-model.h
+@@ -499,6 +499,76 @@ struct clip_seanet {
+     std::vector<stage> stages;
+ };
+ 
++// apertus 1.5 vision tokenizer: VQGAN-style conv encoder + IBQ codebook
++struct clip_apertus_vq {
++    struct norm_conv {
++        ggml_tensor * norm_w = nullptr;
++        ggml_tensor * norm_b = nullptr;
++        ggml_tensor * conv_w = nullptr;
++        ggml_tensor * conv_b = nullptr;
++    };
++    // GroupNorm -> SiLU -> conv3x3, twice, plus a 1x1 shortcut when the channel count changes
++    struct resblock {
++        norm_conv     a;
++        norm_conv     b;
++        ggml_tensor * nin_w = nullptr;
++        ggml_tensor * nin_b = nullptr;
++    };
++    // single head self attention over the spatial positions, 1x1 convs as projections
++    struct attnblock {
++        ggml_tensor * norm_w = nullptr;
++        ggml_tensor * norm_b = nullptr;
++        ggml_tensor * q_w = nullptr, * q_b = nullptr;
++        ggml_tensor * k_w = nullptr, * k_b = nullptr;
++        ggml_tensor * v_w = nullptr, * v_b = nullptr;
++        ggml_tensor * o_w = nullptr, * o_b = nullptr;
++    };
++    struct stage {
++        std::vector<resblock>  res;
++        std::vector<attnblock> attn; // empty or one per resblock
++        ggml_tensor * down_w = nullptr;
++        ggml_tensor * down_b = nullptr;
++    };
++
++    ggml_tensor * conv_in_w = nullptr;
++    ggml_tensor * conv_in_b = nullptr;
++    std::vector<stage> stages;
++    resblock  mid_res0;
++    attnblock mid_attn;
++    resblock  mid_res1;
++    ggml_tensor * norm_out_w   = nullptr;
++    ggml_tensor * norm_out_b   = nullptr;
++    ggml_tensor * conv_out_w   = nullptr;
++    ggml_tensor * conv_out_b   = nullptr;
++    ggml_tensor * quant_conv_w = nullptr;
++    ggml_tensor * quant_conv_b = nullptr;
++    ggml_tensor * codebook     = nullptr; // [embed_dim, codebook_size]
++};
++
++// apertus 1.5 audio tokenizer: WavTokenizer SEANet encoder + LSTM + euclidean codebook
++struct clip_apertus_codec {
++    struct stage {
++        // resblock: ELU -> conv K -> ELU -> conv 1, plus a 1x1 shortcut
++        ggml_tensor * conv1_w = nullptr, * conv1_b = nullptr;
++        ggml_tensor * conv2_w = nullptr, * conv2_b = nullptr;
++        ggml_tensor * short_w = nullptr, * short_b = nullptr;
++        // ELU -> strided conv, kernel = 2 * stride
++        ggml_tensor * down_w  = nullptr, * down_b  = nullptr;
++    };
++    struct lstm_layer {
++        ggml_tensor * w_ih = nullptr, * b_ih = nullptr;
++        ggml_tensor * w_hh = nullptr, * b_hh = nullptr;
++    };
++
++    ggml_tensor * conv_in_w  = nullptr;
++    ggml_tensor * conv_in_b  = nullptr;
++    std::vector<stage>      stages;
++    std::vector<lstm_layer> lstm;
++    ggml_tensor * conv_out_w = nullptr;
++    ggml_tensor * conv_out_b = nullptr;
++    ggml_tensor * codebook   = nullptr; // [codebook_dim, codebook_size]
++};
++
+ // pocket-tts flow-matching decoder (SimpleMLPAdaLN)
+ struct clip_flow_net {
+     // AdaLN res block: in_ln -> modulate -> Linear -> SiLU -> Linear, gated residual
+@@ -872,6 +942,8 @@ struct clip_model {
+ 
+     // pocket-tts: SEANet stack, shared by the encoder (speaker path) and the decoder (gen path)
+     clip_seanet seanet;
++    clip_apertus_vq apertus_vq;
++    clip_apertus_codec apertus_codec;
+ 
+     // pocket-tts: voice latent -> backbone embd (speaker path)
+     ggml_tensor * spk_proj_w      = nullptr;

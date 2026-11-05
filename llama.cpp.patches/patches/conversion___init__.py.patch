@@ -1,0 +1,21 @@
+diff --git a/conversion/__init__.py b/conversion/__init__.py
+--- a/llama.cpp/conversion/__init__.py
++++ b/llama.cpp/conversion/__init__.py
+@@ -22,6 +22,8 @@ TEXT_MODEL_MAP: dict[str, str] = {
+     "LagunaForCausalLM": "laguna",
+     "FlintForCausalLM": "flint",
+     "ApertusForCausalLM": "llama",
++    "Apertus1p5ForConditionalGeneration": "llama",
++    "Apertus1p5TextForCausalLM": "llama",
+     "ArceeForCausalLM": "llama",
+     "ArcticForCausalLM": "arctic",
+     "AudioFlamingo3ForConditionalGeneration": "qwen",
+@@ -324,6 +326,8 @@ TEXT_MODEL_MAP: dict[str, str] = {
+ 
+ 
+ MMPROJ_MODEL_MAP: dict[str, str] = {
++    "Apertus1p5ForConditionalGeneration": "llama",
++    "Apertus1p5VisionTokenizerModel": "llama",
+     "AudioFlamingo3ForConditionalGeneration": "ultravox",
+     "ClefModel": "clef",
+     "CogVLMForCausalLM": "cogvlm",

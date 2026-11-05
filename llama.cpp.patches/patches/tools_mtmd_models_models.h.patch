@@ -1,0 +1,27 @@
+diff --git a/tools/mtmd/models/models.h b/tools/mtmd/models/models.h
+--- a/llama.cpp/tools/mtmd/models/models.h
++++ b/llama.cpp/tools/mtmd/models/models.h
+@@ -269,6 +269,23 @@ struct clip_graph_mimo_audio : clip_graph {
+     ggml_cgraph * build() override;
+ };
+ 
++struct clip_graph_apertus1p5a : clip_graph {
++    clip_graph_apertus1p5a(clip_ctx * ctx, const clip_image_f32 & img) : clip_graph(ctx, img) {}
++    ggml_cgraph * build() override;
++
++    ggml_tensor * conv1d(ggml_tensor * x, ggml_tensor * w, ggml_tensor * b, int stride) const;
++};
++
++struct clip_graph_apertus1p5v : clip_graph {
++    clip_graph_apertus1p5v(clip_ctx * ctx, const clip_image_f32 & img) : clip_graph(ctx, img) {}
++    ggml_cgraph * build() override;
++
++    ggml_tensor * conv2d(ggml_tensor * x, ggml_tensor * w, ggml_tensor * b, int stride, int pad) const;
++    ggml_tensor * group_norm(ggml_tensor * x, ggml_tensor * w, ggml_tensor * b) const;
++    ggml_tensor * resblock(ggml_tensor * x, const clip_apertus_vq::resblock & r) const;
++    ggml_tensor * attnblock(ggml_tensor * x, const clip_apertus_vq::attnblock & a) const;
++};
++
+ struct clip_graph_qwen3tts_spkenc : clip_graph {
+     clip_graph_qwen3tts_spkenc(clip_ctx * ctx, const clip_image_f32 & img) : clip_graph(ctx, img) {}
+     ggml_cgraph * build() override;

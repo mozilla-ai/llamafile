@@ -1,0 +1,197 @@
+diff --git a/conversion/llama.py b/conversion/llama.py
+--- a/llama.cpp/conversion/llama.py
++++ b/llama.cpp/conversion/llama.py
+@@ -2,8 +2,9 @@ from __future__ import annotations
+ 
+ import json
+ import math
++import re
+ 
+-from typing import Callable, Iterable, TYPE_CHECKING
++from typing import Any, Callable, Iterable, TYPE_CHECKING
+ 
+ import numpy as np
+ import torch
+@@ -11,7 +12,7 @@ import torch
+ if TYPE_CHECKING:
+     from torch import Tensor
+ 
+-from .base import ModelBase, TextModel, gguf, logger
++from .base import LazyTorchTensor, MmprojModel, ModelBase, TextModel, gguf, logger
+ 
+ 
+ @ModelBase.register(
+@@ -465,3 +466,173 @@ class ApertusModel(LlamaModel):
+             return
+ 
+         yield from super().modify_tensors(data_torch, name, bid)
++
++
++@ModelBase.register("Apertus1p5ForConditionalGeneration", "Apertus1p5TextForCausalLM")
++@ModelBase.example("swiss-ai/Apertus-v1.5-8B")
++class Apertus1p5Model(ApertusModel):
++    model_arch = gguf.MODEL_ARCH.APERTUS
++
++    def get_vocab_base(self) -> tuple[list[str], list[int], str]:
++        tokens, toktypes, tokpre = super().get_vocab_base()
++        # image/audio codes are passed as token ids, never parsed from text.
++        # mark them unused: 135k control tokens make special token matching in llama_tokenize very slow
++        media_token = re.compile(r"^<\|(visual|audio) token \d+\|>$")
++        n_media = 0
++        for i, tok in enumerate(tokens):
++            if toktypes[i] == gguf.TokenType.CONTROL and media_token.match(tok):
++                toktypes[i] = gguf.TokenType.UNUSED
++                n_media += 1
++        logger.info(f"Apertus 1.5: marked {n_media} image/audio code tokens as unused")
++        return tokens, toktypes, tokpre
++
++    def set_vocab(self):
++        super().set_vocab()
++
++        with open(self.dir_model / "tokenizer.json", encoding="utf-8") as f:
++            added_tokens = {t["content"]: t["id"] for t in json.load(f)["added_tokens"]}
++        # same stop tokens as generation_config.json: </s>, end of turn, end of tool calls
++        self.gguf_writer.add_eot_token_id(added_tokens["<|assistant_end|>"])
++        self.gguf_writer.add_eom_token_id(added_tokens["<|tools_suffix|>"])
++
++    def set_gguf_parameters(self):
++        super().set_gguf_parameters()
++
++        # the LM head is pruned to the text tokens, image/audio codes are input only
++        n_vocab = self.hparams["vocab_size"]
++        n_vocab_out = self.hparams.get("output_vocab_size") or n_vocab
++        if not 0 < n_vocab_out <= n_vocab:
++            raise ValueError(f"invalid output_vocab_size {n_vocab_out} for vocab_size {n_vocab}")
++        if n_vocab_out < n_vocab:
++            self.gguf_writer.add_vocab_size_out(n_vocab_out)
++
++
++@ModelBase.register("Apertus1p5ForConditionalGeneration", "Apertus1p5VisionTokenizerModel")
++class Apertus1p5MmprojModel(MmprojModel):
++    # image codes are an argmax over a 131k codebook: keep the tokenizer in f32, like transformers does
++    has_vision_encoder = True
++    has_audio_encoder = True
++    n_block_keys = ["num_res_blocks"]
++
++    # "vision_tokenizer_config" / "audio_tokenizer_config" in the first published checkpoint
++    def get_vision_config(self) -> dict[str, Any] | None:
++        return self.global_config.get("vision_config") or self.global_config.get("vision_tokenizer_config")
++
++    def get_audio_config(self) -> dict[str, Any] | None:
++        return self.global_config.get("audio_config") or self.global_config.get("audio_tokenizer_config")
++
++    def set_gguf_parameters(self):
++        assert self.hparams_vision is not None
++        vision = self.hparams_vision
++        size = self.preprocessor_config.get("size") or {}
++
++        self.gguf_writer.add_file_type(self.ftype)
++        self.gguf_writer.add_clip_has_vision_encoder(True)
++        self.gguf_writer.add_clip_vision_projector_type(gguf.VisionProjectorType.APERTUS1P5V)
++        self.gguf_writer.add_vision_projection_dim(self.n_embd_text)
++        self.gguf_writer.add_vision_image_size(vision["resolution"])
++        self.gguf_writer.add_vision_patch_size(2 ** (len(vision["channel_multiplier"]) - 1))
++        self.gguf_writer.add_vision_embedding_length(vision["base_channels"])
++        self.gguf_writer.add_vision_feed_forward_length(0)
++        self.gguf_writer.add_vision_block_count(len(vision["channel_multiplier"]))
++        self.gguf_writer.add_vision_head_count(1)
++        self.gguf_writer.add_vision_attention_layernorm_eps(1e-6)
++        self.gguf_writer.add_vision_image_mean(self.preprocessor_config["image_mean"])
++        self.gguf_writer.add_vision_image_std(self.preprocessor_config["image_std"])
++        # Apertus1p5ImageProcessor defaults
++        self.gguf_writer.add_vision_min_pixels(size.get("min_pixels", 128 * 128))
++        self.gguf_writer.add_vision_max_pixels(size.get("max_pixels", 1400 * 1400))
++
++        # WavTokenizer encoder: 24 kHz waveform -> one code per hop of prod(upsampling_ratios) samples
++        assert self.hparams_audio is not None
++        audio = self.hparams_audio
++        if audio.get("use_causal_conv") or audio.get("pad_mode", "reflect") != "reflect":
++            raise ValueError("only the non-causal, reflect padded WavTokenizer encoder is supported")
++        self.gguf_writer.add_clip_has_audio_encoder(True)
++        self.gguf_writer.add_clip_audio_projector_type(gguf.VisionProjectorType.APERTUS1P5A)
++        self.gguf_writer.add_audio_projection_dim(self.n_embd_text)
++        self.gguf_writer.add_audio_embedding_length(audio["hidden_size"])
++        self.gguf_writer.add_audio_feed_forward_length(0)
++        self.gguf_writer.add_audio_block_count(len(audio["upsampling_ratios"]))
++        self.gguf_writer.add_audio_head_count(1)
++        self.gguf_writer.add_audio_num_mel_bins(1)
++        self.gguf_writer.add_audio_attention_layernorm_eps(1e-6)
++
++    @classmethod
++    def filter_tensors(cls, item: tuple[str, Callable[[], Tensor]]) -> tuple[str, Callable[[], Tensor]] | None:
++        name, _ = item
++        if name.startswith("model.vision_tokenizer."):
++            return item
++        # only the encoder and the codebook of the audio codec, not the decoder (backbone, head)
++        if name.startswith("model.audio_tokenizer.encoder.") or name == "model.audio_tokenizer.quantizer.codebook.embed":
++            return item
++        return None
++
++    def tensor_force_quant(self, name, new_name, bid, n_dims):
++        return gguf.GGMLQuantizationType.F32
++
++    def modify_tensors(self, data_torch: Tensor, name: str, bid: int | None) -> Iterable[tuple[str, Tensor]]:
++        if name.startswith("model.audio_tokenizer."):
++            yield from self.modify_audio_tensors(data_torch, name)
++            return
++
++        name = name.removeprefix("model.vision_tokenizer.")
++        # two layouts: encoder.down.S.{block,attn}.L (first checkpoint) and encoder.stages.S.layers.L.{resnet,attention}
++        name = re.sub(r"^encoder\.down\.(\d+)\.block\.(\d+)\.", r"v.s\1.r\2.", name)
++        name = re.sub(r"^encoder\.down\.(\d+)\.attn\.(\d+)\.", r"v.s\1.a\2.", name)
++        name = re.sub(r"^encoder\.down\.(\d+)\.downsample\.conv\.", r"v.s\1.down.", name)
++        name = re.sub(r"^encoder\.stages\.(\d+)\.layers\.(\d+)\.resnet\.", r"v.s\1.r\2.", name)
++        name = re.sub(r"^encoder\.stages\.(\d+)\.layers\.(\d+)\.attention\.", r"v.s\1.a\2.", name)
++        name = re.sub(r"^encoder\.stages\.(\d+)\.downsample\.conv\.", r"v.s\1.down.", name)
++        name = name.replace("encoder.mid.block_1.", "v.mid.r0.").replace("encoder.mid.attn_1.", "v.mid.a0.")
++        name = name.replace("encoder.mid.block_2.", "v.mid.r1.")
++        name = name.replace("encoder.conv_in.", "v.conv_in.").replace("encoder.conv_out.", "v.conv_out.")
++        name = name.replace("encoder.norm_out.", "v.norm_out.").replace("quant_conv.", "v.quant_conv.")
++        name = name.replace("quantize.embedding.weight", "v.codebook.weight")
++        name = name.replace(".nin_shortcut.", ".nin.").replace(".proj_out.", ".proj.")
++        if not name.startswith("v."):
++            raise ValueError(f"Unexpected vision tokenizer tensor: {name}")
++        yield name, data_torch
++
++    def modify_audio_tensors(self, data_torch: Tensor, name: str) -> Iterable[tuple[str, Tensor]]:
++        name = name.removeprefix("model.audio_tokenizer.")
++        if name == "quantizer.codebook.embed":
++            yield "a.codebook.weight", data_torch
++            return
++
++        # fold the weight norm: w = g * v / |v|
++        weight_g = ".parametrizations.weight.original0"
++        weight_v = ".parametrizations.weight.original1"
++        if name.endswith(weight_v):
++            return
++        if name.endswith(weight_g):
++            g = LazyTorchTensor.to_eager(data_torch).float()
++            v = LazyTorchTensor.to_eager(self.model_tensors["model.audio_tokenizer." + name.removesuffix(weight_g) + weight_v]()).float()
++            data_torch = torch._weight_norm(v, g, dim=0)
++            name = name.removesuffix(weight_g) + ".weight"
++
++        # SEANet layer list: conv, then per stage [resblock, ELU, strided conv], then LSTM, ELU, conv
++        n_stages = len(self.hparams_audio["upsampling_ratios"])
++        m = re.match(r"^encoder\.layers\.(\d+)\.(.*)$", name)
++        if m is None:
++            raise ValueError(f"Unexpected audio tokenizer tensor: {name}")
++        il, rest = int(m.group(1)), m.group(2)
++        if il == 0:
++            name = "a.conv_in." + rest.removeprefix("conv.")
++        elif il == 3 * n_stages + 1:
++            lm = re.match(r"^lstm\.(weight|bias)_(ih|hh)_l(\d+)$", rest)
++            if lm is None:
++                raise ValueError(f"Unexpected audio tokenizer tensor: {name}")
++            name = f"a.lstm.l{lm.group(3)}.{lm.group(1)}_{lm.group(2)}"
++        elif il == 3 * n_stages + 3:
++            name = "a.conv_out." + rest.removeprefix("conv.")
++        elif (il - 1) % 3 == 0:
++            # resblock: block.0 ELU, block.1 conv, block.2 ELU, block.3 conv
++            stage = (il - 1) // 3
++            rest = rest.replace("block.1.conv.", "conv1.").replace("block.3.conv.", "conv2.").replace("shortcut.conv.", "short.")
++            name = f"a.s{stage}.{rest}"
++        elif (il - 3) % 3 == 0:
++            name = f"a.s{(il - 3) // 3}.down." + rest.removeprefix("conv.")
++        else:
++            raise ValueError(f"Unexpected audio tokenizer tensor: {name}")
++        yield name, data_torch

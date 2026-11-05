@@ -1,0 +1,20 @@
+diff --git a/gguf-py/gguf/constants.py b/gguf-py/gguf/constants.py
+--- a/llama.cpp/gguf-py/gguf/constants.py
++++ b/llama.cpp/gguf-py/gguf/constants.py
+@@ -107,6 +107,7 @@ class Keys:
+ 
+     class LLM:
+         VOCAB_SIZE                        = "{arch}.vocab_size"
++        VOCAB_SIZE_OUT                    = "{arch}.vocab_size_out"
+         CONTEXT_LENGTH                    = "{arch}.context_length"
+         EMBEDDING_LENGTH                  = "{arch}.embedding_length"
+         EMBEDDING_LENGTH_OUT              = "{arch}.embedding_length_out"
+@@ -6622,6 +6623,8 @@ class VisionProjectorType:
+     D1OMNI_V       = "d1omni_v"  # lfm2 vision, without separator tokens
+     D1OMNI_A       = "d1omni_a"  # lfm2a audio, with a residual block after the projector
+     MUSE_SPARK_AUDIO = "muse-spark-audio"
++    APERTUS1P5V    = "apertus1p5v"  # discrete image tokenizer (EMU3.5 IBQ encoder)
++    APERTUS1P5A    = "apertus1p5a"  # discrete audio tokenizer (WavTokenizer encoder)
+ 
+ 
+ # Items here are (block size, type size)

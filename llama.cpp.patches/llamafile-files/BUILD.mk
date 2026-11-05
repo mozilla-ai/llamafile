@@ -297,6 +297,7 @@ COMMON_SRCS_CPP := \
 	llama.cpp/common/parsers/llm-jp-harmony.cpp \
 	llama.cpp/common/parsers/muse-spark.cpp \
 	llama.cpp/common/parsers/parsers.cpp \
+	llama.cpp/common/parsers/apertus.cpp \
 	llama.cpp/common/parsers/cohere2moe.cpp \
 	llama.cpp/common/parsers/deepseek.cpp \
 	llama.cpp/common/parsers/functionary-v3-2.cpp \
@@ -374,6 +375,8 @@ MTMD_SRCS_CPP := \
 	llama.cpp/tools/mtmd/mtmd-helper-gen.cpp \
 	llama.cpp/tools/mtmd/mtmd-audio.cpp \
 	llama.cpp/tools/mtmd/mtmd-image.cpp \
+	llama.cpp/tools/mtmd/models/apertus1p5a.cpp \
+	llama.cpp/tools/mtmd/models/apertus1p5v.cpp \
 	llama.cpp/tools/mtmd/models/cogvlm.cpp \
 	llama.cpp/tools/mtmd/models/deepseekocr.cpp \
 	llama.cpp/tools/mtmd/models/deepseekocr2.cpp \

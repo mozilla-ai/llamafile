@@ -1,0 +1,213 @@
+diff --git a/tools/mtmd/clip.cpp b/tools/mtmd/clip.cpp
+--- a/llama.cpp/tools/mtmd/clip.cpp
++++ b/llama.cpp/tools/mtmd/clip.cpp
+@@ -1185,6 +1185,14 @@ static std::unique_ptr<clip_graph> clip_get_graph_builder(clip_ctx * ctx, const
+             {
+                 builder = std::make_unique<clip_graph_pockettts_spkenc>(ctx, img);
+             } break;
++        case PROJECTOR_TYPE_APERTUS1P5V:
++            {
++                builder = std::make_unique<clip_graph_apertus1p5v>(ctx, img);
++            } break;
++        case PROJECTOR_TYPE_APERTUS1P5A:
++            {
++                builder = std::make_unique<clip_graph_apertus1p5a>(ctx, img);
++            } break;
+         case PROJECTOR_TYPE_POCKETTTS_GEN:
+             {
+                 const auto gen_process = params ? params->gen_process : CLIP_GEN_PROCESS_GEN_CODE;
+@@ -1674,6 +1682,17 @@ struct clip_model_loader {
+                         GGML_ASSERT(hparams.preproc_min_tiles >= 1 && hparams.preproc_min_tiles <= hparams.preproc_max_tiles);
+                         hparams.set_limit_image_tokens(64, 256);
+                     } break;
++                case PROJECTOR_TYPE_APERTUS1P5V:
++                    {
++                        // Apertus1p5ImageProcessor: smart_resize to multiples of 16, torchvision bicubic, no padding
++                        hparams.n_merge = 1;
++                        hparams.set_image_resize_algo(RESIZE_ALGO_BICUBIC, true);
++                        hparams.image_resize_pad = PAD_NONE;
++                        get_u32(KEY_IMAGE_MIN_PIXELS, hparams.image_min_pixels);
++                        get_u32(KEY_IMAGE_MAX_PIXELS, hparams.image_max_pixels);
++                        hparams.set_limit_image_tokens();
++                        hparams.set_warmup_n_tokens(16*16);
++                    } break;
+                 case PROJECTOR_TYPE_PHI4:
+                     {
+                         hparams.n_merge = 1;
+@@ -2220,6 +2239,11 @@ struct clip_model_loader {
+                         hparams.flow_n_step       = 1;
+                         hparams.gen_eos_threshold = -4.0f;
+                     } break;
++                case PROJECTOR_TYPE_APERTUS1P5A:
++                    {
++                        // WavTokenizer takes the raw 24 kHz waveform, the hop length comes from the strided convs
++                        hparams.audio_sample_rate = 24000;
++                    } break;
+                 case PROJECTOR_TYPE_SOPRANO:
+                     {
+                         // SopranoDecoder defaults, n_fft comes from the head tensor
+@@ -2456,9 +2480,11 @@ struct clip_model_loader {
+                 // checks below do not apply to it.
+                 // pocket-tts is encoder-free in the same sense: mimi convolves the raw waveform
+                 // Muse Spark is encoder-free in the same sense: its conv pyramid reads the raw waveform, one channel takes the place of the mel bins
++                // the Apertus 1.5 WavTokenizer encoder convolves the raw waveform too
+                 const bool fft_based = model.proj_type != PROJECTOR_TYPE_GEMMA4UA &&
+                                        model.proj_type != PROJECTOR_TYPE_MUSE_SPARK_AUDIO &&
+-                                       model.proj_type != PROJECTOR_TYPE_POCKETTTS_SPKENC;
++                                       model.proj_type != PROJECTOR_TYPE_POCKETTTS_SPKENC &&
++                                       model.proj_type != PROJECTOR_TYPE_APERTUS1P5A;
+ 
+                 // Validate audio hparams loaded from GGUF metadata
+                 if (hparams.n_mel_bins <= 0 || (fft_based && hparams.n_mel_bins > 256)) {
+@@ -2623,7 +2649,9 @@ struct clip_model_loader {
+             model.proj_type != PROJECTOR_TYPE_QWEN3TTS_SPKENC &&
+             model.proj_type != PROJECTOR_TYPE_POCKETTTS_GEN &&
+             model.proj_type != PROJECTOR_TYPE_SOPRANO &&
+-            model.proj_type != PROJECTOR_TYPE_MUSE_SPARK_AUDIO);
++            model.proj_type != PROJECTOR_TYPE_MUSE_SPARK_AUDIO &&
++            model.proj_type != PROJECTOR_TYPE_APERTUS1P5V &&
++            model.proj_type != PROJECTOR_TYPE_APERTUS1P5A);
+ 
+         // layers
+         const int n_layers_to_load = has_standard_layers ? hparams.n_layer : 0;
+@@ -3427,6 +3455,101 @@ struct clip_model_loader {
+                     model.mm_fc_w = get_tensor(string_format(TN_MM_AUDIO_FC, "weight"));
+                     model.mm_fc_b = get_tensor(string_format(TN_MM_AUDIO_FC, "bias"));
+                 } break;
++            case PROJECTOR_TYPE_APERTUS1P5A:
++                {
++                    auto & codec = model.apertus_codec;
++                    auto has_tensor = [&](const std::string & name) {
++                        return ggml_get_tensor(ctx_meta.get(), name.c_str()) != nullptr;
++                    };
++                    codec.conv_in_w = get_tensor(string_format(TN_APA_CONV_IN, "weight"));
++                    codec.conv_in_b = get_tensor(string_format(TN_APA_CONV_IN, "bias"));
++                    hparams.audio_hop_len = 1;
++                    for (int is = 0; has_tensor(string_format(TN_APA_STAGE, is, "down", "weight")); is++) {
++                        clip_apertus_codec::stage st;
++                        st.conv1_w = get_tensor(string_format(TN_APA_STAGE, is, "conv1", "weight"));
++                        st.conv1_b = get_tensor(string_format(TN_APA_STAGE, is, "conv1", "bias"));
++                        st.conv2_w = get_tensor(string_format(TN_APA_STAGE, is, "conv2", "weight"));
++                        st.conv2_b = get_tensor(string_format(TN_APA_STAGE, is, "conv2", "bias"));
++                        st.short_w = get_tensor(string_format(TN_APA_STAGE, is, "short", "weight"), false);
++                        st.short_b = get_tensor(string_format(TN_APA_STAGE, is, "short", "bias"),   false);
++                        st.down_w  = get_tensor(string_format(TN_APA_STAGE, is, "down",  "weight"));
++                        st.down_b  = get_tensor(string_format(TN_APA_STAGE, is, "down",  "bias"));
++                        // SEANet: kernel = 2 * stride
++                        GGML_ASSERT(st.down_w->ne[0] % 2 == 0);
++                        hparams.audio_hop_len *= (int32_t) (st.down_w->ne[0] / 2);
++                        codec.stages.push_back(st);
++                    }
++                    GGML_ASSERT(!codec.stages.empty());
++                    for (int il = 0; has_tensor(string_format(TN_APA_LSTM, il, "weight_ih")); il++) {
++                        clip_apertus_codec::lstm_layer l;
++                        l.w_ih = get_tensor(string_format(TN_APA_LSTM, il, "weight_ih"));
++                        l.b_ih = get_tensor(string_format(TN_APA_LSTM, il, "bias_ih"));
++                        l.w_hh = get_tensor(string_format(TN_APA_LSTM, il, "weight_hh"));
++                        l.b_hh = get_tensor(string_format(TN_APA_LSTM, il, "bias_hh"));
++                        codec.lstm.push_back(l);
++                    }
++                    codec.conv_out_w = get_tensor(string_format(TN_APA_CONV_OUT, "weight"));
++                    codec.conv_out_b = get_tensor(string_format(TN_APA_CONV_OUT, "bias"));
++                    codec.codebook   = get_tensor(TN_APA_CODEBOOK);
++                } break;
++            case PROJECTOR_TYPE_APERTUS1P5V:
++                {
++                    auto & vq = model.apertus_vq;
++                    auto has_tensor = [&](const std::string & name) {
++                        return ggml_get_tensor(ctx_meta.get(), name.c_str()) != nullptr;
++                    };
++                    using tn_fn = std::function<std::string(const char *, const char *)>;
++                    auto load_res = [&](clip_apertus_vq::resblock & r, const tn_fn & tn) {
++                        r.a.norm_w = get_tensor(tn("norm1", "weight"));
++                        r.a.norm_b = get_tensor(tn("norm1", "bias"));
++                        r.a.conv_w = get_tensor(tn("conv1", "weight"));
++                        r.a.conv_b = get_tensor(tn("conv1", "bias"));
++                        r.b.norm_w = get_tensor(tn("norm2", "weight"));
++                        r.b.norm_b = get_tensor(tn("norm2", "bias"));
++                        r.b.conv_w = get_tensor(tn("conv2", "weight"));
++                        r.b.conv_b = get_tensor(tn("conv2", "bias"));
++                        r.nin_w    = get_tensor(tn("nin", "weight"), false);
++                        r.nin_b    = get_tensor(tn("nin", "bias"), false);
++                    };
++                    auto load_attn = [&](clip_apertus_vq::attnblock & a, const tn_fn & tn) {
++                        a.norm_w = get_tensor(tn("norm", "weight"));
++                        a.norm_b = get_tensor(tn("norm", "bias"));
++                        a.q_w = get_tensor(tn("q", "weight"));    a.q_b = get_tensor(tn("q", "bias"));
++                        a.k_w = get_tensor(tn("k", "weight"));    a.k_b = get_tensor(tn("k", "bias"));
++                        a.v_w = get_tensor(tn("v", "weight"));    a.v_b = get_tensor(tn("v", "bias"));
++                        a.o_w = get_tensor(tn("proj", "weight")); a.o_b = get_tensor(tn("proj", "bias"));
++                    };
++
++                    vq.conv_in_w = get_tensor(string_format(TN_APV_CONV_IN, "weight"));
++                    vq.conv_in_b = get_tensor(string_format(TN_APV_CONV_IN, "bias"));
++                    // stage and block counts are only known from the tensors
++                    for (int is = 0; has_tensor(string_format(TN_APV_RES, is, 0, "conv1", "weight")); is++) {
++                        clip_apertus_vq::stage st;
++                        for (int il = 0; has_tensor(string_format(TN_APV_RES, is, il, "conv1", "weight")); il++) {
++                            st.res.emplace_back();
++                            load_res(st.res.back(), [&](const char * n, const char * t) { return string_format(TN_APV_RES, is, il, n, t); });
++                            if (has_tensor(string_format(TN_APV_ATTN, is, il, "q", "weight"))) {
++                                st.attn.emplace_back();
++                                load_attn(st.attn.back(), [&](const char * n, const char * t) { return string_format(TN_APV_ATTN, is, il, n, t); });
++                            }
++                        }
++                        GGML_ASSERT(st.attn.empty() || st.attn.size() == st.res.size());
++                        st.down_w = get_tensor(string_format(TN_APV_DOWN, is, "weight"), false);
++                        st.down_b = get_tensor(string_format(TN_APV_DOWN, is, "bias"),   false);
++                        vq.stages.push_back(std::move(st));
++                    }
++                    GGML_ASSERT(!vq.stages.empty());
++                    load_res (vq.mid_res0, [&](const char * n, const char * t) { return string_format(TN_APV_MID_RES,  0, n, t); });
++                    load_attn(vq.mid_attn, [&](const char * n, const char * t) { return string_format(TN_APV_MID_ATTN, 0, n, t); });
++                    load_res (vq.mid_res1, [&](const char * n, const char * t) { return string_format(TN_APV_MID_RES,  1, n, t); });
++                    vq.norm_out_w   = get_tensor(string_format(TN_APV_NORM_OUT,   "weight"));
++                    vq.norm_out_b   = get_tensor(string_format(TN_APV_NORM_OUT,   "bias"));
++                    vq.conv_out_w   = get_tensor(string_format(TN_APV_CONV_OUT,   "weight"));
++                    vq.conv_out_b   = get_tensor(string_format(TN_APV_CONV_OUT,   "bias"));
++                    vq.quant_conv_w = get_tensor(string_format(TN_APV_QUANT_CONV, "weight"));
++                    vq.quant_conv_b = get_tensor(string_format(TN_APV_QUANT_CONV, "bias"));
++                    vq.codebook     = get_tensor(TN_APV_CODEBOOK);
++                } break;
+             case PROJECTOR_TYPE_POCKETTTS_SPKENC:
+                 {
+                     load_seanet(model.seanet, false);
+@@ -4737,6 +4860,7 @@ int clip_n_output_tokens(const clip_ctx * ctx, const clip_image_f32 * img) {
+         case PROJECTOR_TYPE_MLP_NORM:
+         case PROJECTOR_TYPE_JANUS_PRO:
+         case PROJECTOR_TYPE_PHI4:
++        case PROJECTOR_TYPE_APERTUS1P5V:
+             {
+                 // do nothing
+             } break;
+@@ -4744,6 +4868,12 @@ int clip_n_output_tokens(const clip_ctx * ctx, const clip_image_f32 * img) {
+             {
+                 n_patches = 64; // adaptive average pooling to 8x8 tokens
+             } break;
++        case PROJECTOR_TYPE_APERTUS1P5A:
++            {
++                // one code per started hop, the encoder pads the tail
++                const int hop = params.audio_hop_len;
++                n_patches = (img->nx() + hop - 1) / hop;
++            } break;
+         case PROJECTOR_TYPE_LDP:
+         case PROJECTOR_TYPE_LDPV2:
+         case PROJECTOR_TYPE_GLM_EDGE:
+@@ -6215,6 +6345,8 @@ bool clip_encode(struct clip_ctx * ctx, struct clip_encode_params * params) {
+         case PROJECTOR_TYPE_GEMMA4UA:
+         case PROJECTOR_TYPE_MUSE_SPARK_AUDIO:
+         case PROJECTOR_TYPE_QWEN3TTS_SPKENC:
++        case PROJECTOR_TYPE_APERTUS1P5V:
++        case PROJECTOR_TYPE_APERTUS1P5A:
+             {
+                 // do nothing
+             } break;
+@@ -6987,6 +7119,8 @@ int clip_n_mmproj_embd(const struct clip_ctx * ctx) {
+         case PROJECTOR_TYPE_YOUTUVL:
+             return ctx->model.mm_1_b->ne[0];
+         case PROJECTOR_TYPE_SENSENOVA_U1:
++        case PROJECTOR_TYPE_APERTUS1P5V:
++        case PROJECTOR_TYPE_APERTUS1P5A:
+             return ctx->model.hparams.projection_dim;
+         case PROJECTOR_TYPE_QWEN3VL:
+             // main path + deepstack paths

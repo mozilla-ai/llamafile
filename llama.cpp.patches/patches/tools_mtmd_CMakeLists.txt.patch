@@ -1,0 +1,12 @@
+diff --git a/tools/mtmd/CMakeLists.txt b/tools/mtmd/CMakeLists.txt
+--- a/llama.cpp/tools/mtmd/CMakeLists.txt
++++ b/llama.cpp/tools/mtmd/CMakeLists.txt
+@@ -28,6 +28,8 @@ add_library(mtmd
+             clip-model.h
+             clip-graph.h
+             models/models.h
++            models/apertus1p5a.cpp
++            models/apertus1p5v.cpp
+             models/cogvlm.cpp
+             models/conformer.cpp
+             models/deepseek4v.cpp

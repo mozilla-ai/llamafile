@@ -1,0 +1,15 @@
+diff --git a/common/chat-peg-parser.cpp b/common/chat-peg-parser.cpp
+--- a/llama.cpp/common/chat-peg-parser.cpp
++++ b/llama.cpp/common/chat-peg-parser.cpp
+@@ -694,9 +694,10 @@ common_peg_parser common_chat_peg_builder::build_json_tools_function_is_key(
+             inner_object = inner_object + space() + literal("}");
+         }
+ 
++        // atomic: while streaming, a tool name that is a prefix of another name must not match early
+         auto tool_parser = tool(
+             tool_open(literal("{")) + space() +
+-            literal("\"") + tool_name(literal(name)) + literal("\"") +
++            atomic(literal("\"") + tool_name(literal(name)) + literal("\"")) +
+             space() + literal(":") + space() +
+             inner_object +
+             space() + tool_close(literal("}"))
