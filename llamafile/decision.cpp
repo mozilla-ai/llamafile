@@ -32,6 +32,8 @@
 #include "log.h"
 #include "server-common.h"
 
+#include "image.h"
+
 // llama.cpp/tools/server/server.cpp (llamafile patch): answers one
 // /v1/systemone request in-process, as the server would. Returns the HTTP
 // status, -1 for parameters the server rejects, -2 if the model fails to load
@@ -103,32 +105,55 @@ static bool read_stream(FILE *f, std::string &out) {
     return !ferror(f);
 }
 
-// the server only reads data URLs; mtmd tells images from audio by content,
-// so the MIME type is informative only
-static const char *media_mime_type(const std::string &path) {
+// The server only takes data:image/, data:audio/ or data:video/ URLs, then mtmd
+// tells the kinds apart by content: name the kind from the content too.
+
+// the audio formats mtmd decodes, detected as is_audio_file() in mtmd-helper.cpp
+static const char *audio_mime_type(const std::string &b) {
+    if (b.size() < 12)
+        return nullptr;
+    if (!b.compare(0, 4, "RIFF") && !b.compare(8, 4, "WAVE"))
+        return "audio/wav";
+    if (!b.compare(0, 3, "ID3") || ((unsigned char)b[0] == 0xFF && ((unsigned char)b[1] & 0xE0) == 0xE0))
+        return "audio/mpeg";
+    if (!b.compare(0, 4, "fLaC"))
+        return "audio/flac";
+    return nullptr;
+}
+
+// video, for the models that read it, by file extension
+static const char *video_mime_type(const std::string &path) {
     std::string ext = path.substr(path.find_last_of('.') + 1);
     std::transform(ext.begin(), ext.end(), ext.begin(),
                    [](unsigned char c) { return (char)tolower(c); });
-    if (ext == "png") return "image/png";
-    if (ext == "jpg" || ext == "jpeg") return "image/jpeg";
-    if (ext == "gif") return "image/gif";
-    if (ext == "webp") return "image/webp";
-    if (ext == "bmp") return "image/bmp";
-    if (ext == "wav") return "audio/wav";
-    if (ext == "mp3") return "audio/mpeg";
-    if (ext == "flac") return "audio/flac";
-    return "application/octet-stream";
+    if (ext == "mp4" || ext == "m4v") return "video/mp4";
+    if (ext == "webm") return "video/webm";
+    if (ext == "mov") return "video/quicktime";
+    if (ext == "mkv") return "video/x-matroska";
+    if (ext == "avi") return "video/x-msvideo";
+    return nullptr;
 }
 
-static bool media_data_url(const std::string &path, std::string &url) {
+// returns an error message, or "" on success
+static std::string media_data_url(const std::string &path, std::string &url) {
     std::ifstream f(path, std::ios::binary);
     if (!f)
-        return false;
+        return "failed to open " + path;
     const std::string bytes((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
     if (f.bad())
-        return false;
-    url = std::string("data:") + media_mime_type(path) + ";base64," + base64::encode(bytes);
-    return true;
+        return "failed to read " + path;
+    url.clear();
+    if (get_image_type(bytes) != IMAGE_TYPE_UNKNOWN) {
+        convert_image_to_uri(&url, bytes);
+        return "";
+    }
+    const char *mime = audio_mime_type(bytes);
+    if (!mime)
+        mime = video_mime_type(path);
+    if (!mime)
+        return path + " is not an image, audio (WAV, MP3, FLAC) or video file";
+    url = std::string("data:") + mime + ";base64," + base64::encode(bytes);
+    return "";
 }
 
 static std::string error_message(const std::string &response) {
@@ -176,8 +201,9 @@ int decision_cli_main(common_params &params, char **argv) {
         }
         for (const std::string &path : params.image) {
             std::string url;
-            if (!media_data_url(path, url)) {
-                fprintf(stderr, "error: failed to read %s\n", path.c_str());
+            const std::string err = media_data_url(path, url);
+            if (!err.empty()) {
+                fprintf(stderr, "error: %s\n", err.c_str());
                 return 1;
             }
             body["files"].push_back(url);
