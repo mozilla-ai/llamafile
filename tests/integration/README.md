@@ -60,6 +60,7 @@ Use `-m` to select test categories:
 | `ssl` | HTTPS/TLS tests: serving with `--ssl-cert-file` and model download over HTTPS. Needs `openssl` in PATH. Run against the bare executable with `--model`. |
 | `determinism` | Tests requiring reproducible output at temperature=0. Unreliable on gpt-oss models (see `tests/run_integration_tests.sh`); deselect with `-m "not determinism"`. |
 | `online` | Tests that need network access (the HTTPS model download from Hugging Face). Skip with `-m "not online"` if offline. |
+| `decision` | Decision model tests (`POST /v1/systemone`, `--cli` JSON mode, chat gates). They run when `--model` is a decision model, detected from its GGUF metadata (`<arch>.decision.type`) as llama.cpp does; with a decision-only model every other test skips, since it can't generate text. Small models: `ggml-org/tinylaya-for-testing-gguf`, `ggml-org/tinyopenjev-for-testing-gguf` (with `--mmproj` for the image test). |
 
 Examples:
 

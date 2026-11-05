@@ -20,6 +20,7 @@
 #include "chatbot_backend.h"
 #include "color.h"
 
+#include <algorithm>
 #include <cstdio>
 #include <string>
 #include <vector>
@@ -121,6 +122,7 @@ public:
         std::string body = req_json.dump();
         std::string assistant_content;
         std::string sse_buffer;
+        std::string raw_body;  // start of the response, for error messages
         bool stopped = false;
 
         httplib::Client cli(host_, port_);
@@ -135,6 +137,8 @@ public:
                 if (stopped)
                     return false;
 
+                if (raw_body.size() < 65536)
+                    raw_body.append(data, std::min(len, 65536 - raw_body.size()));
                 sse_buffer.append(data, len);
 
                 // Process complete SSE lines
@@ -242,10 +246,48 @@ public:
         } else if (!result) {
             err("error: HTTP request failed: %s", httplib::to_string(result.error()).c_str());
         } else if (result->status != 200) {
-            err("error: server returned HTTP %d", result->status);
+            // show the server's reason, as llama-cli does (e.g. a decision
+            // model, which serves /v1/systemone and can't chat)
+            std::string message = error_message(result->body.empty() ? raw_body : result->body);
+            if (message.empty())
+                err("error: server returned HTTP %d", result->status);
+            else
+                err("error: %s", message.c_str());
         }
 
         return assistant_content;
+    }
+
+    // The "error.message" of an OpenAI-style error body, or "" if there is none
+    static std::string error_message(const std::string &body) {
+        try {
+            json j = json::parse(body);
+            if (j.contains("error") && j["error"].is_object() &&
+                j["error"].contains("message") && j["error"]["message"].is_string())
+                return j["error"]["message"].get<std::string>();
+        } catch (const json::exception &) {
+        }
+        return "";
+    }
+
+    // False if the server's model can't generate text: a decision model, which
+    // serves POST /v1/systemone instead. True if the server doesn't say.
+    bool can_chat() {
+        httplib::Client cli(host_, port_);
+        cli.set_read_timeout(5);
+        auto result = cli.Get("/v1/models");
+        if (!result || result->status != 200)
+            return true;
+        try {
+            json models = json::parse(result->body);
+            const auto &out = models.at("data").at(0).at("architecture").at("output_modalities");
+            for (const auto &m : out)
+                if (m == "text")
+                    return true;
+            return out.empty();
+        } catch (const json::exception &) {
+            return true;
+        }
     }
 
     int context_used() override {
@@ -393,6 +435,10 @@ private:
 // Factory function
 std::unique_ptr<ChatBackend> create_api_backend(const std::string &server_url) {
     return std::make_unique<ApiBackend>(server_url);
+}
+
+bool api_server_can_chat(const std::string &server_url) {
+    return ApiBackend(server_url).can_chat();
 }
 
 } // namespace chatbot

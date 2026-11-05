@@ -40,6 +40,7 @@
 
 #include "color.h"
 #include "compute.h"
+#include "decision.h"
 #include "string.h"
 #include <cpp-httplib/httplib.h>
 #include "llamafile.h"
@@ -160,6 +161,16 @@ int main(int argc, char **argv) {
         g_params->n_gpu_layers = INT_MAX;
     }
     clear_ephemeral();
+
+    // A decision model scores the options it's given instead of generating
+    // text, so it can't chat: refuse it like llama.cpp's llama-cli does
+    if (!model_outputs(g_params->model.path).text) {
+        fprintf(stderr,
+                "error: %s\n"
+                "       serve it with --server, or pipe a JSON request into --cli\n",
+                kDecisionNoChat);
+        exit(1);
+    }
 
     // Drop network access before the untrusted GGUF file is parsed. Must
     // happen after common_params_parse() (-hf model downloads need the
@@ -402,6 +413,12 @@ int api_main(const std::string &server_url, const std::string &system_prompt,
     // Create API backend
     auto backend = create_api_backend(server_url);
     g_backend = backend.get();
+
+    // A decision model can't chat, but the server answers its requests
+    if (!api_server_can_chat(server_url))
+        printf("note: this is a decision model, it can't chat. Send its requests to\n"
+               "      POST %s/v1/systemone (see docs/api.md)\n\n",
+               server_url.c_str());
 
     // Run REPL
     repl(*backend);

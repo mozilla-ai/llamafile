@@ -5,6 +5,7 @@ from pathlib import Path
 
 import pytest
 
+from utils.gguf import ModelOutputs, model_outputs
 from utils.llamafile import (
     LlamafileRunner,
     TIMEOUT_CLI,
@@ -101,6 +102,38 @@ def mmproj(request) -> str | None:
         return mmproj_path
 
     return os.environ.get("LLAMAFILE_MMPROJ")
+
+
+@pytest.fixture(scope="session")
+def model_kind(request, model) -> ModelOutputs:
+    """What the model under test can do, read from its GGUF metadata as
+    llama.cpp does: a decision model ("<arch>.decision.type") serves
+    POST /v1/systemone, and only Granite Switch also generates text.
+
+    Reads the options directly rather than through the ``executable``
+    fixture, which skips when no executable is given (agentfile tests are
+    configured by their own environment variables)."""
+    exe = request.config.getoption("--executable") or os.environ.get("LLAMAFILE_EXECUTABLE")
+    return model_outputs(model, exe)
+
+
+@pytest.fixture(autouse=True)
+def _match_model_kind(request):
+    """Run each test only against the kind of model it needs.
+
+    Tests marked ``decision`` need a decision model; the rest need a model
+    that generates text, so they skip on a decision-only model. ``help``
+    tests need no model at all.
+    """
+    markers = {m.name for m in request.node.iter_markers()}
+    if "help" in markers:
+        return
+    kind = request.getfixturevalue("model_kind")
+    if "decision" in markers:
+        if not kind.decisions:
+            pytest.skip("needs a decision model (GGUF with <arch>.decision.type)")
+    elif not kind.text:
+        pytest.skip(f"{kind.decision_type} is a decision model, it doesn't generate text")
 
 
 @pytest.fixture(scope="session")

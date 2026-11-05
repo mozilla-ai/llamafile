@@ -49,6 +49,7 @@
 #include "mtmd-helper.h"
 #include "sampling.h"
 
+#include "decision.h"
 #include "llamafile.h"
 
 namespace lf {
@@ -151,6 +152,10 @@ int cli_main(int argc, char **argv) {
         fprintf(stderr, "error: failed to parse arguments\n");
         return 1;
     }
+
+    // Decision models answer a /v1/systemone request: JSON in, JSON out
+    if (decision_cli_wanted(model_outputs(params.model.path), params.prompt))
+        return decision_cli_main(params, argv);
 
     // Check that a prompt was provided
     if (params.prompt.empty()) {

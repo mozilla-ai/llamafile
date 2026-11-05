@@ -159,6 +159,7 @@ LLAMAFILE_SRCS_CPP := \
 	llamafile/chatbot_repl.cpp \
 	llamafile/compute.cpp \
 	llamafile/datauri.cpp \
+	llamafile/decision.cpp \
 	llamafile/extract_data_uris.cpp \
 	llamafile/image.cpp \
 	llamafile/llama.cpp \
@@ -422,6 +423,11 @@ o/$(MODE)/llamafile/gpu.a: $(LLAMAFILE_GPU_OBJS)
 o/$(MODE)/llamafile/chatbot_api.o \
 o/$(MODE)/llamafile/chatbot_main.o: private \
 	LLAMAFILE_CPPFLAGS += $(LLAMAFILE_HTTPLIB_TLS_FLAGS)
+
+# decision.cpp uses the server's decision model helpers (server-common.h) and
+# calls into server.cpp to answer --cli requests in-process
+o/$(MODE)/llamafile/decision.o: private \
+	LLAMAFILE_CPPFLAGS += -iquote llama.cpp/tools/server -iquote o/$(MODE)/llama.cpp/tools/server
 
 o/$(MODE)/llamafile/%.o: llamafile/%.cpp
 	@mkdir -p $(@D)

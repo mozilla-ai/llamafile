@@ -89,6 +89,7 @@ int cli_main(int argc, char **argv);
 // Backend factories
 std::unique_ptr<ChatBackend> create_direct_backend();
 std::unique_ptr<ChatBackend> create_api_backend(const std::string &server_url);
+bool api_server_can_chat(const std::string &server_url);
 
 bool eval_string(std::string_view, bool, bool);
 DataUriExtraction extract_data_uris(std::string_view, const char *marker);

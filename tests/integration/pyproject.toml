@@ -30,6 +30,7 @@ markers = [
     "ssl: tests HTTPS/TLS support (serving and model download)",
     "online: tests that need network access (deselect with '-m \"not online\"')",
     "sandbox: tests pledge()/SECCOMP sandboxing (enforcement checks need Linux)",
+    "decision: requires a decision model (detected from the --model GGUF metadata), tests POST /v1/systemone",
     "bare_executable: requires a bare llamafile binary with no embedded model (skip for pre-built .llamafile bundles)",
     "determinism: requires reproducible output at temperature=0 (unreliable on gpt-oss models, whose long forced reasoning trace and MXFP4 quantization give a threaded matmul rounding difference more opportunities to flip a near-tied token; see tests/run_integration_tests.sh)",
 ]
