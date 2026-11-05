@@ -32,8 +32,6 @@
 #include "log.h"
 #include "server-common.h"
 
-#include "llamafile.h"
-
 // llama.cpp/tools/server/server.cpp (llamafile patch): answers one
 // /v1/systemone request in-process, as the server would
 int llamafile_server_decide(common_params &params, const std::string &request, std::string &response);
@@ -186,14 +184,13 @@ int decision_cli_main(common_params &params, char **argv) {
         params.image.clear();
     }
 
-    // The text --cli defaults (set before parsing) don't apply here: keep the
-    // server's, so the answers match llamafile --server. Decisions read whole
-    // prompts in one batch (laya, clef, ...), and their questions share the
-    // state across slots.
-    if (!llamafile_has(argv, "-b") && !llamafile_has(argv, "--batch-size") && !getenv("LLAMA_ARG_BATCH"))
+    // The server's defaults where the user set nothing (cli_main leaves
+    // n_batch and n_parallel at -1), so the answers match llamafile --server:
+    // decisions read whole prompts in one batch (laya, clef, ...), and the
+    // questions of a request share its state across slots. n_parallel -1 is
+    // the server's "auto", resolved by server_prepare_params().
+    if (params.n_batch < 0)
         params.n_batch = common_params{}.n_batch;
-    if (!llamafile_has(argv, "-np") && !llamafile_has(argv, "--parallel") && !getenv("LLAMA_ARG_N_PARALLEL"))
-        params.n_parallel = -1; // auto, as the server parses it
 
     std::string response;
     const int status = llamafile_server_decide(params, request, response);

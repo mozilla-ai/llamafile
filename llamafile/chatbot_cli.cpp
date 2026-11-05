@@ -130,8 +130,13 @@ int cli_main(int argc, char **argv) {
     // Parse flags quietly (no logo, no ephemeral messages)
     common_params params;
     params.sampling.n_prev = 64;
-    params.n_batch = 256;
     params.sampling.temp = 0;  // deterministic by default
+    // Unset (-1) until the model is known: text generation and decision
+    // models have different defaults. They are applied after parsing, only
+    // where the user set nothing (flags in any spelling, environment, or
+    // llama.cpp's config.ini).
+    params.n_batch = -1;
+    params.n_parallel = -1;
 
     // Note: FLAG_nothink, FLAG_verbose, FLAG_nologo are set by main.cpp
     // before calling cli_main(). GPU is also initialized there;
@@ -170,6 +175,12 @@ int cli_main(int argc, char **argv) {
     // --image, and answer in-process.
     if (decision_cli_wanted(model_outputs(params.model.path), params, argv))
         return decision_cli_main(params, argv);
+
+    // Text generation defaults (see the unset values above)
+    if (params.n_batch < 0)
+        params.n_batch = 256;  // for better progress indication
+    if (params.n_parallel < 0)
+        params.n_parallel = 1;
 
     // Check that a prompt was provided
     if (params.prompt.empty()) {
