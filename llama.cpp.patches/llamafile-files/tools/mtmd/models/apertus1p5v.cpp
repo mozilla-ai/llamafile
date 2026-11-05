@@ -23,18 +23,29 @@ ggml_tensor * clip_graph_apertus1p5v::conv2d(ggml_tensor * x, ggml_tensor * w, g
     if (pad > 0) {
         xc = ggml_pad_ext(ctx0, xc, 0, 0, pad, pad, pad, pad, 0, 0);
     }
-    const int64_t Wo = (xc->ne[1] - KW) / stride + 1;
+    const int64_t Wp = xc->ne[1];
+    const int64_t Wo = (Wp - KW) / stride + 1;
     const int64_t Ho = (xc->ne[2] - KH) / stride + 1;
 
     // [KW, KH, Cin, Cout] -> [Cin, Cout, KW, KH]
     ggml_tensor * wt = KW * KH > 1 ? ggml_cont(ctx0, ggml_permute(ctx0, w, 2, 3, 0, 1)) : ggml_reshape_2d(ctx0, w, Cin, Cout);
 
+    // stride 1: every tap reads a contiguous run of the padded input, the output is computed on the padded
+    // width and cropped at the end; contiguous src1 keeps the fast matmul paths (tinyBLAS on CPU)
+    // stride > 1: the taps are strided views, copied to be contiguous
+    const int64_t n = stride == 1 ? Wp * Ho - (KW - 1) : Wo * Ho;
     ggml_tensor * out = nullptr;
     for (int64_t ky = 0; ky < KH; ky++) {
         for (int64_t kx = 0; kx < KW; kx++) {
             ggml_tensor * wk = KW * KH > 1 ? ggml_view_2d(ctx0, wt, Cin, Cout, wt->nb[1], kx * wt->nb[2] + ky * wt->nb[3]) : wt;
-            ggml_tensor * xk = ggml_view_3d(ctx0, xc, Cin, Wo, Ho, stride * xc->nb[1], stride * xc->nb[2], kx * xc->nb[1] + ky * xc->nb[2]);
-            ggml_tensor * yk = ggml_mul_mat(ctx0, wk, xk); // [Cout, Wo, Ho]
+            ggml_tensor * xk;
+            if (stride == 1) {
+                xk = ggml_view_2d(ctx0, xc, Cin, n, xc->nb[1], (kx + ky * Wp) * xc->nb[1]);
+            } else {
+                xk = ggml_view_3d(ctx0, xc, Cin, Wo, Ho, stride * xc->nb[1], stride * xc->nb[2], kx * xc->nb[1] + ky * xc->nb[2]);
+                xk = ggml_reshape_2d(ctx0, ggml_cont(ctx0, xk), Cin, n);
+            }
+            ggml_tensor * yk = ggml_mul_mat(ctx0, wk, xk); // [Cout, n]
             out = out ? ggml_add(ctx0, out, yk) : yk;
         }
     }
@@ -42,7 +53,9 @@ ggml_tensor * clip_graph_apertus1p5v::conv2d(ggml_tensor * x, ggml_tensor * w, g
         out = ggml_add(ctx0, out, b);
     }
 
-    // [C, W, H] -> [W, H, C]
+    // [C, W, H] -> [W, H, C], dropping the padding columns of the stride 1 case
+    const int64_t row = stride == 1 ? Wp : Wo;
+    out = ggml_view_3d(ctx0, out, Cout, Wo, Ho, out->nb[1], row * out->nb[1], 0);
     return ggml_cont(ctx0, ggml_permute(ctx0, out, 2, 0, 1, 3));
 }
 

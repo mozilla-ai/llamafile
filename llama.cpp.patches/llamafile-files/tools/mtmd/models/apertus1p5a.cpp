@@ -53,6 +53,10 @@ ggml_tensor * clip_graph_apertus1p5a::conv1d(ggml_tensor * x, ggml_tensor * w, g
     for (int64_t k = 0; k < K; k++) {
         ggml_tensor * wk = K > 1 ? ggml_view_2d(ctx0, wt, Cin, Cout, wt->nb[1], k * wt->nb[2]) : wt;
         ggml_tensor * xk = ggml_view_2d(ctx0, x, Cin, n_out, stride * x->nb[1], k * x->nb[1]);
+        if (stride > 1) {
+            // a strided src1 misses the fast matmul paths (tinyBLAS on CPU)
+            xk = ggml_cont(ctx0, xk);
+        }
         ggml_tensor * yk = ggml_mul_mat(ctx0, wk, xk); // [Cout, n_out]
         out = out ? ggml_add(ctx0, out, yk) : yk;
     }
