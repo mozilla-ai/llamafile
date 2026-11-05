@@ -106,7 +106,8 @@ static bool read_stream(FILE *f, std::string &out) {
 // so the MIME type is informative only
 static const char *media_mime_type(const std::string &path) {
     std::string ext = path.substr(path.find_last_of('.') + 1);
-    std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
+    std::transform(ext.begin(), ext.end(), ext.begin(),
+                   [](unsigned char c) { return (char)tolower(c); });
     if (ext == "png") return "image/png";
     if (ext == "jpg" || ext == "jpeg") return "image/jpeg";
     if (ext == "gif") return "image/gif";
