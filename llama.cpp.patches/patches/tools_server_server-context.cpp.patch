@@ -1,0 +1,33 @@
+diff --git a/tools/server/server-context.cpp b/tools/server/server-context.cpp
+--- a/llama.cpp/tools/server/server-context.cpp
++++ b/llama.cpp/tools/server/server-context.cpp
+@@ -1278,15 +1278,26 @@ private:
+                 }
+                 SRV_TRC("[mtmd] estimated worst-case memory usage of mmproj is %.2f MiB (took %.2f ms)\n", total / (1024.0 * 1024.0), t_elapsed / 1000.0);
+                 GGML_ASSERT(!params_base.fit_params_target.empty());
++                // fit_params_target follows the device list of the model (GPUs, else iGPUs, else the CPU), not the backend registry:
++                // llamafile registers its GPU modules after the CPU backend
++                const bool has_gpu  = ggml_backend_dev_by_type(GGML_BACKEND_DEVICE_TYPE_GPU)  != nullptr;
++                const bool has_igpu = ggml_backend_dev_by_type(GGML_BACKEND_DEVICE_TYPE_IGPU) != nullptr;
++                const auto fit_type = has_gpu ? GGML_BACKEND_DEVICE_TYPE_GPU : has_igpu ? GGML_BACKEND_DEVICE_TYPE_IGPU : GGML_BACKEND_DEVICE_TYPE_CPU;
+                 for (auto & [dev, size] : mmproj_mem) {
++                    size_t id = 0;
+                     for (size_t i = 0; i < ggml_backend_dev_count(); i++) {
+-                        if (ggml_backend_dev_get(i) == dev) {
+-                            if (i < params_base.fit_params_target.size()) {
++                        ggml_backend_dev_t d = ggml_backend_dev_get(i);
++                        if (ggml_backend_dev_type(d) != fit_type) {
++                            continue;
++                        }
++                        if (d == dev) {
++                            if (id < params_base.fit_params_target.size()) {
+                                 SRV_DBG("[mtmd] adding %.2f MiB to fit_params_target for device %s\n", size / (1024.0 * 1024.0), ggml_backend_dev_name(dev));
+-                                params_base.fit_params_target[i] += size;
++                                params_base.fit_params_target[id] += size;
+                             }
+                             break;
+                         }
++                        id++;
+                     }
+                 }
+             } else {

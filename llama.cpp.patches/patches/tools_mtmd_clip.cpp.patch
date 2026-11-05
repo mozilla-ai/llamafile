@@ -172,7 +172,21 @@ diff --git a/tools/mtmd/clip.cpp b/tools/mtmd/clip.cpp
              case PROJECTOR_TYPE_POCKETTTS_SPKENC:
                  {
                      load_seanet(model.seanet, false);
-@@ -4737,6 +4860,7 @@ int clip_n_output_tokens(const clip_ctx * ctx, const clip_image_f32 * img) {
+@@ -4273,7 +4396,12 @@ struct clip_model_loader {
+         clip_image_f32_batch batch;
+         clip_image_f32 img;
+         if (ctx_clip.model.modality == CLIP_MODALITY_VISION) {
+-            const int sz = hparams.warmup_image_size;
++            int sz = hparams.warmup_image_size;
++            if (ctx_clip.no_alloc && ctx_clip.model.proj_type == PROJECTOR_TYPE_APERTUS1P5V) {
++                // the encoder runs at full image resolution and its compute buffer grows with the image:
++                // estimate the memory (mtmd_get_memory_usage) with the largest image, without allocating it at warmup
++                sz = (int) std::sqrt((double) hparams.image_max_pixels) / hparams.patch_size * hparams.patch_size;
++            }
+             img.set_size({sz, sz}, false, false);
+             LOG_INF("%s: warmup with image size = %d x %d\n", __func__, sz, sz);
+         } else {
+@@ -4737,6 +4865,7 @@ int clip_n_output_tokens(const clip_ctx * ctx, const clip_image_f32 * img) {
          case PROJECTOR_TYPE_MLP_NORM:
          case PROJECTOR_TYPE_JANUS_PRO:
          case PROJECTOR_TYPE_PHI4:
@@ -180,7 +194,7 @@ diff --git a/tools/mtmd/clip.cpp b/tools/mtmd/clip.cpp
              {
                  // do nothing
              } break;
-@@ -4744,6 +4868,12 @@ int clip_n_output_tokens(const clip_ctx * ctx, const clip_image_f32 * img) {
+@@ -4744,6 +4873,12 @@ int clip_n_output_tokens(const clip_ctx * ctx, const clip_image_f32 * img) {
              {
                  n_patches = 64; // adaptive average pooling to 8x8 tokens
              } break;
@@ -193,7 +207,7 @@ diff --git a/tools/mtmd/clip.cpp b/tools/mtmd/clip.cpp
          case PROJECTOR_TYPE_LDP:
          case PROJECTOR_TYPE_LDPV2:
          case PROJECTOR_TYPE_GLM_EDGE:
-@@ -6215,6 +6345,8 @@ bool clip_encode(struct clip_ctx * ctx, struct clip_encode_params * params) {
+@@ -6215,6 +6350,8 @@ bool clip_encode(struct clip_ctx * ctx, struct clip_encode_params * params) {
          case PROJECTOR_TYPE_GEMMA4UA:
          case PROJECTOR_TYPE_MUSE_SPARK_AUDIO:
          case PROJECTOR_TYPE_QWEN3TTS_SPKENC:
@@ -202,7 +216,7 @@ diff --git a/tools/mtmd/clip.cpp b/tools/mtmd/clip.cpp
              {
                  // do nothing
              } break;
-@@ -6987,6 +7119,8 @@ int clip_n_mmproj_embd(const struct clip_ctx * ctx) {
+@@ -6987,6 +7124,8 @@ int clip_n_mmproj_embd(const struct clip_ctx * ctx) {
          case PROJECTOR_TYPE_YOUTUVL:
              return ctx->model.mm_1_b->ne[0];
          case PROJECTOR_TYPE_SENSENOVA_U1:
