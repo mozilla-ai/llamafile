@@ -10,6 +10,17 @@ import zipfile
 from dataclasses import dataclass
 from typing import BinaryIO
 
+# The decision types llama.cpp knows: COMMON_DECISION_TYPE_NAMES in
+# common/common.cpp (keep in sync). Any other "<arch>.decision.type" string is
+# COMMON_DECISION_TYPE_UNKNOWN there, which the server serves as a text model.
+DECISION_TYPES = frozenset({
+    "openjev", "lev", "kev", "nimble", "laya", "clef", "pplx-decider",
+    "vllm-decision2", "vllm-d3", "lfm2-d1", "lfm2-d1-omni", "granite-switch",
+    "h2o-lightning", "openbmb-minicpm-ocr-jev", "lfm3-d1", "lfm3-d1-omni",
+})
+# ...and the ones that also generate text
+TEXT_DECISION_TYPES = frozenset({"granite-switch"})
+
 # GGUF value types: fixed sizes, plus STRING (8) and ARRAY (9)
 _SIZES = {0: 1, 1: 1, 2: 2, 3: 2, 4: 4, 5: 4, 6: 4, 7: 1, 10: 8, 11: 8, 12: 8}
 _STRING, _ARRAY = 8, 9
@@ -82,9 +93,10 @@ def _bundled_gguf(path: str):
 def model_outputs(model: str | None, executable: str | None = None) -> ModelOutputs:
     """What the model given with --model (or bundled in the executable) can do.
 
-    Mirrors server_model_output_modalities(): a model with a decision type
-    serves /v1/systemone and, except granite-switch, nothing else. Anything
-    that can't be read counts as a text model, as in llama.cpp.
+    Mirrors server_model_output_modalities(): a model with a known decision
+    type serves /v1/systemone and, except granite-switch, nothing else. An
+    unknown decision type, or anything that can't be read, counts as a text
+    model, as in llama.cpp.
     """
     try:
         f = open(model, "rb") if model else (_bundled_gguf(executable) if executable else None)
@@ -94,10 +106,10 @@ def model_outputs(model: str | None, executable: str | None = None) -> ModelOutp
             decision_type = read_decision_type(f)
     except (OSError, ValueError, KeyError):
         return ModelOutputs()
-    if not decision_type:
-        return ModelOutputs()
+    if decision_type not in DECISION_TYPES:
+        return ModelOutputs(decision_type=decision_type)
     return ModelOutputs(
-        text=decision_type == "granite-switch",
+        text=decision_type in TEXT_DECISION_TYPES,
         decisions=True,
         decision_type=decision_type,
     )
