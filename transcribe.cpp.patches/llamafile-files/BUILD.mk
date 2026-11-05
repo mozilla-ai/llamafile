@@ -22,8 +22,13 @@ PKGS += TRANSCRIBE_CPP
 # Version Information
 # ==============================================================================
 
-TRANSCRIBE_GGML_VERSION := 0.15.2
-TRANSCRIBE_GGML_COMMIT := $(shell cd transcribe.cpp/ggml 2>/dev/null && cat UPSTREAM 2>/dev/null | sed -n 's/^sha:[[:space:]]*//p' | cut -c1-7 || echo "unknown")
+# ggml/src/ggml.c #includes "ggml-version.h", which CMake generates with
+# configure_file(). transcribe.cpp.patches/apply-patches.sh writes it next
+# to ggml.c from the same .in template (version from ggml/CMakeLists.txt,
+# commit from ggml/UPSTREAM), as llama.cpp.patches does for llama.cpp.
+
+# Stamped into transcribe_version_commit(), as upstream's CMake does.
+TRANSCRIBE_COMMIT := $(shell cd transcribe.cpp 2>/dev/null && git rev-parse --short HEAD 2>/dev/null || echo "unknown")
 
 # ==============================================================================
 # Include Paths
@@ -57,9 +62,7 @@ TRANSCRIBE_GGML_CPPFLAGS := \
 	-DGGML_USE_CPU \
 	-DGGML_CPU_GENERIC \
 	-DGGML_USE_CPU_REPACK \
-	-DGGML_SCHED_MAX_COPIES=4 \
-	-DGGML_VERSION=\"$(TRANSCRIBE_GGML_VERSION)\" \
-	-DGGML_COMMIT=\"$(TRANSCRIBE_GGML_COMMIT)\"
+	-DGGML_SCHED_MAX_COPIES=4
 
 # TRANSCRIBE_HAS_BLAS is intentionally NOT defined: the decoder falls
 # back to a correct (if slower) scalar loop, avoiding a BLAS dependency
@@ -73,6 +76,7 @@ TRANSCRIBE_GGML_CPPFLAGS := \
 TRANSCRIBE_LIB_CPPFLAGS := \
 	-DGGML_MULTIPLATFORM \
 	-DTRANSCRIBE_BUILD \
+	-DTRANSCRIBE_COMMIT=\"$(TRANSCRIBE_COMMIT)\" \
 	-DGGML_SCHED_MAX_COPIES=4 \
 	-DMINIZ_NO_INFLATE_APIS \
 	-DMINIZ_NO_STDIO \
@@ -80,7 +84,7 @@ TRANSCRIBE_LIB_CPPFLAGS := \
 	-DMINIZ_NO_ZLIB_COMPATIBLE_NAMES
 
 # ==============================================================================
-# GGML Sources (transcribe.cpp/ggml/src — vendored ggml 0.9.8)
+# GGML Sources (transcribe.cpp/ggml/src — vendored ggml, see ggml/UPSTREAM)
 # ==============================================================================
 
 TRANSCRIBE_GGML_SRCS_C := \
@@ -108,7 +112,9 @@ TRANSCRIBE_GGML_SRCS_CPP := \
 	transcribe.cpp/ggml/src/ggml-cpu/unary-ops.cpp \
 	transcribe.cpp/ggml/src/ggml-cpu/vec.cpp \
 	transcribe.cpp/ggml/src/ggml-cpu/amx/amx.cpp \
-	transcribe.cpp/ggml/src/ggml-cpu/amx/mmq.cpp
+	transcribe.cpp/ggml/src/ggml-cpu/amx/mmq.cpp \
+	transcribe.cpp/ggml/src/ggml-cpu/tiled/tiled.cpp \
+	transcribe.cpp/ggml/src/ggml-cpu/tiled/tiled-kernel.cpp
 
 # ==============================================================================
 # Transcribe Library Sources (transcribe.cpp/src — from src/CMakeLists.txt)
@@ -116,6 +122,10 @@ TRANSCRIBE_GGML_SRCS_CPP := \
 
 TRANSCRIBE_LIB_SRCS_CPP := \
 	transcribe.cpp/src/transcribe.cpp \
+	transcribe.cpp/src/transcribe-asr.cpp \
+	transcribe.cpp/src/transcribe-diarize.cpp \
+	transcribe.cpp/src/transcribe-langid.cpp \
+	transcribe.cpp/src/transcribe-vad.cpp \
 	transcribe.cpp/src/transcribe-loader.cpp \
 	transcribe.cpp/src/transcribe-arch.cpp \
 	transcribe.cpp/src/transcribe-meta.cpp \
@@ -123,6 +133,7 @@ TRANSCRIBE_LIB_SRCS_CPP := \
 	transcribe.cpp/src/transcribe-mel.cpp \
 	transcribe.cpp/src/transcribe-model.cpp \
 	transcribe.cpp/src/transcribe-tokenizer.cpp \
+	transcribe.cpp/src/transcribe-prompting.cpp \
 	transcribe.cpp/src/transcribe-unicode.cpp \
 	transcribe.cpp/src/transcribe-unicode-data.cpp \
 	transcribe.cpp/src/transcribe-debug.cpp \
@@ -130,6 +141,7 @@ TRANSCRIBE_LIB_SRCS_CPP := \
 	transcribe.cpp/src/transcribe-flash-policy.cpp \
 	transcribe.cpp/src/transcribe-backend.cpp \
 	transcribe.cpp/src/transcribe-load-common.cpp \
+	transcribe.cpp/src/transcribe-mmap.cpp \
 	transcribe.cpp/src/transcribe-weights-util.cpp \
 	transcribe.cpp/src/transcribe-bin-loader.cpp \
 	transcribe.cpp/src/transcribe-batch-util.cpp \
@@ -138,6 +150,8 @@ TRANSCRIBE_LIB_SRCS_CPP := \
 	transcribe.cpp/src/causal_lm/causal_lm.cpp \
 	transcribe.cpp/src/granite_conformer/shaw_attn.cpp \
 	transcribe.cpp/src/arch/parakeet/model.cpp \
+	transcribe.cpp/src/arch/parakeet/longform.cpp \
+	transcribe.cpp/src/arch/parakeet/multitalker.cpp \
 	transcribe.cpp/src/arch/parakeet/capabilities.cpp \
 	transcribe.cpp/src/arch/parakeet/weights.cpp \
 	transcribe.cpp/src/arch/parakeet/encoder.cpp \
@@ -157,6 +171,32 @@ TRANSCRIBE_LIB_SRCS_CPP := \
 	transcribe.cpp/src/arch/qwen3_asr/weights.cpp \
 	transcribe.cpp/src/arch/qwen3_asr/encoder.cpp \
 	transcribe.cpp/src/arch/qwen3_asr/decoder.cpp \
+	transcribe.cpp/src/arch/moss/model.cpp \
+	transcribe.cpp/src/arch/moss/capabilities.cpp \
+	transcribe.cpp/src/arch/moss/diarize.cpp \
+	transcribe.cpp/src/arch/moss/weights.cpp \
+	transcribe.cpp/src/arch/moss/encoder.cpp \
+	transcribe.cpp/src/arch/moss/decoder.cpp \
+	transcribe.cpp/src/arch/sortformer/model.cpp \
+	transcribe.cpp/src/arch/sortformer/stream.cpp \
+	transcribe.cpp/src/arch/sortformer/weights.cpp \
+	transcribe.cpp/src/arch/ecapa_tdnn/graph.cpp \
+	transcribe.cpp/src/arch/ecapa_tdnn/model.cpp \
+	transcribe.cpp/src/arch/ecapa_tdnn/weights.cpp \
+	transcribe.cpp/src/arch/silero_vad/decoder.cpp \
+	transcribe.cpp/src/arch/silero_vad/encoder.cpp \
+	transcribe.cpp/src/arch/silero_vad/model.cpp \
+	transcribe.cpp/src/arch/silero_vad/weights.cpp \
+	transcribe.cpp/src/arch/voxtral/model.cpp \
+	transcribe.cpp/src/arch/voxtral/capabilities.cpp \
+	transcribe.cpp/src/arch/voxtral/weights.cpp \
+	transcribe.cpp/src/arch/voxtral/encoder.cpp \
+	transcribe.cpp/src/arch/voxtral/decoder.cpp \
+	transcribe.cpp/src/arch/voxtral_realtime/model.cpp \
+	transcribe.cpp/src/arch/voxtral_realtime/capabilities.cpp \
+	transcribe.cpp/src/arch/voxtral_realtime/weights.cpp \
+	transcribe.cpp/src/arch/voxtral_realtime/encoder.cpp \
+	transcribe.cpp/src/arch/voxtral_realtime/decoder.cpp \
 	transcribe.cpp/src/arch/canary_qwen/model.cpp \
 	transcribe.cpp/src/arch/canary_qwen/capabilities.cpp \
 	transcribe.cpp/src/arch/canary_qwen/weights.cpp \
@@ -196,11 +236,17 @@ TRANSCRIBE_LIB_SRCS_CPP := \
 	transcribe.cpp/src/arch/gigaam/decoder.cpp \
 	transcribe.cpp/src/arch/gigaam/mel.cpp \
 	transcribe.cpp/src/arch/granite/model.cpp \
+	transcribe.cpp/src/arch/granite/diarize.cpp \
 	transcribe.cpp/src/arch/granite/capabilities.cpp \
 	transcribe.cpp/src/arch/granite/weights.cpp \
 	transcribe.cpp/src/arch/granite/encoder.cpp \
 	transcribe.cpp/src/arch/granite/projector.cpp \
 	transcribe.cpp/src/arch/granite/decoder.cpp \
+	transcribe.cpp/src/arch/granite5_ctc/model.cpp \
+	transcribe.cpp/src/arch/granite5_ctc/capabilities.cpp \
+	transcribe.cpp/src/arch/granite5_ctc/weights.cpp \
+	transcribe.cpp/src/arch/granite5_ctc/encoder.cpp \
+	transcribe.cpp/src/arch/granite5_ctc/decoder.cpp \
 	transcribe.cpp/src/arch/granite_nar/model.cpp \
 	transcribe.cpp/src/arch/granite_nar/capabilities.cpp \
 	transcribe.cpp/src/arch/granite_nar/weights.cpp \
@@ -210,17 +256,7 @@ TRANSCRIBE_LIB_SRCS_CPP := \
 	transcribe.cpp/src/arch/medasr/model.cpp \
 	transcribe.cpp/src/arch/medasr/capabilities.cpp \
 	transcribe.cpp/src/arch/medasr/weights.cpp \
-	transcribe.cpp/src/arch/medasr/encoder.cpp \
-	transcribe.cpp/src/arch/voxtral/model.cpp \
-	transcribe.cpp/src/arch/voxtral/capabilities.cpp \
-	transcribe.cpp/src/arch/voxtral/weights.cpp \
-	transcribe.cpp/src/arch/voxtral/encoder.cpp \
-	transcribe.cpp/src/arch/voxtral/decoder.cpp \
-	transcribe.cpp/src/arch/voxtral_realtime/model.cpp \
-	transcribe.cpp/src/arch/voxtral_realtime/capabilities.cpp \
-	transcribe.cpp/src/arch/voxtral_realtime/weights.cpp \
-	transcribe.cpp/src/arch/voxtral_realtime/encoder.cpp \
-	transcribe.cpp/src/arch/voxtral_realtime/decoder.cpp
+	transcribe.cpp/src/arch/medasr/encoder.cpp
 
 # Vendored miniz (C) — only consumer is arch/whisper/model.cpp's
 # compression-ratio heuristic. Built into the transcribe lib so the
@@ -269,10 +305,15 @@ $(TRANSCRIBE_GGML_SRCS_CPP:%.cpp=o/$(MODE)/%.cpp.o): \
 # Compilation Rules — Transcribe Library
 # ==============================================================================
 
+# The library is C++17, as upstream's CMake builds it (CMAKE_CXX_STANDARD
+# 17), overriding the global -std=gnu++23: it relies on C++17 semantics,
+# e.g. std::filesystem::path::u8string() returning std::string (C++20
+# changed it to std::u8string, which breaks the plugin-dir key in
+# transcribe.cpp).
 $(TRANSCRIBE_LIB_SRCS_CPP:%.cpp=o/$(MODE)/%.cpp.o): \
 		o/$(MODE)/%.cpp.o: %.cpp transcribe.cpp/BUILD.mk $(COSMOCC)
 	@mkdir -p $(@D)
-	$(COMPILE.cc) $(TRANSCRIBE_LIB_INCS) $(TRANSCRIBE_LIB_CPPFLAGS) -o $@ $<
+	$(COMPILE.cc) $(TRANSCRIBE_LIB_INCS) $(TRANSCRIBE_LIB_CPPFLAGS) -std=gnu++17 -o $@ $<
 
 # Vendored miniz.c uses third-party style that trips strict warnings;
 # silence them for this one file (upstream does the same via -w).

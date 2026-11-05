@@ -20,6 +20,7 @@
 #include <string.h>
 
 #include "llamafile/llamafile.h"
+#include "transcribe.h"
 
 // Defined in transcribe.cpp/examples/cli/main.cpp, compiled with
 // -DTRANSCRIBEFILE (which renames its main() to transcribe_cli_main() and
@@ -65,8 +66,9 @@ static void print_wrapper_help(void) {
             "  --verbose             show GPU loader and backend logging\n"
             "                        (suppressed by default)\n"
             "transcribefile notes:\n"
-            "  No GPU backend in this build: runs on CPU. Metal is disabled\n"
-            "  until transcribe.cpp's ggml matches llamafile's again;\n"
+            "  GPU backends wired up in this build: metal (macOS on Apple\n"
+            "  Silicon; used by --backend auto/metal, first run compiles\n"
+            "  ggml-metal.dylib and caches it under ~/.transcribefile).\n"
             "  vulkan and cuda are not available yet.\n"
             "  Default arguments are read from .args in the executable's zip\n"
             "  store (one per line), so models can be bundled with zipalign.\n");
@@ -75,38 +77,42 @@ static void print_wrapper_help(void) {
 // Register GPU backends with ggml before the CLI enumerates devices.
 // Only Metal is wired up for now (Vulkan/CUDA are follow-up work), via
 // llamafile's runtime loader: on Apple Silicon it compiles the bundled
-// ggml Metal sources into ggml-metal.dylib (cached under ~/.llamafile),
+// ggml Metal sources into ggml-metal.dylib (cached under ~/.transcribefile),
 // loads it with cosmo_dlopen, and registers it with transcribe.cpp's
 // ggml. The CLI owns --backend semantics; this only controls which
 // backends get a chance to register:
 //   - cpu / cpu_accel: don't touch the GPU machinery at all
 //   - auto / metal:    try Metal; on failure or non-mac hardware nothing
 //                      registers and selection proceeds CPU-only
+//   - TRANSCRIBE_BACKENDS without metal: same as cpu. transcribe.cpp
+//     promises an excluded backend never runs any code, and enforces it
+//     when ggml registers its built-in backends; the dylib is registered
+//     through the unfiltered ggml_backend_register(), so it is checked
+//     here, before anything is compiled or loaded.
 // FLAG_gpu stays AUTO (not APPLE) even for --backend metal so a failed
 // load degrades silently here; transcribe.cpp reports the missing
 // backend itself, with wording that matches its own CLI.
-// Metal is disabled for now. The dylib is built from llamafile's bundled
-// llama.cpp ggml-metal sources and registered with transcribe.cpp's own
-// ggml (0.15.2), which only works while both trees agree on the backend
-// interface structs. llama.cpp v0.8.0 (ggml 0.28) added alloc_buffer_n
-// and get_alloc_size_n to ggml_backend_buffer_type_i, so transcribe.cpp
-// called a NULL slot in ggml_backend_buft_get_alignment and crashed on
-// model load. Re-enable together with a transcribe.cpp update whose ggml
-// matches llama.cpp's.
-static constexpr bool kMetalEnabled = false;
-
+//
+// The dylib is built from llama.cpp's ggml (0.28 as of llama.cpp v0.8.0)
+// but runs graphs built by transcribe.cpp's own vendored ggml (0.26 as of
+// transcribe.cpp v0.4.1). That only works while both trees agree on the
+// backend interface structs, struct ggml_tensor, ggml_cgraph, the
+// ggml_op numbering, and the host-side expectations of what a backend
+// does (e.g. which ops it may over-allocate). Temporary patches in
+// transcribe.cpp.patches align the two (see its README.md); when either
+// submodule is bumped, re-check the two trees before trusting Metal.
 static void load_gpu_backends(char ** argv) {
-    if (!kMetalEnabled) {
-        FLAG_gpu = LLAMAFILE_GPU_DISABLE;
-        return;
-    }
     const char * backend = "auto";
     for (char ** p = argv + 1; p && *p; ++p) {
         if (!strcmp(*p, "--backend") && p[1]) {
             backend = p[1];
         }
     }
-    if (strcmp(backend, "auto") != 0 && strcmp(backend, "metal") != 0) {
+    // transcribe_allowed_backends() only reads the mask (env narrowed by
+    // the host's, which this CLI never sets); unlike backend registration
+    // it does not fix it.
+    if ((strcmp(backend, "auto") != 0 && strcmp(backend, "metal") != 0) ||
+        !(transcribe_allowed_backends() & TRANSCRIBE_BACKEND_MASK_METAL)) {
         FLAG_gpu = LLAMAFILE_GPU_DISABLE;
         return;
     }
@@ -130,13 +136,14 @@ int main(int argc, char ** argv) {
 
     // Cached artifacts (the runtime-compiled Metal dylib and the ggml
     // sources it is built from) go under ~/.transcribefile, not
-    // ~/.llamafile: the two products' ggml trees are aligned today but
-    // may diverge, and neither should ever overwrite the other's cache.
+    // ~/.llamafile: the two products' ggml trees are kept aligned (see
+    // load_gpu_backends) but may diverge, and neither should ever
+    // overwrite the other's cache.
     llamafile_set_app_name("transcribefile");
 
     // Answer --version before touching args or the zip store. The
     // version string is transcribe.cpp's `git describe` output, which
-    // already carries its own "v" prefix (e.g. v0.0.11-7-gdf1a4ad).
+    // already carries its own "v" prefix (e.g. v0.4.1).
     if (has_flag(argv, "--version")) {
         puts("transcribefile " TRANSCRIBEFILE_VERSION_STRING);
         return 0;

@@ -1,0 +1,11 @@
+diff --git a/ggml/src/ggml-cpu/ggml-cpu.c b/ggml/src/ggml-cpu/ggml-cpu.c
+--- a/transcribe.cpp/ggml/src/ggml-cpu/ggml-cpu.c
++++ b/transcribe.cpp/ggml/src/ggml-cpu/ggml-cpu.c
+@@ -2200,6 +2200,7 @@ static void ggml_compute_forward(struct ggml_compute_params * params, struct ggm
+             {
+                 // nop
+             } break;
++        case GGML_OP_TOP_K_MASK: // [llamafile] TEMPORARY: enum value only (see ggml.h), never built here
+         case GGML_OP_COUNT:
+             {
+                 GGML_ABORT("fatal error");

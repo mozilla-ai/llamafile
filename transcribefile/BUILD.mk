@@ -6,7 +6,8 @@
 # Entry point is transcribefile/main.cpp, a thin wrapper that loads default
 # arguments from the executable's own zip store (/zip/.args, via cosmo_args)
 # and then calls transcribe.cpp's example CLI logic. The CLI lives in
-# transcribe.cpp/examples/cli/main.cpp, compiled with -DTRANSCRIBEFILE so its
+# transcribe.cpp/examples/cli/ (main.cpp plus one file per task: asr,
+# diarize, langid, vad); main.cpp is compiled with -DTRANSCRIBEFILE so its
 # main() is renamed to transcribe_cli_main() and our wrapper owns the entry
 # point (the standalone CLI main() is dropped). The WAV loader comes from
 # transcribe.cpp/examples/common/wav.cpp. Everything links against the
@@ -24,6 +25,10 @@ TRANSCRIBEFILE_VERSION_STRING := $(shell cd transcribe.cpp 2>/dev/null && git de
 TRANSCRIBEFILE_SRCS_CPP := \
 	transcribefile/main.cpp \
 	transcribe.cpp/examples/cli/main.cpp \
+	transcribe.cpp/examples/cli/asr.cpp \
+	transcribe.cpp/examples/cli/diarize.cpp \
+	transcribe.cpp/examples/cli/langid.cpp \
+	transcribe.cpp/examples/cli/vad.cpp \
 	transcribe.cpp/examples/common/wav.cpp
 
 # Our own code (cosmocc libc compatibility shims, etc.).
@@ -68,10 +73,11 @@ $(TRANSCRIBEFILE_C_OBJS): o/$(MODE)/%.c.o: %.c transcribefile/BUILD.mk $(COSMOCC
 # Same pattern as whisperfile/BUILD.mk: llamafile.o carries the FLAG_*
 # globals and DSO/app-dir helpers, gpu.a the runtime GPU loaders. The
 # GPU backends register into transcribe.cpp's vendored ggml registry
-# (ggml_backend_register resolves from transcribe.cpp.a; the ggml trees
-# are ABI-aligned at 0.15.2). $(LLAMAFILE_METAL_SOURCES) embeds the
-# patched llama.cpp ggml/metal sources in the zip store, which metal.c
-# extracts and compiles into ggml-metal.dylib at runtime on macOS.
+# (ggml_backend_register resolves from transcribe.cpp.a). The two ggml
+# trees differ in version, so they must be kept aligned at the backend
+# boundary; see transcribe.cpp.patches/README.md. $(LLAMAFILE_METAL_SOURCES)
+# embeds the patched llama.cpp ggml/metal sources in the zip store, which
+# metal.c extracts and compiles into ggml-metal.dylib at runtime on macOS.
 
 TRANSCRIBEFILE_LLAMAFILE_OBJS := \
 	o/$(MODE)/llamafile/llamafile.o \

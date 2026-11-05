@@ -33,6 +33,20 @@ cp -r "$LLAMAFILE_FILES_DIR"/* .
 
 "$SCRIPT_DIR/renames.sh"
 
+# Generate the version header that CMake's configure_file() produces:
+# ggml/src/ggml.c #includes "ggml-version.h". It is written next to its
+# source (as llama.cpp.patches/apply-patches.sh does for llama.cpp's copy)
+# so BUILD.mk needs no -D flags. The vendored ggml is not a git checkout
+# of ggml-org/ggml, so the commit comes from ggml/UPSTREAM.
+echo "Generating ggml version header..."
+ggml_version_major=$(grep -E 'GGML_VERSION_MAJOR [0-9]+' ggml/CMakeLists.txt | sed 's/[^0-9]*//g')
+ggml_version_minor=$(grep -E 'GGML_VERSION_MINOR [0-9]+' ggml/CMakeLists.txt | sed 's/[^0-9]*//g')
+ggml_version_patch=$(grep -E 'GGML_VERSION_PATCH [0-9]+' ggml/CMakeLists.txt | sed 's/[^0-9]*//g')
+ggml_commit=$(sed -n 's/^sha:[[:space:]]*//p' ggml/UPSTREAM 2>/dev/null | cut -c1-7)
+sed -e "s/@GGML_VERSION@/${ggml_version_major}.${ggml_version_minor}.${ggml_version_patch}/g" \
+    -e "s/@GGML_BUILD_COMMIT@/${ggml_commit:-unknown}/g" \
+    ggml/src/ggml-version.h.in > ggml/src/ggml-version.h
+
 cd ..
 echo "Applying modifications to upstream files..."
 for patch_file in "$PATCHES_DIR"/*.patch; do
