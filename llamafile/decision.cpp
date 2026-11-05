@@ -1,0 +1,252 @@
+// -*- mode:c++;indent-tabs-mode:nil;c-basic-offset:4;coding:utf-8 -*-
+// vi: set et ft=cpp ts=4 sts=4 sw=4 fenc=utf-8 :vi
+//
+// Copyright 2026 Mozilla.ai
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+#include "decision.h"
+
+#include <algorithm>
+#include <cstdio>
+#include <cstdlib>
+#include <cstring>
+#include <fstream>
+#include <iterator>
+#include <string>
+#include <unistd.h>
+#include <vector>
+
+#include "base64.hpp"
+#include "common.h"
+#include "log.h"
+#include "server-common.h"
+
+#include "image.h"
+
+// llama.cpp/tools/server/server.cpp (llamafile patch): answers one
+// /v1/systemone request in-process, as the server would. Returns the HTTP
+// status, -1 for parameters the server rejects, -2 if the model fails to load
+int llamafile_server_decide(common_params &params, const std::string &request, std::string &response);
+
+namespace lf {
+
+const char kDecisionNoChat[] =
+    "This model is a decision model without text generation, use /v1/systemone";
+
+static ModelOutputs from_modalities(const std::vector<std::string> &out) {
+    ModelOutputs res;
+    res.text = std::find(out.begin(), out.end(), "text") != out.end();
+    res.decisions = std::find(out.begin(), out.end(), "decisions") != out.end();
+    return res;
+}
+
+ModelOutputs model_outputs(const std::string &model_path) {
+    // a file that can't be read gives COMMON_DECISION_TYPE_UNKNOWN, which the
+    // server reports as text: the normal load error is left to the caller
+    const common_gguf_info info = common_get_gguf_info(model_path);
+    return from_modalities(
+        server_model_output_modalities(info.decision_type, /*has_cap_chat=*/true, /*has_cap_tts=*/false));
+}
+
+ModelOutputs model_outputs(const llama_model *model) {
+    return from_modalities(server_model_output_modalities(model, /*has_cap_chat=*/true, /*has_cap_tts=*/false));
+}
+
+static bool is_decision_request(const std::string &text) {
+    const json body = json::parse_no_throw(text);
+    return !body.is_discarded() && body.is_object() && body.contains("questions");
+}
+
+// The request text of -p or -f as the user wrote it. common_params_parse()
+// rewrites the escape sequences of the prompt (\n, \", \\, ...; params.escape,
+// on by default), which breaks a JSON request. As in common_params_parse(),
+// the last -p or -f wins; empty means neither was given.
+static std::string request_text(const common_params &params, char **argv) {
+    if (!params.escape)
+        return params.prompt;
+    std::string text = params.prompt;
+    for (int i = 1; argv[i] && argv[i + 1]; ++i) {
+        if (!strcmp(argv[i], "-p") || !strcmp(argv[i], "--prompt")) {
+            text = argv[++i];
+        } else if (!strcmp(argv[i], "-f") || !strcmp(argv[i], "--file")) {
+            std::ifstream f(argv[++i], std::ios::binary);
+            text.assign(std::istreambuf_iterator<char>(f), std::istreambuf_iterator<char>());
+        }
+    }
+    return text;
+}
+
+bool decision_cli_wanted(const ModelOutputs &outputs, const common_params &params, char **argv) {
+    if (!outputs.decisions)
+        return false;
+    if (!outputs.text)
+        return true;
+    // a model that also generates text: decide when given a request
+    const std::string text = request_text(params, argv);
+    return text.empty() ? !isatty(STDIN_FILENO) : is_decision_request(text);
+}
+
+static bool read_stream(FILE *f, std::string &out) {
+    char buf[65536];
+    size_t n;
+    while ((n = fread(buf, 1, sizeof(buf), f)) > 0)
+        out.append(buf, n);
+    return !ferror(f);
+}
+
+// The server only takes data:image/, data:audio/ or data:video/ URLs, then mtmd
+// tells the kinds apart by content: name the kind from the content too.
+
+// the audio formats mtmd decodes, detected as is_audio_file() in mtmd-helper.cpp
+static const char *audio_mime_type(const std::string &b) {
+    if (b.size() < 12)
+        return nullptr;
+    if (!b.compare(0, 4, "RIFF") && !b.compare(8, 4, "WAVE"))
+        return "audio/wav";
+    if (!b.compare(0, 3, "ID3") || ((unsigned char)b[0] == 0xFF && ((unsigned char)b[1] & 0xE0) == 0xE0))
+        return "audio/mpeg";
+    if (!b.compare(0, 4, "fLaC"))
+        return "audio/flac";
+    return nullptr;
+}
+
+// video, for the models that read it, by file extension
+static const char *video_mime_type(const std::string &path) {
+    std::string ext = path.substr(path.find_last_of('.') + 1);
+    std::transform(ext.begin(), ext.end(), ext.begin(),
+                   [](unsigned char c) { return (char)tolower(c); });
+    if (ext == "mp4" || ext == "m4v") return "video/mp4";
+    if (ext == "webm") return "video/webm";
+    if (ext == "mov") return "video/quicktime";
+    if (ext == "mkv") return "video/x-matroska";
+    if (ext == "avi") return "video/x-msvideo";
+    return nullptr;
+}
+
+// returns an error message, or "" on success
+static std::string media_data_url(const std::string &path, std::string &url) {
+    std::ifstream f(path, std::ios::binary);
+    if (!f)
+        return "failed to open " + path;
+    const std::string bytes((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
+    if (f.bad())
+        return "failed to read " + path;
+    url.clear();
+    if (get_image_type(bytes) != IMAGE_TYPE_UNKNOWN) {
+        convert_image_to_uri(&url, bytes);
+        return "";
+    }
+    const char *mime = audio_mime_type(bytes);
+    if (!mime)
+        mime = video_mime_type(path);
+    if (!mime)
+        return path + " is not an image, audio (WAV, MP3, FLAC) or video file";
+    url = std::string("data:") + mime + ";base64," + base64::encode(bytes);
+    return "";
+}
+
+static std::string error_message(const std::string &response) {
+    const json body = json::parse_no_throw(response);
+    if (!body.is_discarded() && body.is_object() && body.contains("error")) {
+        const json &e = body.at("error");
+        if (e.is_object() && e.contains("message") && e.at("message").is_string())
+            return e.at("message").get<std::string>();
+        if (e.is_string())
+            return e.get<std::string>();
+    }
+    return response;
+}
+
+int decision_cli_main(common_params &params, char **argv) {
+    // the request: -p TEXT, -f FILE, or stdin
+    std::string request = request_text(params, argv);
+    if (request.empty()) {
+        if (isatty(STDIN_FILENO)) {
+            fprintf(stderr,
+                    "error: %s is a decision model: give it a /v1/systemone request as JSON,\n"
+                    "       with -p '{...}', -f request.json, or on stdin:\n"
+                    "         echo '{\"state\": \"...\", \"questions\": {...}}' | llamafile -m MODEL --cli\n",
+                    params.model.path.c_str());
+            return 1;
+        }
+        if (!read_stream(stdin, request)) {
+            fprintf(stderr, "error: failed to read the request from stdin\n");
+            return 1;
+        }
+    }
+
+    // --image/--audio FILE: appended to the "files" of the request as data URLs
+    if (!params.image.empty()) {
+        json body = json::parse_no_throw(request);
+        if (body.is_discarded() || !body.is_object()) {
+            fprintf(stderr, "error: the request must be a JSON object\n");
+            return 1;
+        }
+        if (!body.contains("files") || body.at("files").is_null())
+            body["files"] = json::array();
+        if (!body.at("files").is_array()) {
+            fprintf(stderr, "error: \"files\" must be an array\n");
+            return 1;
+        }
+        for (const std::string &path : params.image) {
+            std::string url;
+            const std::string err = media_data_url(path, url);
+            if (!err.empty()) {
+                fprintf(stderr, "error: %s\n", err.c_str());
+                return 1;
+            }
+            body["files"].push_back(url);
+        }
+        request = body.dump();
+        params.image.clear();
+    }
+
+    // The server's defaults where the user set nothing (cli_main leaves
+    // n_batch and n_parallel at -1), so the answers match llamafile --server:
+    // decisions read whole prompts in one batch (laya, clef, ...), and the
+    // questions of a request share its state across slots. n_parallel -1 is
+    // the server's "auto", resolved by server_prepare_params().
+    if (params.n_batch < 0)
+        params.n_batch = common_params{}.n_batch;
+    // the server's -np rejects 0, the CLI's doesn't: the context would have
+    // no sequence and fail to load
+    if (params.n_parallel == 0) {
+        fprintf(stderr, "error: invalid value for -np/--parallel: 0 (use 1 or more, or -1 for auto)\n");
+        return 1;
+    }
+
+    std::string response;
+    const int status = llamafile_server_decide(params, request, response);
+    if (status == -1) {
+        fprintf(stderr, "error: invalid parameters for a decision model (see the error above)\n");
+        return 1;
+    }
+    if (status < 0) {
+        fprintf(stderr, "error: failed to load model: %s\n", params.model.path.c_str());
+        return 2;
+    }
+    if (status != 200) {
+        fprintf(stderr, "error: %s\n", error_message(response).c_str());
+        if (!is_decision_request(request))
+            fprintf(stderr, "       a decision model answers a /v1/systemone request, e.g.\n"
+                            "       {\"state\": \"...\", \"questions\": {\"q\": {\"type\": \"noul\", \"instructions\": \"...\"}}}\n");
+        return 1;
+    }
+    fwrite(response.data(), 1, response.size(), stdout);
+    fputc('\n', stdout);
+    fflush(stdout);
+    return 0;
+}
+
+} // namespace lf

@@ -18,6 +18,7 @@
 
 #include "chatbot.h"
 
+#include <algorithm>
 #include <cosmo.h>
 #include <cstdio>
 #include <cstdlib>
@@ -40,6 +41,7 @@
 
 #include "color.h"
 #include "compute.h"
+#include "decision.h"
 #include "string.h"
 #include <cpp-httplib/httplib.h>
 #include "llamafile.h"
@@ -191,6 +193,18 @@ int main(int argc, char **argv) {
     if (g_model == NULL) {
         fprintf(stderr, "%s: failed to load model%s\n", g_params->model.path.c_str(), tip());
         exit(2);
+    }
+
+    // A decision model scores the options it's given instead of generating
+    // text, so it can't chat: refuse it like llama.cpp's llama-cli does.
+    // Checked on the loaded model, so the GGUF is only parsed sandboxed.
+    const ModelOutputs outputs = model_outputs(g_model);
+    if (outputs.decisions && !outputs.text) {
+        fprintf(stderr,
+                "error: %s\n"
+                "       serve it with --server, or pipe a JSON request into --cli\n",
+                kDecisionNoChat);
+        exit(1);
     }
 
     // Adjust context size
@@ -402,6 +416,19 @@ int api_main(const std::string &server_url, const std::string &system_prompt,
     // Create API backend
     auto backend = create_api_backend(server_url);
     g_backend = backend.get();
+
+    // A model that doesn't generate text (a decision model, or a speech-only
+    // one) can't chat; a decision model's server still answers its requests
+    const std::vector<std::string> outputs = backend->output_modalities();
+    auto outputs_has = [&](const char *m) {
+        return std::find(outputs.begin(), outputs.end(), m) != outputs.end();
+    };
+    if (!outputs.empty() && !outputs_has("text")) {
+        printf("note: this is not a text model, it can't chat");
+        if (outputs_has("decisions"))
+            printf(". Send its requests to\n      POST %s/v1/systemone (see docs/api.md)", server_url.c_str());
+        printf("\n\n");
+    }
 
     // Run REPL
     repl(*backend);

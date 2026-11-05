@@ -49,6 +49,7 @@
 #include "mtmd-helper.h"
 #include "sampling.h"
 
+#include "decision.h"
 #include "llamafile.h"
 
 namespace lf {
@@ -129,8 +130,13 @@ int cli_main(int argc, char **argv) {
     // Parse flags quietly (no logo, no ephemeral messages)
     common_params params;
     params.sampling.n_prev = 64;
-    params.n_batch = 256;
     params.sampling.temp = 0;  // deterministic by default
+    // Unset (-1) until the model is known: text generation and decision
+    // models have different defaults. They are applied after parsing, only
+    // where the user set nothing (flags in any spelling, environment, or
+    // llama.cpp's config.ini).
+    params.n_batch = -1;
+    params.n_parallel = -1;
 
     // Note: FLAG_nothink, FLAG_verbose, FLAG_nologo are set by main.cpp
     // before calling cli_main(). GPU is also initialized there;
@@ -152,6 +158,30 @@ int cli_main(int argc, char **argv) {
         return 1;
     }
 
+    // Drop network and filesystem-write access before the untrusted GGUF
+    // file is parsed, including the metadata read that tells a decision
+    // model apart. Must happen after common_params_parse() (-hf model
+    // downloads need the network) and before threads/weights come up.
+    // Quiesce the log worker across the pledge so it doesn't outlive the
+    // per-thread filter unsandboxed (see llamafile/sandbox.c rule 1).
+    common_log_pause(common_log_main());
+    int sandbox = llamafile_sandbox_enter("stdio rpath tty", FLAG_verbose);
+    common_log_resume(common_log_main());
+    if (sandbox == LLAMAFILE_SANDBOX_FAILED)
+        return 1;
+
+    // Decision models answer a /v1/systemone request: JSON in, JSON out.
+    // The sandbox above covers them too: they read stdin and the files of
+    // --image, and answer in-process.
+    if (decision_cli_wanted(model_outputs(params.model.path), params, argv))
+        return decision_cli_main(params, argv);
+
+    // Text generation defaults (see the unset values above)
+    if (params.n_batch < 0)
+        params.n_batch = 256;  // for better progress indication
+    if (params.n_parallel < 0)
+        params.n_parallel = 1;
+
     // Check that a prompt was provided
     if (params.prompt.empty()) {
         fprintf(stderr, "error: --cli mode requires -p \"prompt\"\n");
@@ -162,17 +192,6 @@ int cli_main(int argc, char **argv) {
     if (llamafile_has_metal() && params.n_gpu_layers < 0) {
         params.n_gpu_layers = INT_MAX;
     }
-
-    // Drop network and filesystem-write access before the untrusted GGUF
-    // file is parsed. Must happen after common_params_parse() (-hf model
-    // downloads need the network) and before threads/weights come up.
-    // Quiesce the log worker across the pledge so it doesn't outlive the
-    // per-thread filter unsandboxed (see llamafile/sandbox.c rule 1).
-    common_log_pause(common_log_main());
-    int sandbox = llamafile_sandbox_enter("stdio rpath tty", FLAG_verbose);
-    common_log_resume(common_log_main());
-    if (sandbox == LLAMAFILE_SANDBOX_FAILED)
-        return 1;
 
     // Load model
     llama_model_params model_params = common_model_params_to_llama(params);

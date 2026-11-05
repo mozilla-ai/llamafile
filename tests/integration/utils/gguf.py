@@ -1,0 +1,120 @@
+"""Read what a model can do from its GGUF metadata, as llama.cpp does.
+
+llama.cpp marks decision models (POST /v1/systemone) with an
+"<arch>.decision.type" key; see common_get_gguf_info() in common/common.cpp
+and server_model_output_modalities() in tools/server/server-common.cpp.
+"""
+
+import struct
+import zipfile
+from dataclasses import dataclass
+from typing import BinaryIO
+
+# The decision types llama.cpp knows: COMMON_DECISION_TYPE_NAMES in
+# common/common.cpp (keep in sync). Any other "<arch>.decision.type" string is
+# COMMON_DECISION_TYPE_UNKNOWN there, which the server serves as a text model.
+DECISION_TYPES = frozenset({
+    "openjev", "lev", "kev", "nimble", "laya", "clef", "pplx-decider",
+    "vllm-decision2", "vllm-d3", "lfm2-d1", "lfm2-d1-omni", "granite-switch",
+    "h2o-lightning", "openbmb-minicpm-ocr-jev", "lfm3-d1", "lfm3-d1-omni",
+})
+# ...and the ones that also generate text
+TEXT_DECISION_TYPES = frozenset({"granite-switch"})
+
+# GGUF value types: fixed sizes, plus STRING (8) and ARRAY (9)
+_SIZES = {0: 1, 1: 1, 2: 2, 3: 2, 4: 4, 5: 4, 6: 4, 7: 1, 10: 8, 11: 8, 12: 8}
+_STRING, _ARRAY = 8, 9
+
+
+@dataclass(frozen=True)
+class ModelOutputs:
+    """The "output_modalities" the server reports for a model."""
+
+    text: bool = True  # chat and text generation
+    decisions: bool = False  # POST /v1/systemone
+    decision_type: str | None = None
+
+
+def _read(f: BinaryIO, fmt: str):
+    size = struct.calcsize(fmt)
+    data = f.read(size)
+    if len(data) != size:
+        raise ValueError("truncated GGUF")
+    return struct.unpack(fmt, data)[0]
+
+
+def _string(f: BinaryIO) -> str:
+    return f.read(_read(f, "<Q")).decode("utf-8", errors="replace")
+
+
+def _skip(f: BinaryIO, vtype: int) -> None:
+    if vtype == _STRING:
+        f.seek(_read(f, "<Q"), 1)
+    elif vtype == _ARRAY:
+        etype, count = _read(f, "<I"), _read(f, "<Q")
+        if etype in _SIZES:
+            f.seek(_SIZES[etype] * count, 1)
+        else:
+            for _ in range(count):
+                _skip(f, etype)
+    elif vtype in _SIZES:
+        f.seek(_SIZES[vtype], 1)
+    else:
+        raise ValueError(f"unknown GGUF value type {vtype}")
+
+
+def read_decision_type(f: BinaryIO) -> str | None:
+    """The "<arch>.decision.type" string of a GGUF stream, or None."""
+    if f.read(4) != b"GGUF":
+        raise ValueError("not a GGUF file")
+    _read(f, "<I")  # version
+    _read(f, "<Q")  # tensor count
+    strings = {}
+    for _ in range(_read(f, "<Q")):
+        key, vtype = _string(f), _read(f, "<I")
+        if vtype == _STRING and (key == "general.architecture" or key.endswith(".decision.type")):
+            strings[key] = _string(f)
+        else:
+            _skip(f, vtype)
+    arch = strings.get("general.architecture")
+    return strings.get(f"{arch}.decision.type") if arch else None
+
+
+def _bundled_decision_type(path: str) -> str | None:
+    """The decision type of the first .gguf stored in a llamafile bundle (a zip)."""
+    try:
+        with zipfile.ZipFile(path) as zf:
+            names = [n for n in zf.namelist() if n.endswith(".gguf") and "mmproj" not in n]
+            if not names:
+                return None
+            with zf.open(names[0]) as f:
+                return read_decision_type(f)
+    except zipfile.BadZipFile:
+        return None
+
+
+def model_outputs(model: str | None, executable: str | None = None) -> ModelOutputs:
+    """What the model given with --model (or bundled in the executable) can do.
+
+    Mirrors server_model_output_modalities(): a model with a known decision
+    type serves /v1/systemone and, except granite-switch, nothing else. An
+    unknown decision type, or anything that can't be read, counts as a text
+    model, as in llama.cpp.
+    """
+    try:
+        if model:
+            with open(model, "rb") as f:
+                decision_type = read_decision_type(f)
+        elif executable:
+            decision_type = _bundled_decision_type(executable)
+        else:
+            return ModelOutputs()
+    except (OSError, ValueError, KeyError):
+        return ModelOutputs()
+    if decision_type not in DECISION_TYPES:
+        return ModelOutputs(decision_type=decision_type)
+    return ModelOutputs(
+        text=decision_type in TEXT_DECISION_TYPES,
+        decisions=True,
+        decision_type=decision_type,
+    )

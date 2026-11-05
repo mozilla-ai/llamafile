@@ -64,6 +64,10 @@ public:
 
     // Whether this backend supports manual mode (role cycling)
     virtual bool supports_manual_mode() { return false; }
+
+    // What the model outputs, as the server reports it in /v1/models ("text",
+    // "decisions", "audio"); empty if unknown
+    virtual std::vector<std::string> output_modalities() { return {}; }
 };
 
 } // namespace chatbot

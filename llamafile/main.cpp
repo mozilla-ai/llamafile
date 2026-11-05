@@ -277,6 +277,9 @@ static void print_cli_help(bool show_full_list_hint) {
            "multimodal options:\n"
            "  --mmproj FILE    path to vision model (mmproj GGUF)\n"
            "  --image FILE     image file(s) to include with prompt\n"
+           "\n"
+           "decision models (POST /v1/systemone, see docs/api.md) read a JSON\n"
+           "request from stdin, -p or -f FILE, and print the JSON answer.\n"
            "\n");
     if (show_full_list_hint) {
         printf("all other llama.cpp options are also accepted.\n"
@@ -286,7 +289,8 @@ static void print_cli_help(bool show_full_list_hint) {
     printf("examples:\n"
            "  llamafile -m model.gguf --cli -p \"explain quantum computing\"\n"
            "  llamafile -m model.gguf --cli --nothink -p \"write a haiku\"\n"
-           "  llamafile -m model.gguf --cli --mmproj mm.gguf --image photo.jpg -p \"describe this\"\n");
+           "  llamafile -m model.gguf --cli --mmproj mm.gguf --image photo.jpg -p \"describe this\"\n"
+           "  echo '{\"state\": ..., \"questions\": {...}}' | llamafile -m decision.gguf --cli\n");
 }
 
 namespace lf {

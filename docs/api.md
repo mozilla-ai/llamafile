@@ -8,6 +8,7 @@ The server provides:
 
 - OpenAI-compatible APIs under `/v1`.
 - An Anthropic-compatible Messages API.
+- A TypeSafe-compatible System One API for [decision models](#decision-models).
 - Native llama.cpp endpoints for lower-level server features.
 - An experimental internal endpoint for the bundled Web UI's
   [built-in tools](built-in-tools.md).
@@ -172,6 +173,146 @@ returns its input-token count without generating a response:
   "input_tokens": 10
 }
 ```
+
+## Decision models
+
+A decision model answers by scoring the options you give it, instead of
+generating text. It reads a `state` (text, JSON, chat messages, and for some
+models images) and typed questions, and returns a probability for each option
+in a single forward pass. Typical uses are routing a request, moderating
+content, checking that an agent's step worked, or choosing its next action.
+
+`POST /v1/systemone` follows the
+[TypeSafe System One API](https://docs.typesafe.ai/api) that llama.cpp
+implements. Streaming is not supported.
+
+```sh
+curl http://127.0.0.1:8080/v1/systemone \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "state": "Customer message: I was charged twice for my order last week and nobody has replied.",
+    "questions": {
+      "route": {
+        "type": "choice",
+        "instructions": "Which team should handle this?",
+        "criteria": {
+          "billing": "payments, charges, refunds, invoices",
+          "shipping": "delivery, tracking, lost or late parcels",
+          "technical": "bugs, errors, login problems"
+        }
+      },
+      "angry": {"type": "noul", "instructions": "Is the customer angry?"},
+      "urgency": {
+        "type": "score",
+        "instructions": "How urgent is this?",
+        "criteria": ["can wait", "this week", "today", "right now"]
+      }
+    }
+  }'
+```
+
+Response from `Kev-4B-Q4_K_M.gguf` (values rounded):
+
+```json
+{
+  "model": "Kev-4B-Q4_K_M.gguf",
+  "answers": {
+    "route": {
+      "type": "choice",
+      "choice": "billing",
+      "probabilities": {"billing": 0.9049, "shipping": 0.0275, "technical": 0.0676},
+      "confidence": 0.8574
+    },
+    "angry": {"type": "noul", "noul": 0.8208},
+    "urgency": {
+      "type": "score",
+      "score": 2.282,
+      "legend": {"0": "can wait", "1": "this week", "2": "today", "3": "right now"},
+      "probabilities": {"0": 0.036, "1": 0.1936, "2": 0.2227, "3": 0.5476},
+      "confidence": 0.282
+    }
+  },
+  "usage": {"input_tokens": 130, "output_tokens": 0}
+}
+```
+
+There are three question types:
+
+| `type` | `criteria` | Answer |
+| --- | --- | --- |
+| `choice` | An object mapping each option to its description (`null` allowed). | `choice`, the most likely option, plus `probabilities` and `confidence`. |
+| `score` | An array of 2 to 10 level descriptions, lowest first. | `score`, the expected level (it can fall between two), plus `legend`, `probabilities` and `confidence`. |
+| `noul` | Optional: an object with the descriptions of `true` and `false`. | `noul`, the probability that the answer is true. |
+
+The questions of a request are answered independently, and most models
+evaluate the shared `state` only once. Describing your options usually helps
+small models. The probabilities are scaled with temperatures stored in the
+model file; they are not calibrated for your data, so pick a confidence cutoff
+per model on your own examples.
+
+**Models.** Use a GGUF made for this API, for example from the
+[ggml-org decision models collection](https://huggingface.co/collections/ggml-org/decision-models-6abf80cca3c83f127060a769)
+(Julia-1, Laya, Kev-4B, lev, OpenJev, Clef, LiquidAI d1, vllm-d3, ...).
+`GET /v1/models` lists `"decisions"` in the model's
+`architecture.output_modalities`. A model that only makes decisions cannot
+chat: chat and completion endpoints return a `501` error, the chat TUI of
+the default mode says so at startup, and `--chat` refuses to load it. A
+model that is not a decision model returns `501` on `/v1/systemone`.
+
+**Images.** Models that read images (for example OpenJev, Clef, LiquidAI d1,
+vllm-d3) need their projector, loaded with `--mmproj`. Send images as data
+URLs in `images` (or its alias `files`), or as `image_url` parts of a `state`
+made of chat messages:
+
+```json
+{
+  "state": "A file uploaded by a customer.",
+  "images": ["data:image/png;base64,iVBORw0KGgo..."],
+  "questions": {
+    "kind": {
+      "type": "choice",
+      "instructions": "What kind of document is this?",
+      "criteria": {"invoice": null, "receipt": null, "contract": null, "other": null}
+    }
+  }
+}
+```
+
+**Sizing.** Some models (Laya, Julia-1, Clef, vllm-d3, d1-omni) evaluate the
+whole prompt in one batch, so the prompt must fit in `--ubatch-size`; raise
+`-b` and `-ub` together if a request fails with "input is too large". The
+prompt cache is off by default for decision models, because requests rarely
+repeat a state; enable it with `--cache-ram N`.
+
+### From the command line
+
+`--cli` answers one request without starting a server: it reads the same
+JSON from stdin (or from `-p` or `-f FILE`) and prints the response on
+stdout, so it fits in a pipeline:
+
+```sh
+echo '{
+  "state": "Customer message: I was charged twice for my order last week.",
+  "questions": {"angry": {"type": "noul", "instructions": "Is the customer angry?"}}
+}' | llamafile -m Kev-4B-Q4_K_M.gguf --cli | jq .answers.angry.noul
+```
+
+`--image FILE` (or `--audio FILE`, for models that read audio) adds files to
+the request as data URLs, so they need not be base64-encoded by hand; repeat
+it or give a comma-separated list for several files:
+
+```sh
+llamafile -m OpenJev-Q4_K_M.gguf --mmproj mmproj-OpenJev-Q8_0.gguf --cli \
+  --image invoice.png -f questions.json
+```
+
+The answers are the same as the server's. Errors go to stderr with a non-zero
+exit status. A model that can both chat and decide (for example Granite
+Switch) answers a request when the prompt is a JSON object with `questions`
+or comes from a pipe, and generates text otherwise.
+
+See the [llama.cpp server README](https://github.com/ggml-org/llama.cpp/tree/master/tools/server#post-v1systemone-typesafe-compatible-system-one-api)
+for the full reference, including model-specific limits.
 
 ## Tool calling
 
