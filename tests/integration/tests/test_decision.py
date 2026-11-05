@@ -13,6 +13,7 @@ image test):
 """
 
 import json
+import platform
 import subprocess
 
 import pytest
@@ -180,7 +181,20 @@ class TestDecisionCli:
         with_image = json.loads(result.stdout)
         check_answers(with_image)
         without = run_cli(llamafile, stdin=json.dumps(REQUEST), timeout=timeouts.cli)
+        assert without.returncode == 0, without.stderr
         assert with_image["usage"]["input_tokens"] > json.loads(without.stdout)["usage"]["input_tokens"]
+
+    @pytest.mark.sandbox
+    @pytest.mark.skipif(platform.system() != "Linux", reason="SECCOMP enforcement is only observable on Linux")
+    def test_cli_sandboxed(self, executable, model, timeouts):
+        """the decision --cli answers under the text --cli's pledge ("stdio
+        rpath tty"). On CPU: a loaded GPU backend disables the sandbox.
+        --verbose prints the sandbox status on stderr, stdout stays JSON."""
+        runner = LlamafileRunner(executable=executable, model=model, gpu="disable")
+        result = run_cli(runner, ["--verbose"], stdin=json.dumps(REQUEST), timeout=timeouts.cli)
+        assert result.returncode == 0, result.stderr
+        assert "sandbox: active" in result.stderr
+        check_answers(json.loads(result.stdout))
 
 
 class TestDecisionChatGates:

@@ -80,14 +80,17 @@ def read_decision_type(f: BinaryIO) -> str | None:
     return strings.get(f"{arch}.decision.type") if arch else None
 
 
-def _bundled_gguf(path: str):
-    """The first .gguf stored in a llamafile bundle (a zip), or None."""
+def _bundled_decision_type(path: str) -> str | None:
+    """The decision type of the first .gguf stored in a llamafile bundle (a zip)."""
     try:
-        zf = zipfile.ZipFile(path)
-    except (OSError, zipfile.BadZipFile):
+        with zipfile.ZipFile(path) as zf:
+            names = [n for n in zf.namelist() if n.endswith(".gguf") and "mmproj" not in n]
+            if not names:
+                return None
+            with zf.open(names[0]) as f:
+                return read_decision_type(f)
+    except zipfile.BadZipFile:
         return None
-    names = [n for n in zf.namelist() if n.endswith(".gguf") and "mmproj" not in n]
-    return zf.open(names[0]) if names else None
 
 
 def model_outputs(model: str | None, executable: str | None = None) -> ModelOutputs:
@@ -99,11 +102,13 @@ def model_outputs(model: str | None, executable: str | None = None) -> ModelOutp
     model, as in llama.cpp.
     """
     try:
-        f = open(model, "rb") if model else (_bundled_gguf(executable) if executable else None)
-        if f is None:
+        if model:
+            with open(model, "rb") as f:
+                decision_type = read_decision_type(f)
+        elif executable:
+            decision_type = _bundled_decision_type(executable)
+        else:
             return ModelOutputs()
-        with f:
-            decision_type = read_decision_type(f)
     except (OSError, ValueError, KeyError):
         return ModelOutputs()
     if decision_type not in DECISION_TYPES:
