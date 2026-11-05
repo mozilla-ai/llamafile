@@ -153,7 +153,21 @@ int cli_main(int argc, char **argv) {
         return 1;
     }
 
-    // Decision models answer a /v1/systemone request: JSON in, JSON out
+    // Drop network and filesystem-write access before the untrusted GGUF
+    // file is parsed, including the metadata read that tells a decision
+    // model apart. Must happen after common_params_parse() (-hf model
+    // downloads need the network) and before threads/weights come up.
+    // Quiesce the log worker across the pledge so it doesn't outlive the
+    // per-thread filter unsandboxed (see llamafile/sandbox.c rule 1).
+    common_log_pause(common_log_main());
+    int sandbox = llamafile_sandbox_enter("stdio rpath tty", FLAG_verbose);
+    common_log_resume(common_log_main());
+    if (sandbox == LLAMAFILE_SANDBOX_FAILED)
+        return 1;
+
+    // Decision models answer a /v1/systemone request: JSON in, JSON out.
+    // The sandbox above covers them too: they read stdin and the files of
+    // --image, and answer in-process.
     if (decision_cli_wanted(model_outputs(params.model.path), params, argv))
         return decision_cli_main(params, argv);
 
@@ -167,17 +181,6 @@ int cli_main(int argc, char **argv) {
     if (llamafile_has_metal() && params.n_gpu_layers < 0) {
         params.n_gpu_layers = INT_MAX;
     }
-
-    // Drop network and filesystem-write access before the untrusted GGUF
-    // file is parsed. Must happen after common_params_parse() (-hf model
-    // downloads need the network) and before threads/weights come up.
-    // Quiesce the log worker across the pledge so it doesn't outlive the
-    // per-thread filter unsandboxed (see llamafile/sandbox.c rule 1).
-    common_log_pause(common_log_main());
-    int sandbox = llamafile_sandbox_enter("stdio rpath tty", FLAG_verbose);
-    common_log_resume(common_log_main());
-    if (sandbox == LLAMAFILE_SANDBOX_FAILED)
-        return 1;
 
     // Load model
     llama_model_params model_params = common_model_params_to_llama(params);

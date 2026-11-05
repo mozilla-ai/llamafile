@@ -23,6 +23,7 @@
 #include <string>
 
 struct common_params;
+struct llama_model;
 
 namespace lf {
 
@@ -33,6 +34,8 @@ struct ModelOutputs {
     bool decisions = false; // POST /v1/systemone
 };
 ModelOutputs model_outputs(const std::string &model_path);
+// same, for a loaded model
+ModelOutputs model_outputs(const llama_model *model);
 
 // The error llama.cpp gives when a decision-only model is asked to chat
 extern const char kDecisionNoChat[];
@@ -45,6 +48,7 @@ bool decision_cli_wanted(const ModelOutputs &outputs, const common_params &param
 // --cli with a decision model: reads one /v1/systemone request (-p, -f or
 // stdin), adds the --image/--audio files to it, answers it in-process and
 // prints the response JSON on stdout. Returns the process exit code.
+// The caller enters the --cli sandbox first: this needs only stdio and rpath.
 int decision_cli_main(common_params &params, char **argv);
 
 } // namespace lf

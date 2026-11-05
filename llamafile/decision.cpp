@@ -43,16 +43,23 @@ namespace lf {
 const char kDecisionNoChat[] =
     "This model is a decision model without text generation, use /v1/systemone";
 
-ModelOutputs model_outputs(const std::string &model_path) {
-    // a file that can't be read gives COMMON_DECISION_TYPE_UNKNOWN, which the
-    // server reports as text: the normal load error is left to the caller
-    const common_gguf_info info = common_get_gguf_info(model_path);
-    const std::vector<std::string> out =
-        server_model_output_modalities(info.decision_type, /*has_cap_chat=*/true, /*has_cap_tts=*/false);
+static ModelOutputs from_modalities(const std::vector<std::string> &out) {
     ModelOutputs res;
     res.text = std::find(out.begin(), out.end(), "text") != out.end();
     res.decisions = std::find(out.begin(), out.end(), "decisions") != out.end();
     return res;
+}
+
+ModelOutputs model_outputs(const std::string &model_path) {
+    // a file that can't be read gives COMMON_DECISION_TYPE_UNKNOWN, which the
+    // server reports as text: the normal load error is left to the caller
+    const common_gguf_info info = common_get_gguf_info(model_path);
+    return from_modalities(
+        server_model_output_modalities(info.decision_type, /*has_cap_chat=*/true, /*has_cap_tts=*/false));
+}
+
+ModelOutputs model_outputs(const llama_model *model) {
+    return from_modalities(server_model_output_modalities(model, /*has_cap_chat=*/true, /*has_cap_tts=*/false));
 }
 
 static bool is_decision_request(const std::string &text) {
@@ -178,14 +185,6 @@ int decision_cli_main(common_params &params, char **argv) {
         request = body.dump();
         params.image.clear();
     }
-
-    // Same sandbox as the text --cli: the request is answered in-process, so
-    // no network is needed. Must come before the untrusted GGUF is parsed.
-    common_log_pause(common_log_main());
-    int sandbox = llamafile_sandbox_enter("stdio rpath tty", FLAG_verbose);
-    common_log_resume(common_log_main());
-    if (sandbox == LLAMAFILE_SANDBOX_FAILED)
-        return 1;
 
     // The text --cli defaults (set before parsing) don't apply here: keep the
     // server's, so the answers match llamafile --server. Decisions read whole

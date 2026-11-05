@@ -162,16 +162,6 @@ int main(int argc, char **argv) {
     }
     clear_ephemeral();
 
-    // A decision model scores the options it's given instead of generating
-    // text, so it can't chat: refuse it like llama.cpp's llama-cli does
-    if (!model_outputs(g_params->model.path).text) {
-        fprintf(stderr,
-                "error: %s\n"
-                "       serve it with --server, or pipe a JSON request into --cli\n",
-                kDecisionNoChat);
-        exit(1);
-    }
-
     // Drop network access before the untrusted GGUF file is parsed. Must
     // happen after common_params_parse() (-hf model downloads need the
     // network) and before threads/weights come up. Unlike --cli, the chat
@@ -202,6 +192,18 @@ int main(int argc, char **argv) {
     if (g_model == NULL) {
         fprintf(stderr, "%s: failed to load model%s\n", g_params->model.path.c_str(), tip());
         exit(2);
+    }
+
+    // A decision model scores the options it's given instead of generating
+    // text, so it can't chat: refuse it like llama.cpp's llama-cli does.
+    // Checked on the loaded model, so the GGUF is only parsed sandboxed.
+    const ModelOutputs outputs = model_outputs(g_model);
+    if (outputs.decisions && !outputs.text) {
+        fprintf(stderr,
+                "error: %s\n"
+                "       serve it with --server, or pipe a JSON request into --cli\n",
+                kDecisionNoChat);
+        exit(1);
     }
 
     // Adjust context size
