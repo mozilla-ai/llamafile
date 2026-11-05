@@ -4,9 +4,12 @@
 // Test for legacy quant types (Q4_0, Q4_1, Q5_0, Q5_1) through IQK path.
 // Reproduces https://github.com/mozilla-ai/llamafile/issues/922
 //
-// Tests two classes of bugs:
+// Tests three classes of bugs:
 // 1. Q81::load_scales layout mismatch (affects Q4_1, Q5_1 at all dimensions)
 // 2. DequantizerQ51::prepare1(int) missing 5th bit (affects Q5_1 when nb%4 != 0)
+// 3. ARM block scale products computed in fp16 (Q80/Q81::process_scales): small
+//    weight x activation scales lose precision or go subnormal. Exercised by the
+//    small-scale runs, which push d_x*d_y below the fp16 normal range (6.1e-5).
 
 #include "sgemm.h"
 #include "ggml.h"
@@ -98,25 +101,34 @@ static void dequantize_q5_1(const void *x, float *y, int64_t k) {
     dequantize_row_q5_1((const block_q5_1 *)x, y, k);
 }
 
+static void quantize_q8_0(const float *x, void *y, int64_t k) {
+    quantize_row_q8_0_ref(x, (block_q8_0 *)y, k);
+}
+static void dequantize_q8_0(const void *x, float *y, int64_t k) {
+    dequantize_row_q8_0((const block_q8_0 *)x, y, k);
+}
+
 static QuantType quant_types[] = {
     {GGML_TYPE_Q4_0, "Q4_0", quantize_q4_0, dequantize_q4_0, GGML_TYPE_Q8_0},
     {GGML_TYPE_Q4_1, "Q4_1", quantize_q4_1, dequantize_q4_1, GGML_TYPE_Q8_1},
     {GGML_TYPE_Q5_0, "Q5_0", quantize_q5_0, dequantize_q5_0, GGML_TYPE_Q8_0},
     {GGML_TYPE_Q5_1, "Q5_1", quantize_q5_1, dequantize_q5_1, GGML_TYPE_Q8_1},
+    {GGML_TYPE_Q8_0, "Q8_0", quantize_q8_0, dequantize_q8_0, GGML_TYPE_Q8_0},
 };
 
 // Test a specific quant type with a given inner dimension.
-// ne00 must be a multiple of 32.
-static int test_type(const QuantType &qt, long ne00) {
+// ne00 must be a multiple of 32. scale_a/scale_b scale the random inputs.
+static int test_type(const QuantType &qt, long ne00, float scale_a = 1.0f, float scale_b = 1.0f) {
     int nb = ne00 / 32;
-    printf("\n--- %s ne00=%ld (nb=%d, nb%%4=%d) ---\n", qt.name, ne00, nb, nb % 4);
+    printf("\n--- %s ne00=%ld (nb=%d, nb%%4=%d) scale_a=%g scale_b=%g ---\n", qt.name, ne00, nb, nb % 4,
+           scale_a, scale_b);
 
     float *src_A = (float *)aligned_alloc(64, Nx * ne00 * sizeof(float));
     float *src_B = (float *)aligned_alloc(64, Ny * ne00 * sizeof(float));
 
     lcg = 12345;
-    for (long i = 0; i < Nx * ne00; ++i) src_A[i] = rand_float();
-    for (long i = 0; i < Ny * ne00; ++i) src_B[i] = rand_float();
+    for (long i = 0; i < Nx * ne00; ++i) src_A[i] = scale_a * rand_float();
+    for (long i = 0; i < Ny * ne00; ++i) src_B[i] = scale_b * rand_float();
 
     size_t row_size_A = ggml_row_size((ggml_type)qt.type, ne00);
     void *A_quant = aligned_alloc(64, Nx * row_size_A);
@@ -178,6 +190,8 @@ static int test_type(const QuantType &qt, long ne00) {
     double err_sum = 0.0;
     double err_max = 0.0;
     long err_count = 0;
+    double sq_err = 0.0;
+    double sq_ref = 0.0;
 
     for (long j = 0; j < Ny; ++j) {
         for (long i = 0; i < Nx; ++i) {
@@ -187,6 +201,8 @@ static int test_type(const QuantType &qt, long ne00) {
             if (std::isnan(iqk_val)) { nan_count++; continue; }
             if (std::isinf(iqk_val)) { inf_count++; continue; }
 
+            sq_err += ((double)iqk_val - ref_val) * ((double)iqk_val - ref_val);
+            sq_ref += (double)ref_val * ref_val;
             double rel_err = std::fabs(iqk_val - ref_val) / (std::fabs(ref_val) + 1e-6);
             err_sum += rel_err;
             if (rel_err > err_max) err_max = rel_err;
@@ -194,15 +210,22 @@ static int test_type(const QuantType &qt, long ne00) {
         }
     }
 
+    // both sides use the same quantized data, so only accumulation rounding is left:
+    // f32 scale products give nmse ~1e-12, f16 ones are far above 1e-6 at small scales
+    const double nmse = sq_ref > 0 ? sq_err / sq_ref : 0.0;
+
     int rc = 0;
     if (nan_count > 0 || inf_count > 0) {
         printf("  FAIL: %d NaN, %d Inf\n", nan_count, inf_count);
         rc = 1;
-    } else if (err_max > 0.05) {
+    } else if (err_max > 0.05 && scale_a == 1.0f && scale_b == 1.0f) {
         printf("  FAIL: max error %.2e exceeds threshold\n", err_max);
         rc = 1;
+    } else if (nmse > 1e-6) {
+        printf("  FAIL: nmse %.2e exceeds 1e-6\n", nmse);
+        rc = 1;
     } else {
-        printf("  PASS (avg=%.2e max=%.2e)\n", err_sum / err_count, err_max);
+        printf("  PASS (avg=%.2e max=%.2e nmse=%.2e)\n", err_sum / err_count, err_max, nmse);
     }
 
     free(C_ref); free(B_float); free(A_float);
@@ -229,6 +252,9 @@ int main() {
             if (test_type(qt, ne00) != 0)
                 failures++;
         }
+        // small weights and activations, as in real models: d_x*d_y ~ 1e-6
+        if (test_type(qt, 1024, 0.01f, 0.1f) != 0)
+            failures++;
     }
 
     printf("\n============================================\n");

@@ -2641,11 +2641,12 @@ template <int nrc> struct Q80 {
     }
 
     template <typename Dequantizer>
-    inline void process_scales(int i, Dequantizer& deq, float16x4_t * sc16, float32x4_t * /*acc*/) const {
-        auto qx_scales = deq.new_block(i);
+    inline void process_scales(int i, Dequantizer& deq, float32x4_t * sc, float32x4_t * /*acc*/) const {
+        // multiply the block scales in f32: an f16 product loses precision and goes
+        // subnormal (or to zero) for small weight x activation scales
+        auto qx_scales = vcvt_f32_f16(deq.new_block(i));
         for (int iy = 0; iy < nrc; ++iy) {
-            auto q8_scales = load_scales(iy, i);
-            sc16[iy] = vmul_f16(qx_scales, q8_scales);
+            sc[iy] = vmulq_f32(qx_scales, vcvt_f32_f16(load_scales(iy, i)));
         }
     }
 
@@ -2693,13 +2694,15 @@ template <int nrc> struct Q81 {
     }
 
     template <typename Dequantizer>
-    inline void process_scales(int i, Dequantizer& deq, float16x4_t * sc16, float32x4_t * acc) const {
+    inline void process_scales(int i, Dequantizer& deq, float32x4_t * sc, float32x4_t * acc) const {
+        // products in f32, see Q80::process_scales
         auto qx_scales = deq.new_block(i);
+        auto qx_d = vcvt_f32_f16(vget_low_f16(qx_scales));
+        auto qx_m = vcvt_f32_f16(vget_high_f16(qx_scales));
         for (int iy = 0; iy < nrc; ++iy) {
             auto q8_scales = load_scales(iy, i);
-            auto m = vmul_f16(vget_high_f16(qx_scales), vget_high_f16(q8_scales));
-            acc[iy] = vaddq_f32(acc[iy], vcvt_f32_f16(m));
-            sc16[iy] = vmul_f16(vget_low_f16(qx_scales), vget_low_f16(q8_scales));
+            acc[iy] = vmlaq_f32(acc[iy], qx_m, vcvt_f32_f16(vget_high_f16(q8_scales)));
+            sc[iy] = vmulq_f32(qx_d, vcvt_f32_f16(vget_low_f16(q8_scales)));
         }
     }
 
@@ -2890,7 +2893,7 @@ struct DequantizerQ51 final : public BaseLegacyDequantizer<block_q5_1> {
 };
 
 template <typename Dequantizer, typename Q8>
-inline void sum_4(int i, Dequantizer& deq, const Q8& q8, const float16x4_t * sc16, float32x4_t * acc) {
+inline void sum_4(int i, Dequantizer& deq, const Q8& q8, const float32x4_t * sc, float32x4_t * acc) {
     for (int iy = 0; iy < Q8::nrc_y; ++iy) {
         int32x4_t pall;
         if constexpr (Q8::needs_strided) {
@@ -2898,8 +2901,7 @@ inline void sum_4(int i, Dequantizer& deq, const Q8& q8, const float16x4_t * sc1
         } else {
             pall = sum_4_blocks(deq.bits.b, q8.quant_data(iy, i));
         }
-        auto scale = vcvt_f32_f16(sc16[iy]);
-        acc[iy] = vmlaq_f32(acc[iy], scale, vcvtq_f32_s32(pall));
+        acc[iy] = vmlaq_f32(acc[iy], sc[iy], vcvtq_f32_s32(pall));
     }
 }
 
@@ -2907,7 +2909,7 @@ template <typename Dequantizer, typename Q8>
 inline void mul_mat_qX_Y_q8_Y(int n, Dequantizer& deq, Q8& q8, const DataInfo& info, int nrc_x) {
     const int nb = n / QK4_1;
 
-    float16x4_t sc16[Q8::nrc_y];
+    float32x4_t sc[Q8::nrc_y];
 
     for (int ix = 0; ix < nrc_x; ++ix) {
 
@@ -2917,8 +2919,8 @@ inline void mul_mat_qX_Y_q8_Y(int n, Dequantizer& deq, Q8& q8, const DataInfo& i
         for (int iy = 0; iy < Q8::nrc_y; ++iy) acc[iy] = vdupq_n_f32(0.f);
 
         for (int i = 0; i < nb/4; ++i) {
-            q8.process_scales(i, deq, sc16, acc);
-            sum_4(i, deq, q8, sc16, acc);
+            q8.process_scales(i, deq, sc, acc);
+            sum_4(i, deq, q8, sc, acc);
         }
         for (int i = 4*(nb/4); i < nb; ++i) {
             q8.process_1_block(i, deq, acc);
@@ -2934,7 +2936,7 @@ template <typename Dequantizer, typename Q8>
 inline void mul_mat_qX_Y_q8_Y_1(int n, Dequantizer& deq1, Dequantizer& deq2, Q8& q8, const DataInfo& info, int nrc_x) {
     const int nb = n / QK4_1;
 
-    float16x4_t sc16[2];
+    float32x4_t sc[2];
 
     for (int ix = 0; ix < nrc_x; ++ix) {
 
@@ -2944,14 +2946,14 @@ inline void mul_mat_qX_Y_q8_Y_1(int n, Dequantizer& deq1, Dequantizer& deq2, Q8&
         float32x4_t acc[2] = { vdupq_n_f32(0.f), vdupq_n_f32(0.f) };
 
         for (int i = 0; i < nb/8; ++i) {
-            q8.process_scales(2*i+0, deq1, sc16+0, acc+0);
-            q8.process_scales(2*i+1, deq2, sc16+1, acc+1);
-            sum_4(2*i+0, deq1, q8, sc16+0, acc+0);
-            sum_4(2*i+1, deq2, q8, sc16+1, acc+1);
+            q8.process_scales(2*i+0, deq1, sc+0, acc+0);
+            q8.process_scales(2*i+1, deq2, sc+1, acc+1);
+            sum_4(2*i+0, deq1, q8, sc+0, acc+0);
+            sum_4(2*i+1, deq2, q8, sc+1, acc+1);
         }
         for (int i = 2*(nb/8); i < nb/4; ++i) {
-            q8.process_scales(i, deq1, sc16, acc);
-            sum_4(i, deq1, q8, sc16, acc);
+            q8.process_scales(i, deq1, sc, acc);
+            sum_4(i, deq1, q8, sc, acc);
         }
         for (int i = 4*(nb/4); i < nb; ++i) {
             q8.process_1_block(i, deq1, acc);
