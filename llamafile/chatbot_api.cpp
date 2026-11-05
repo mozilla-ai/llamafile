@@ -122,7 +122,10 @@ public:
         std::string body = req_json.dump();
         std::string assistant_content;
         std::string sse_buffer;
-        std::string raw_body;  // start of the response, for error messages
+        // an error response is one JSON body, not an event stream: keep the
+        // start of the response until the first event, for its message
+        std::string raw_body;
+        bool streaming = false;
         bool stopped = false;
 
         httplib::Client cli(host_, port_);
@@ -137,7 +140,7 @@ public:
                 if (stopped)
                     return false;
 
-                if (raw_body.size() < 65536)
+                if (!streaming && raw_body.size() < 65536)
                     raw_body.append(data, std::min(len, 65536 - raw_body.size()));
                 sse_buffer.append(data, len);
 
@@ -158,6 +161,8 @@ public:
                     // Only process "data: " lines
                     if (line.substr(0, 6) != "data: ")
                         continue;
+                    streaming = true;
+                    raw_body.clear();
 
                     std::string payload = line.substr(6);
 
