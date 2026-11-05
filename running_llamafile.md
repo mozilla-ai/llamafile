@@ -62,6 +62,15 @@ Here's how you can use Qwen3.5 9B to summarize a Web page:
     sed 's/   */ /g')`"
 ```
 
+With a [decision model](api.md#decision-models), `--cli` reads a JSON request
+from stdin (or `-p`, or `-f FILE`) and prints the JSON answer, the same as
+the server's `POST /v1/systemone`:
+
+```sh
+echo '{"state": "I was charged twice!", "questions": {"angry": {"type": "noul", "instructions": "Is the customer angry?"}}}' |
+  llamafile -m Kev-4B-Q4_K_M.gguf --cli | jq .answers.angry.noul
+```
+
 ## Running llamafile in chat mode
 
 If you add the `--chat` argument to a llamafile, you will run it in chat mode.
