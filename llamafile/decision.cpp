@@ -33,7 +33,8 @@
 #include "server-common.h"
 
 // llama.cpp/tools/server/server.cpp (llamafile patch): answers one
-// /v1/systemone request in-process, as the server would
+// /v1/systemone request in-process, as the server would. Returns the HTTP
+// status, -1 for parameters the server rejects, -2 if the model fails to load
 int llamafile_server_decide(common_params &params, const std::string &request, std::string &response);
 
 namespace lf {
@@ -192,9 +193,19 @@ int decision_cli_main(common_params &params, char **argv) {
     // the server's "auto", resolved by server_prepare_params().
     if (params.n_batch < 0)
         params.n_batch = common_params{}.n_batch;
+    // the server's -np rejects 0, the CLI's doesn't: the context would have
+    // no sequence and fail to load
+    if (params.n_parallel == 0) {
+        fprintf(stderr, "error: invalid value for -np/--parallel: 0 (use 1 or more, or -1 for auto)\n");
+        return 1;
+    }
 
     std::string response;
     const int status = llamafile_server_decide(params, request, response);
+    if (status == -1) {
+        fprintf(stderr, "error: invalid parameters for a decision model (see the error above)\n");
+        return 1;
+    }
     if (status < 0) {
         fprintf(stderr, "error: failed to load model: %s\n", params.model.path.c_str());
         return 2;

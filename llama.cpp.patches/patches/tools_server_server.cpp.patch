@@ -263,7 +263,7 @@ diff --git a/tools/server/server.cpp b/tools/server/server.cpp
      common_log_flush(common_log_main());
      return result;
  }
-@@ -811,3 +987,82 @@ int llama_server(common_params & params, int argc, char ** argv) {
+@@ -811,3 +987,83 @@ int llama_server(common_params & params, int argc, char ** argv) {
      server_role role;
      return server_run(params, argc, argv, role, opts);
  }
@@ -272,7 +272,8 @@ diff --git a/tools/server/server.cpp b/tools/server/server.cpp
 +// llamafile `--cli` with a decision model: answer one POST /v1/systemone
 +// request in-process, with no HTTP listener, using the same parameters, model
 +// load and error handling as the server. Returns the HTTP status and sets the
-+// response body, or returns -1 if the model could not be loaded.
++// response body, or returns -1 if the parameters are invalid for the server
++// (the reason is logged), or -2 if the model could not be loaded.
 +int llamafile_server_decide(common_params & params, const std::string & request, std::string & response);
 +int llamafile_server_decide(common_params & params, const std::string & request, std::string & response) {
 +    if (!server_prepare_params(params, SERVER_ROLE_INSTANCE)) {
@@ -282,7 +283,7 @@ diff --git a/tools/server/server.cpp b/tools/server/server.cpp
 +    server_context ctx_server;
 +    server_routes  routes(params, ctx_server);
 +    if (!ctx_server.load_model(params)) {
-+        return -1;
++        return -2;
 +    }
 +    routes.update_meta(ctx_server);
 +
