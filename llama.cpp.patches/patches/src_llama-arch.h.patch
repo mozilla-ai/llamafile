@@ -1,0 +1,11 @@
+diff --git a/src/llama-arch.h b/src/llama-arch.h
+--- a/llama.cpp/src/llama-arch.h
++++ b/llama.cpp/src/llama-arch.h
+@@ -209,6 +209,7 @@ enum llm_kv {
+     LLM_KV_GENERAL_TENSOR_EXTRA_PREC_A4,
+ 
+     LLM_KV_VOCAB_SIZE,
++    LLM_KV_VOCAB_SIZE_OUT,
+     LLM_KV_CONTEXT_LENGTH,
+     LLM_KV_EMBEDDING_LENGTH,
+     LLM_KV_EMBEDDING_LENGTH_OUT,

@@ -1,0 +1,281 @@
+diff --git a/tools/mtmd/mtmd.cpp b/tools/mtmd/mtmd.cpp
+--- a/llama.cpp/tools/mtmd/mtmd.cpp
++++ b/llama.cpp/tools/mtmd/mtmd.cpp
+@@ -570,6 +570,16 @@ struct mtmd_context {
+     // these are not token, but strings used to mark the beginning and end of image/audio embeddings
+     std::string img_beg;
+     std::string img_end;
++    // apertus 1.5: images are discrete tokens of the text vocab (structure tokens + code 0)
++    llama_token apv_tok_start = LLAMA_TOKEN_NULL;
++    llama_token apv_tok_grid  = LLAMA_TOKEN_NULL;
++    llama_token apv_tok_eol   = LLAMA_TOKEN_NULL;
++    llama_token apv_tok_end   = LLAMA_TOKEN_NULL;
++    llama_token apv_code0     = LLAMA_TOKEN_NULL;
++    // apertus 1.5: same for audio
++    llama_token apa_tok_start = LLAMA_TOKEN_NULL;
++    llama_token apa_tok_end   = LLAMA_TOKEN_NULL;
++    llama_token apa_code0     = LLAMA_TOKEN_NULL;
+     std::string aud_beg;
+     std::string aud_end;
+     std::string vid_beg; // wraps a whole video (lazy bitmap with is_video)
+@@ -808,6 +818,19 @@ struct mtmd_context {
+                     img_end = "<|image_end|>";
+                     image_preproc = std::make_unique<mtmd_image_preprocessor_muse_glimmer>(ctx_v);
+                 } break;
++            case PROJECTOR_TYPE_APERTUS1P5V:
++                {
++                    // same resize as transformers Qwen2-VL smart_resize, factor 16
++                    image_preproc = std::make_unique<mtmd_image_preprocessor_lfm3vl>(ctx_v);
++                    if (vocab == nullptr) {
++                        break; // e.g. mtmd_get_memory_usage
++                    }
++                    apv_tok_start = find_text("<|img_start|>");
++                    apv_tok_grid  = find_text("<|img_token_start|>");
++                    apv_tok_eol   = find_text("<|img_end_of_row|>");
++                    apv_tok_end   = find_text("<|img_end|>");
++                    apv_code0     = find_text("<|visual token 0|>");
++                } break;
+             case PROJECTOR_TYPE_LFM3VL:
+                 {
+                     // <|vision_start|> ... (image embeddings) ... <|vision_end|>
+@@ -1168,6 +1191,15 @@ struct mtmd_context {
+                 {
+                     audio_preproc = std::make_unique<mtmd_audio_preprocessor_pockettts>(ctx_a);
+                 } break;
++            case PROJECTOR_TYPE_APERTUS1P5A:
++                {
++                    // audio is tokenized into codes of the text vocab, see mtmd_tokenizer::add_media_apertus1p5_audio()
++                    if (vocab != nullptr) {
++                        apa_tok_start = find_text("<|audio_start|>");
++                        apa_tok_end   = find_text("<|audio_end|>");
++                        apa_code0     = find_text("<|audio token 0|>");
++                    }
++                } break;
+             default:
+                 throw std::runtime_error(string_format("%s: unexpected audio projector type %d\n", __func__, proj));
+         }
+@@ -1218,6 +1250,17 @@ struct mtmd_context {
+     }
+ 
+ private:
++    // like lookup_token(), but with the raw token text: code tokens are typed unused and have no piece
++    llama_token find_text(const char * text) const {
++        const int n_vocab = llama_vocab_n_tokens(vocab);
++        for (llama_token i = 0; i < n_vocab; i++) {
++            if (strcmp(llama_vocab_get_text(vocab, i), text) == 0) {
++                return i;
++            }
++        }
++        throw std::runtime_error(string_format("%s: token %s not found, the text model does not match the mmproj", __func__, text));
++    }
++
+     llama_token lookup_token(const std::string & token_text) {
+         if (vocab == nullptr) {
+             // TODO @ngxson : this case is currently hit by mtmd_get_memory_usage
+@@ -1531,6 +1574,99 @@ struct mtmd_tokenizer {
+         }
+     }
+ 
++    // Apertus 1.5 tokenizes images into codes of the text vocab, in the layout of Apertus1p5Processor.replace_image_token:
++    // <|img_start|>{H}*{W}<|img_token_start|>{row 0}<|img_end_of_row|>...{row H-1}<|img_end|>
++    // the header is text, the rows are an image chunk of (W + 1) * H tokens, see mtmd_encode_apertus1p5()
++    int32_t add_media_apertus1p5(std::vector<const mtmd_bitmap *> & bitmaps) {
++        if (ctx->vocab == nullptr || ctx->apv_code0 == LLAMA_TOKEN_NULL) {
++            LOG_ERR("%s: error: Apertus 1.5 images need the text model\n", __func__);
++            return 2;
++        }
++        const int patch = clip_get_hparams(ctx->ctx_v)->patch_size;
++        for (const auto * bmp : bitmaps) {
++            if (bmp->nx <= 0 || bmp->ny <= 0) {
++                LOG_ERR("%s: error: invalid bitmap dimensions: nx = %d, ny = %d\n", __func__, bmp->nx, bmp->ny);
++                return 2;
++            }
++            clip_image_u8 img_u8;
++            img_u8.set_size({(int) bmp->nx, (int) bmp->ny}, bmp->is_placeholder());
++            img_u8.cpy_buf(bmp->get_ro_buf());
++
++            mtmd_image_preproc_out preproc = ctx->image_preproc->preprocess(img_u8);
++            GGML_ASSERT(preproc.entries.size() == 1);
++            const int gx = preproc.entries[0].nx() / patch;
++            const int gy = preproc.entries[0].ny() / patch;
++
++            std::vector<llama_token> header;
++            header.push_back(ctx->apv_tok_start);
++            const std::string grid = std::to_string(gy) + "*" + std::to_string(gx);
++            for (llama_token t : mtmd_tokenize_text_internal(ctx->vocab, grid, false, false)) {
++                header.push_back(t);
++            }
++            header.push_back(ctx->apv_tok_grid);
++            add_text(header);
++
++            mtmd_image_tokens_ptr image_tokens(new mtmd_image_tokens);
++            image_tokens->nx = gx + 1; // codes and the row separator
++            image_tokens->ny = gy;
++            image_tokens->batch_f32.entries.push_back(std::move(preproc.entries[0]));
++            image_tokens->id = bmp->id;
++            mtmd_input_chunk chunk{
++                MTMD_INPUT_CHUNK_TYPE_IMAGE,
++                {}, // text tokens
++                std::move(image_tokens),
++                nullptr, // audio tokens
++            };
++            cur.entries.emplace_back(std::move(chunk));
++        }
++        return 0;
++    }
++
++    // same for audio: <|audio_start|>{codes}<|audio_end|>, see Apertus1p5Processor.replace_audio_token
++    // <|audio_start|> is text, the codes and <|audio_end|> are an audio chunk
++    int32_t add_media_apertus1p5_audio(const mtmd_bitmap & bitmap) {
++        if (ctx->vocab == nullptr || ctx->apa_code0 == LLAMA_TOKEN_NULL) {
++            LOG_ERR("%s: error: Apertus 1.5 audio needs the text model\n", __func__);
++            return 2;
++        }
++        const int hop = clip_get_hparams(ctx->ctx_a)->audio_hop_len;
++        const auto & buf = bitmap.get_ro_buf();
++        const size_t n_samples = bitmap.is_placeholder() ? (size_t) bitmap.nx : buf.size() / sizeof(float);
++
++        clip_image_f32 audio;
++        audio.set_size({(int) n_samples, 1}, bitmap.is_placeholder(), /* is_audio */ true);
++        if (!bitmap.is_placeholder()) {
++            // peak normalize to -3 dBFS, like the processor
++            const float * samples = (const float *) buf.data();
++            float peak = 0.0f;
++            for (size_t i = 0; i < n_samples; i++) {
++                peak = std::max(peak, std::fabs(samples[i]));
++            }
++            const float scale = std::pow(10.0f, -3.0f / 20.0f) / std::max(peak, 1e-10f);
++            std::vector<float> wav(n_samples);
++            for (size_t i = 0; i < n_samples; i++) {
++                wav[i] = samples[i] * scale;
++            }
++            audio.cpy_buf(wav);
++        }
++
++        add_text(std::vector<llama_token>{ctx->apa_tok_start});
++
++        mtmd_audio_tokens_ptr audio_tokens(new mtmd_audio_tokens);
++        audio_tokens->n_tokens = (uint32_t) ((n_samples + hop - 1) / hop + 1); // codes and <|audio_end|>
++        audio_tokens->batch_f32.is_audio = true;
++        audio_tokens->batch_f32.entries.push_back(std::move(audio));
++        audio_tokens->id = bitmap.id;
++        mtmd_input_chunk chunk{
++            MTMD_INPUT_CHUNK_TYPE_AUDIO,
++            {}, // text tokens
++            nullptr, // image tokens
++            std::move(audio_tokens),
++        };
++        cur.entries.emplace_back(std::move(chunk));
++        return 0;
++    }
++
+     int32_t add_media(std::vector<const mtmd_bitmap *> & bitmaps) {
+         GGML_ASSERT(!bitmaps.empty());
+ 
+@@ -1545,6 +1681,10 @@ struct mtmd_tokenizer {
+                 return 2;
+             }
+ 
++            if (ctx->proj_type_v() == PROJECTOR_TYPE_APERTUS1P5V) {
++                return add_media_apertus1p5(bitmaps);
++            }
++
+             if (!ctx->img_beg.empty()) {
+                 add_text(ctx->img_beg, true); // add image begin token
+             }
+@@ -1786,6 +1926,10 @@ struct mtmd_tokenizer {
+                 return 2;
+             }
+ 
++            if (ctx->proj_type_a() == PROJECTOR_TYPE_APERTUS1P5A) {
++                return add_media_apertus1p5_audio(*bitmap);
++            }
++
+             if (!ctx->aud_beg.empty()) {
+                 add_text(ctx->aud_beg, true); // add audio begin token
+             }
+@@ -2102,6 +2246,63 @@ int32_t mtmd_tokenize_from_parts(const mtmd_context * ctx,
+     }
+ }
+ 
++// apertus 1.5: the tokenizers output codes of the text vocab, so the output embeddings are the token embeddings
++// of the text model for the chunk layout of add_media_apertus1p5() / add_media_apertus1p5_audio()
++static int32_t mtmd_encode_apertus1p5(mtmd_context * ctx, clip_ctx * ctx_clip, const clip_image_f32_batch & batch, std::vector<float> & out_embd) {
++    if (ctx->text_model == nullptr) {
++        LOG_ERR("%s: Apertus 1.5 media need the text model\n", __func__);
++        return 1;
++    }
++    std::vector<llama_token> tokens;
++    for (const auto & entry : batch.entries) {
++        clip_image_f32_batch one;
++        one.is_audio = batch.is_audio;
++        one.entries.push_back(entry);
++        std::vector<int32_t> codes;
++        clip_encode_params params;
++        params.imgs      = &one;
++        params.n_threads = ctx->n_threads;
++        params.out_codes = &codes;
++        const int64_t t0 = ggml_time_ms();
++        if (!clip_encode(ctx_clip, &params)) {
++            return 1;
++        }
++        if (batch.is_audio) {
++            const int hop = clip_get_hparams(ctx_clip)->audio_hop_len;
++            if (codes.size() != (size_t) (entry.nx() + hop - 1) / hop) {
++                LOG_ERR("%s: unexpected number of audio codes %zu\n", __func__, codes.size());
++                return 1;
++            }
++            for (int32_t c : codes) {
++                tokens.push_back(ctx->apa_code0 + c);
++            }
++            tokens.push_back(ctx->apa_tok_end);
++        } else {
++            const int patch = clip_get_hparams(ctx_clip)->patch_size;
++            const int gx = entry.nx() / patch;
++            const int gy = entry.ny() / patch;
++            if (codes.size() != (size_t) gx * gy) {
++                LOG_ERR("%s: unexpected number of image codes %zu\n", __func__, codes.size());
++                return 1;
++            }
++            for (int y = 0; y < gy; y++) {
++                for (int x = 0; x < gx; x++) {
++                    tokens.push_back(ctx->apv_code0 + codes[(size_t) y * gx + x]);
++                }
++                tokens.push_back(y + 1 < gy ? ctx->apv_tok_eol : ctx->apv_tok_end);
++            }
++        }
++        LOG_INF("%s: encoded into %zu codes in %lld ms\n", __func__, codes.size(), (long long) (ggml_time_ms() - t0));
++    }
++    const size_t n_embd = ctx->n_embd_out();
++    out_embd.resize(n_embd * tokens.size());
++    if (llama_model_get_tok_embd_rows(ctx->text_model, tokens.data(), (uint32_t) tokens.size(), out_embd.data()) != n_embd * tokens.size()) {
++        LOG_ERR("%s: failed to get the token embeddings\n", __func__);
++        return 1;
++    }
++    return 0;
++}
++
+ static int32_t mtmd_encode_impl(mtmd_context * ctx, const mtmd_image_tokens * image_tokens, std::vector<float> & out_embd) {
+     clip_ctx * ctx_clip = ctx->ctx_v;
+     if (!ctx_clip) {
+@@ -2118,6 +2319,10 @@ static int32_t mtmd_encode_impl(mtmd_context * ctx, const mtmd_image_tokens * im
+         return 1;
+     }
+ 
++    if (ctx->proj_type_v() == PROJECTOR_TYPE_APERTUS1P5V) {
++        return mtmd_encode_apertus1p5(ctx, ctx_clip, image_tokens->batch_f32, out_embd);
++    }
++
+     if (image_tokens->pos == MTMD_POS_TYPE_CANVAS) {
+         // the tiles differ in size, encode them one by one
+         size_t offset = 0;
+@@ -2176,6 +2381,9 @@ static int32_t mtmd_encode_chunk_impl(mtmd_context * ctx, const mtmd_input_chunk
+             LOG_ERR("%s: audio tokens batch is placeholder\n", __func__);
+             return 1;
+         }
++        if (ctx->proj_type_a() == PROJECTOR_TYPE_APERTUS1P5A) {
++            return mtmd_encode_apertus1p5(ctx, ctx->ctx_a, chunk->tokens_audio->batch_f32, out_embd);
++        }
+         int n_mmproj_embd = ctx->n_embd_out();
+         const auto & track = chunk->tokens_audio->track;
+         if (track) {

@@ -1,0 +1,11 @@
+diff --git a/src/llama-arch.cpp b/src/llama-arch.cpp
+--- a/llama.cpp/src/llama-arch.cpp
++++ b/llama.cpp/src/llama-arch.cpp
+@@ -205,6 +205,7 @@ static const std::map<llm_kv, const char *> LLM_KV_NAMES = {
+     { LLM_KV_GENERAL_TENSOR_EXTRA_PREC_A4,           "general.tensor_extra.prec_a4"          },
+ 
+     { LLM_KV_VOCAB_SIZE,                        "%s.vocab_size"                        },
++    { LLM_KV_VOCAB_SIZE_OUT,                    "%s.vocab_size_out"                    },
+     { LLM_KV_CONTEXT_LENGTH,                    "%s.context_length"                    },
+     { LLM_KV_EMBEDDING_LENGTH,                  "%s.embedding_length"                  },
+     { LLM_KV_EMBEDDING_LENGTH_OUT,              "%s.embedding_length_out"              },

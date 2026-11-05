@@ -1,0 +1,13 @@
+diff --git a/src/llama-hparams.h b/src/llama-hparams.h
+--- a/llama.cpp/src/llama-hparams.h
++++ b/llama.cpp/src/llama-hparams.h
+@@ -262,6 +262,9 @@ struct llama_hparams {
+     // output embedding dimension (0 = use n_embd)
+     uint32_t n_embd_out_impl = 0;
+ 
++    // output vocabulary size (0 = use n_vocab)
++    uint32_t n_vocab_out_impl = 0;
++
+     uint32_t dflash_block_size       = 0;
+     uint32_t dflash_conv_kernel_size = 0;
+     uint32_t dflash_conv_group_size  = 0;

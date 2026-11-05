@@ -1,0 +1,47 @@
+diff --git a/tools/mtmd/clip-impl.h b/tools/mtmd/clip-impl.h
+--- a/llama.cpp/tools/mtmd/clip-impl.h
++++ b/llama.cpp/tools/mtmd/clip-impl.h
+@@ -291,6 +291,25 @@
+ #define TN_A_SEANET_RES_CONV2    "a.seanet.blk.%d.res_conv2.%s"
+ #define TN_A_SEANET_SCALE_CONV   "a.seanet.blk.%d.scale_conv.%s"
+ #define TN_A_SPEAKER_PROJ        "a.speaker_proj.%s"
++
++// apertus 1.5 vision tokenizer (VQ encoder), s = stage, r/a = resnet/attention block
++#define TN_APV_CONV_IN    "v.conv_in.%s"
++#define TN_APV_RES        "v.s%d.r%d.%s.%s"
++#define TN_APV_ATTN       "v.s%d.a%d.%s.%s"
++#define TN_APV_DOWN       "v.s%d.down.%s"
++#define TN_APV_MID_RES    "v.mid.r%d.%s.%s"
++#define TN_APV_MID_ATTN   "v.mid.a%d.%s.%s"
++#define TN_APV_NORM_OUT   "v.norm_out.%s"
++#define TN_APV_CONV_OUT   "v.conv_out.%s"
++#define TN_APV_QUANT_CONV "v.quant_conv.%s"
++#define TN_APV_CODEBOOK   "v.codebook.weight"
++
++// apertus 1.5 audio tokenizer (WavTokenizer SEANet encoder), s = stage
++#define TN_APA_CONV_IN    "a.conv_in.%s"
++#define TN_APA_STAGE      "a.s%d.%s.%s"
++#define TN_APA_LSTM       "a.lstm.l%d.%s"
++#define TN_APA_CONV_OUT   "a.conv_out.%s"
++#define TN_APA_CODEBOOK   "a.codebook.weight"
+ #define TN_A_DOWNSAMPLE_CONV     "a.downsample.conv.%s"
+ #define TN_A_GEN_FLOW_INPUT_PROJ "a.gen.flow.input_proj.%s"
+ #define TN_A_GEN_FLOW_COND_EMBD  "a.gen.flow.cond_embd.%s"
+@@ -581,6 +600,8 @@ enum projector_type {
+     PROJECTOR_TYPE_SENSENOVA_U1,
+     PROJECTOR_TYPE_COHERE2V,
+     PROJECTOR_TYPE_MUSE_SPARK_AUDIO,
++    PROJECTOR_TYPE_APERTUS1P5V,
++    PROJECTOR_TYPE_APERTUS1P5A,
+     PROJECTOR_TYPE_UNKNOWN,
+ };
+ 
+@@ -662,6 +683,8 @@ static std::map<projector_type, std::string> PROJECTOR_TYPE_NAMES = {
+     { PROJECTOR_TYPE_SENSENOVA_U1,      "sensenova_u1"},
+     { PROJECTOR_TYPE_COHERE2V,          "cohere2v"},
+     { PROJECTOR_TYPE_MUSE_SPARK_AUDIO,  "muse-spark-audio"},
++    { PROJECTOR_TYPE_APERTUS1P5V,       "apertus1p5v"},
++    { PROJECTOR_TYPE_APERTUS1P5A,       "apertus1p5a"},
+ };
+ 
+ static projector_type clip_projector_type_from_string(const std::string & str) {

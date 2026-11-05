@@ -1,5 +1,7 @@
 """Multimodal (vision) integration tests."""
 
+from concurrent.futures import ThreadPoolExecutor
+
 import pytest
 
 from utils.llamafile import LlamafileRunner
@@ -167,6 +169,46 @@ class TestMultimodalServer:
             content = response["choices"][0]["message"]["content"].lower()
             color_words = ["red", "blue", "green", "white", "black", "yellow", "color"]
             assert any(color in content for color in color_words)
+
+        finally:
+            proc.terminate()
+            proc.wait()
+
+    def test_server_concurrent_images(self, llamafile, mmproj, test_image, server_port, timeouts):
+        """Image requests from several clients at once, then one after another.
+
+        The server tokenizes prompts on its HTTP threads, and some models
+        (Apertus 1.5) encode the image while tokenizing: every request must
+        succeed and see the same prompt, and the server must stay up.
+        """
+        extra_args = (self._mmproj_args(mmproj) or []) + ["--parallel", "4", "-c", "8192"]
+        proc = llamafile.start_server(port=server_port, extra_args=extra_args)
+
+        try:
+            ready = LlamafileRunner.wait_for_server(
+                server_port, timeout=timeouts.server_ready, proc=proc
+            )
+            assert ready, "Server did not become ready"
+
+            def ask(_):
+                return LlamafileRunner.chat_completion_with_image(
+                    port=server_port,
+                    prompt="Describe this image in one sentence.",
+                    image_path=str(test_image),
+                    timeout=timeouts.http_request,
+                    max_tokens=16,
+                    temperature=0,
+                )
+
+            with ThreadPoolExecutor(max_workers=4) as pool:
+                responses = list(pool.map(ask, range(4)))
+            responses += [ask(i) for i in range(4)]
+
+            assert proc.poll() is None, "Server exited"
+            for response in responses:
+                assert len(response["choices"][0]["message"]["content"].strip()) > 0
+            prompt_tokens = {response["usage"]["prompt_tokens"] for response in responses}
+            assert len(prompt_tokens) == 1, f"Different prompt sizes for the same request: {prompt_tokens}"
 
         finally:
             proc.terminate()

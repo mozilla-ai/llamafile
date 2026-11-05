@@ -1,0 +1,84 @@
+diff --git a/tests/test-chat.cpp b/tests/test-chat.cpp
+--- a/llama.cpp/tests/test-chat.cpp
++++ b/llama.cpp/tests/test-chat.cpp
+@@ -5873,6 +5873,80 @@ static void test_template_output_peg_parsers(bool detailed_debug) {
+             .run();
+     }
+ 
++    // Apertus 1.5 tests
++    // Format: <|inner_prefix|>{reasoning}<|inner_suffix|>{content}<|tools_prefix|>[{"function_name": {...arguments...}}]<|tools_suffix|>
++    // <|tools_suffix|> is an EOG token: the grammar sampler accepts it without matching text, so tool call inputs stop before it
++    {
++        auto tst = peg_tester("models/templates/swiss-ai-Apertus-v1.5.jinja", detailed_debug);
++        tst.test("Hello, world!\nWhat's up?").expect(message_assist).expect_reconstruction().run();
++
++        tst.test("<|inner_prefix|>I'm\nthinking<|inner_suffix|>Hello, world!\nWhat's up?")
++            .enable_thinking(true)
++            .reasoning_format(COMMON_REASONING_FORMAT_AUTO)
++            .expect(message_assist_thoughts)
++            .expect_reconstruction()
++            .run();
++
++        tst.test("<|inner_prefix|>I'm\nthinking<|inner_suffix|>Hello, world!\nWhat's up?")
++            .enable_thinking(true)
++            .reasoning_format(COMMON_REASONING_FORMAT_NONE)
++            .expect_content("<|inner_prefix|>I'm\nthinking<|inner_suffix|>Hello, world!\nWhat's up?")
++            .run();
++
++        tst.test("<|tools_prefix|>[{\"special_function\": {\"arg1\": 1}}]")
++            .tools({ special_function_tool })
++            .expect(message_assist_call)
++            .expect_reconstruction()
++            .run();
++
++        tst.test("<|tools_prefix|>[{\"special_function\": {\"arg1\": 1}}, {\"special_function_with_opt\": {\"arg1\": 1, \"arg2\": 2}}]")
++            .parallel_tool_calls(true)
++            .tools({ special_function_tool, special_function_tool_with_optional_param })
++            .expect_tool_calls({
++                { "special_function", R"({"arg1": 1})", {} },
++                { "special_function_with_opt", R"({"arg1": 1, "arg2": 2})", {} },
++            })
++            .run();
++
++        // tool calls can be made during deliberation, before <|inner_suffix|>
++        tst.test("<|inner_prefix|>Let's call a tool:<|tools_prefix|>[{\"empty_args\": {}}]")
++            .enable_thinking(true)
++            .reasoning_format(COMMON_REASONING_FORMAT_AUTO)
++            .tools({ empty_args_tool })
++            .expect(message_with_reasoning_and_tool_call("Let's call a tool:", "empty_args", "{}"))
++            .expect_reconstruction()
++            .run();
++
++        tst.test("<|inner_prefix|>I'm\nthinking<|inner_suffix|>Hello, world!\nWhat's up?<|tools_prefix|>[{\"special_function\": {\"arg1\": 1}}]")
++            .enable_thinking(true)
++            .reasoning_format(COMMON_REASONING_FORMAT_AUTO)
++            .tools({ special_function_tool })
++            .expect(message_assist_call_thoughts_content)
++            .expect_reconstruction()
++            .run();
++
++        // Continuation tests
++        tst.test("world!\nWhat's up?")
++            .reasoning_format(COMMON_REASONING_FORMAT_AUTO)
++            .enable_thinking(true)
++            .messages({ message_user, message_assist_prefill_content })
++            .add_generation_prompt(false)
++            .continue_final_message(COMMON_CHAT_CONTINUATION_CONTENT)
++            .expect_reasoning("I'm thinking")
++            .expect_content("Hello, world!\nWhat's up?")
++            .run();
++
++        tst.test(" thinking<|inner_suffix|>Hello, world!\nWhat's up?")
++            .reasoning_format(COMMON_REASONING_FORMAT_AUTO)
++            .enable_thinking(true)
++            .messages({ message_user, message_assist_prefill_reasoning })
++            .add_generation_prompt(false)
++            .continue_final_message(COMMON_CHAT_CONTINUATION_REASONING)
++            .expect_reasoning("I'm thinking")
++            .expect_content("Hello, world!\nWhat's up?")
++            .run();
++    }
++
+     // MiniMax-M2 tests - XML invoke format with parameter tags
+     // Format: <minimax:tool_call><invoke name="func"><parameter name="key">value</parameter></invoke></minimax:tool_call>
+     {
