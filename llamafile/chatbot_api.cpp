@@ -270,24 +270,23 @@ public:
         return "";
     }
 
-    // False if the server's model can't generate text: a decision model, which
-    // serves POST /v1/systemone instead. True if the server doesn't say.
-    bool can_chat() {
+    // What the server's model outputs, from /v1/models ("text", "decisions",
+    // "audio"); empty if the server doesn't say
+    std::vector<std::string> output_modalities() {
+        std::vector<std::string> res;
         httplib::Client cli(host_, port_);
         cli.set_read_timeout(5);
         auto result = cli.Get("/v1/models");
         if (!result || result->status != 200)
-            return true;
+            return res;
         try {
             json models = json::parse(result->body);
-            const auto &out = models.at("data").at(0).at("architecture").at("output_modalities");
-            for (const auto &m : out)
-                if (m == "text")
-                    return true;
-            return out.empty();
+            for (const auto &m : models.at("data").at(0).at("architecture").at("output_modalities"))
+                res.push_back(m.get<std::string>());
         } catch (const json::exception &) {
-            return true;
+            res.clear();
         }
+        return res;
     }
 
     int context_used() override {
@@ -437,8 +436,8 @@ std::unique_ptr<ChatBackend> create_api_backend(const std::string &server_url) {
     return std::make_unique<ApiBackend>(server_url);
 }
 
-bool api_server_can_chat(const std::string &server_url) {
-    return ApiBackend(server_url).can_chat();
+std::vector<std::string> api_server_output_modalities(const std::string &server_url) {
+    return ApiBackend(server_url).output_modalities();
 }
 
 } // namespace chatbot

@@ -18,6 +18,7 @@
 
 #include "chatbot.h"
 
+#include <algorithm>
 #include <cosmo.h>
 #include <cstdio>
 #include <cstdlib>
@@ -416,11 +417,18 @@ int api_main(const std::string &server_url, const std::string &system_prompt,
     auto backend = create_api_backend(server_url);
     g_backend = backend.get();
 
-    // A decision model can't chat, but the server answers its requests
-    if (!api_server_can_chat(server_url))
-        printf("note: this is a decision model, it can't chat. Send its requests to\n"
-               "      POST %s/v1/systemone (see docs/api.md)\n\n",
-               server_url.c_str());
+    // A model that doesn't generate text (a decision model, or a speech-only
+    // one) can't chat; a decision model's server still answers its requests
+    const std::vector<std::string> outputs = api_server_output_modalities(server_url);
+    auto outputs_has = [&](const char *m) {
+        return std::find(outputs.begin(), outputs.end(), m) != outputs.end();
+    };
+    if (!outputs.empty() && !outputs_has("text")) {
+        printf("note: this is not a text model, it can't chat");
+        if (outputs_has("decisions"))
+            printf(". Send its requests to\n      POST %s/v1/systemone (see docs/api.md)", server_url.c_str());
+        printf("\n\n");
+    }
 
     // Run REPL
     repl(*backend);

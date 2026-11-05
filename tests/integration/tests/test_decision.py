@@ -207,7 +207,7 @@ class TestDecisionChatGates:
                 server_port, timeout=timeouts.server_ready, proc=proc
             ), "server did not become ready"
             startup = strip_ansi(read_until_idle(proc.stdout, idle_timeout=1.0, max_timeout=10.0))
-            assert "decision model" in startup and "/v1/systemone" in startup
+            assert "not a text model" in startup and "/v1/systemone" in startup
 
             res = systemone(server_port, REQUEST, timeouts.http_request)
             assert res.status_code == 200, res.text
