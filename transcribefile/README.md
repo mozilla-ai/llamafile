@@ -45,7 +45,10 @@ llamafile's `~/.llamafile` so the two products' ggml trees can diverge
 without overwriting each other's artifacts. With `--backend auto` (the
 default), Metal is used when available and the run falls back to CPU
 otherwise; only an explicit `--backend metal` makes a missing Metal
-device an error, reported by transcribe.cpp.
+device an error, reported by transcribe.cpp. transcribe.cpp's
+`TRANSCRIBE_BACKENDS` environment variable is honored too: when it
+leaves out `metal` (e.g. `TRANSCRIBE_BACKENDS=cpu`), the dylib is
+neither built nor loaded.
 
 The cache directory is keyed on llamafile's version number only: once
 `~/.transcribefile/v/<ver>/ggml-metal.dylib` exists it is reused as is,

@@ -20,6 +20,7 @@
 #include <string.h>
 
 #include "llamafile/llamafile.h"
+#include "transcribe.h"
 
 // Defined in transcribe.cpp/examples/cli/main.cpp, compiled with
 // -DTRANSCRIBEFILE (which renames its main() to transcribe_cli_main() and
@@ -83,6 +84,11 @@ static void print_wrapper_help(void) {
 //   - cpu / cpu_accel: don't touch the GPU machinery at all
 //   - auto / metal:    try Metal; on failure or non-mac hardware nothing
 //                      registers and selection proceeds CPU-only
+//   - TRANSCRIBE_BACKENDS without metal: same as cpu. transcribe.cpp
+//     promises an excluded backend never runs any code, and enforces it
+//     when ggml registers its built-in backends; the dylib is registered
+//     through the unfiltered ggml_backend_register(), so it is checked
+//     here, before anything is compiled or loaded.
 // FLAG_gpu stays AUTO (not APPLE) even for --backend metal so a failed
 // load degrades silently here; transcribe.cpp reports the missing
 // backend itself, with wording that matches its own CLI.
@@ -102,7 +108,11 @@ static void load_gpu_backends(char ** argv) {
             backend = p[1];
         }
     }
-    if (strcmp(backend, "auto") != 0 && strcmp(backend, "metal") != 0) {
+    // transcribe_allowed_backends() only reads the mask (env narrowed by
+    // the host's, which this CLI never sets); unlike backend registration
+    // it does not fix it.
+    if ((strcmp(backend, "auto") != 0 && strcmp(backend, "metal") != 0) ||
+        !(transcribe_allowed_backends() & TRANSCRIBE_BACKEND_MASK_METAL)) {
         FLAG_gpu = LLAMAFILE_GPU_DISABLE;
         return;
     }
