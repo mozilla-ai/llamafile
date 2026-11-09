@@ -166,7 +166,7 @@ wrapper.
 ### Model Selection, Downloads, and Logging
 
 - Model path and downloads: `-m`, `--model`, `-mu`, `--model-url`, `-dr`, `--docker-repo`
-- Hugging Face and related model selectors: `-hf`, `-hfr`, `--hf-repo`, `-hfd`, `-hfrd`, `--hf-repo-draft`, `-hff`, `--hf-file`, `-hfv`, `-hfrv`, `--hf-repo-v`, `-hffv`, `--hf-file-v`, `-hft`, `--hf-token`
+- Hugging Face and related model selectors: `-hf`, `-hfr`, `--hf-repo`, `-hfd`, `-hfrd`, `--hf-repo-draft`, `-hff`, `--hf-file`, `-hft`, `--hf-token`
 - Logging and diagnostics: `--log-disable`, `--log-file`, `--log-colors`, `-v`, `--verbose`, `--log-verbose`, `--offline`, `-lv`, `--verbosity`, `--log-verbosity`, `--log-prefix`, `--log-timestamps`, `--perf`, `--no-perf`
 
 ## Sampling Flags
@@ -183,7 +183,7 @@ wrapper.
 - System prompt and stopping: `-sys`, `--system-prompt`, `-sysf`, `--system-prompt-file`, `-r`, `--reverse-prompt`, `-sp`, `--special`
 - Context and cache management: `--ctx-checkpoints`, `--swa-checkpoints`, `-cram`, `--cache-ram`, `--context-shift`, `--no-context-shift`, `--warmup`, `--no-warmup`
 - Parallel decode and multimodal input: `-np`, `--parallel`, `-mm`, `--mmproj`, `-mmu`, `--mmproj-url`, `--mmproj-auto`, `--no-mmproj`, `--no-mmproj-auto`, `--mmproj-offload`, `--no-mmproj-offload`, `--image`, `--audio`, `--image-min-tokens`, `--image-max-tokens`
-- Draft and speculative decoding: `-otd`, `--override-tensor-draft`, `-cmoed`, `--cpu-moe-draft`, `-ncmoed`, `--n-cpu-moe-draft`, `--draft`, `--draft-n`, `--draft-max`, `--draft-min`, `--draft-n-min`, `--draft-p-min`, `-cd`, `--ctx-size-draft`, `-devd`, `--device-draft`, `-ngld`, `--gpu-layers-draft`, `--n-gpu-layers-draft`, `-md`, `--model-draft`, `--spec-replace`
+- Draft and speculative decoding: `-otd`, `--override-tensor-draft`, `-cmoed`, `--cpu-moe-draft`, `-ncmoed`, `--n-cpu-moe-draft`, `--draft`, `--draft-n`, `--draft-max`, `--draft-min`, `--draft-n-min`, `--draft-p-min`, `-devd`, `--device-draft`, `-ngld`, `--gpu-layers-draft`, `--n-gpu-layers-draft`, `-md`, `--model-draft`
 - Chat templates and reasoning controls: `--chat-template-kwargs`, `--jinja`, `--no-jinja`, `--reasoning-format`, `--reasoning-budget`, `--chat-template`, `--chat-template-file`
 - Built-in defaults: `--gpt-oss-20b-default`, `--gpt-oss-120b-default`, `--vision-gemma-4b-default`, `--vision-gemma-12b-default`
 
@@ -198,7 +198,7 @@ wrapper.
 - Router and media: `--media-path`, `--models-dir`, `--models-preset`, `--models-max`, `--models-autoload`, `--no-models-autoload`
 - Embeddings, reranking, and TLS: `--embedding`, `--embeddings`, `--rerank`, `--reranking`, `--ssl-key-file`, `--ssl-cert-file`
 - Chat templating and slot behavior: `--chat-template-kwargs`, `--jinja`, `--no-jinja`, `--reasoning-format`, `--reasoning-budget`, `--chat-template`, `--chat-template-file`, `--prefill-assistant`, `--no-prefill-assistant`, `-sps`, `--slot-prompt-similarity`, `--lora-init-without-apply`, `--sleep-idle-seconds`
-- Draft, speculative decoding, and TTS: `-td`, `--threads-draft`, `-tbd`, `--threads-batch-draft`, `--draft`, `--draft-n`, `--draft-max`, `--draft-min`, `--draft-n-min`, `--draft-p-min`, `-cd`, `--ctx-size-draft`, `-devd`, `--device-draft`, `-ngld`, `--gpu-layers-draft`, `--n-gpu-layers-draft`, `-md`, `--model-draft`, `--spec-replace`, `-mv`, `--model-vocoder`, `--tts-use-guide-tokens`
+- Draft and speculative decoding: `-td`, `--threads-draft`, `-tbd`, `--threads-batch-draft`, `--draft`, `--draft-n`, `--draft-max`, `--draft-min`, `--draft-n-min`, `--draft-p-min`, `-devd`, `--device-draft`, `-ngld`, `--gpu-layers-draft`, `--n-gpu-layers-draft`, `-md`, `--model-draft`
 - Built-in server defaults: `--embd-gemma-default`, `--fim-qwen-1.5b-default`, `--fim-qwen-3b-default`, `--fim-qwen-7b-default`, `--fim-qwen-7b-spec`, `--fim-qwen-14b-spec`, `--fim-qwen-30b-default`, `--gpt-oss-20b-default`, `--gpt-oss-120b-default`, `--vision-gemma-4b-default`, `--vision-gemma-12b-default`
 
 `-np, --parallel` in server mode controls the number of server slots rather than the number of parallel decode sequences.
